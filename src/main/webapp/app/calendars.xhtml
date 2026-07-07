@@ -1,0 +1,36 @@
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:h="jakarta.faces.html"
+                xmlns:ui="jakarta.faces.facelets"
+                xmlns:p="primefaces"
+                template="/WEB-INF/templates/main.xhtml">
+    <ui:define name="title">My calendars - Shared calendar</ui:define>
+
+    <ui:define name="content">
+        <section class="page-section">
+            <div class="section-header">
+                <div>
+                    <h1>My calendars</h1>
+                    <p class="lead-text">Signed-in calendar workspace placeholder</p>
+                </div>
+                <h:link outcome="/register" value="Create calendar" styleClass="button-link primary-link"/>
+            </div>
+
+            <p:dataTable value="#{requestScope.emptyCalendarRows}" var="calendar" emptyMessage="Calendar storage is added with the persistence core." styleClass="surface-table">
+                <p:column headerText="Calendar"/>
+                <p:column headerText="Role"/>
+                <p:column headerText="Public link"/>
+            </p:dataTable>
+
+            <div class="placeholder-list">
+                <h:link outcome="/app/calendar" styleClass="calendar-row">
+                    <span>Kayaking weekend</span>
+                    <strong>Admin</strong>
+                </h:link>
+                <h:link outcome="/app/calendar" styleClass="calendar-row">
+                    <span>Birthday plans</span>
+                    <strong>Editor</strong>
+                </h:link>
+            </div>
+        </section>
+    </ui:define>
+</ui:composition>

@@ -18,6 +18,7 @@ Tasks:
 6. Add minimal PrimeFaces components to prove the Jakarta classifier and assets are loading.
 7. Make the shell visually aligned with a modern, flat, sleek calendar app.
 8. Show placeholder navigation for public calendar links, registration, signed-in calendar list, calendar detail, and calendar member management.
+9. Add the initial GitHub Actions PR check for the Maven wrapper build.
 
 Verification:
 
@@ -31,6 +32,13 @@ mise run db
 mise run dev
 curl -i http://localhost:9080/health
 docker compose exec postgres psql -U calendar -d calendar -c 'select current_database(), current_user;'
+```
+
+GitHub PR check:
+
+```bash
+./mvnw -B -ntp clean test package
+./mvnw -B -ntp dependency:tree "-Dincludes=org.primefaces:primefaces"
 ```
 
 Manual checks:
@@ -53,6 +61,7 @@ Acceptance criteria:
 6. PrimeFaces dependency output shows the `jakarta` classifier.
 7. Placeholder copy does not promise implemented registration, login, persistence, invites, or event storage before M1/M2.
 8. Public docs describe the current foundation accurately.
+9. GitHub PR checks run on pull requests and pushes to `main`, use least-privilege read permissions, and do not require secrets or deployment access.
 
 ## Repository setup
 
@@ -72,10 +81,14 @@ Create this structure for M0:
 |-- .mvn
 |   `-- wrapper
 |       `-- maven-wrapper.properties
+|-- .github
+|   `-- workflows
+|       `-- pr-checks.yml
 |-- mvnw
 |-- mvnw.cmd
 |-- scripts
 |   |-- bootstrap-unix.sh
+|   |-- calendar-tool.java
 |   |-- check-toolchain.sh
 |   |-- check-toolchain.ps1
 |   |-- prepare-liberty-dev.sh
@@ -114,6 +127,19 @@ Create this structure for M0:
 ```
 
 Do not create Flyway migrations, JPA entities, login services, registration services, or calendar services in M0.
+
+## GitHub PR checks
+
+M0 should add one required, fast PR check:
+
+1. Run on `pull_request` and pushes to `main`.
+2. Use `actions/checkout` and `actions/setup-java` with Temurin Java 25 and Maven cache.
+3. Build through the committed Maven wrapper with `./mvnw -B -ntp clean test package`.
+4. Verify the PrimeFaces dependency tree shows the `jakarta` classifier.
+5. Set workflow permissions to `contents: read`.
+6. Do not use secrets, deployment credentials, Railway integration, or write permissions on PRs.
+
+Keep this check small enough to run on every PR. Database integration, app smoke, Docker build, Dependency Review, and CodeQL checks are added in later milestones when they have real behavior to verify.
 
 ## Maven plan
 

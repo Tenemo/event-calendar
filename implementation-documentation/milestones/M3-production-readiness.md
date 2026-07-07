@@ -18,6 +18,7 @@ Tasks:
 8. Confirm generated Railway domain, then custom domain and HTTPS.
 9. Register a real account, create a calendar, create a public link, create an invite link, accept the invite with a second account, and verify events persist across redeploy.
 10. Update README with local setup, deployment, environment variables, roles, registration, public links, invitations, backup/restore, troubleshooting, and known limitations.
+11. Extend GitHub PR checks with Docker build coverage and available security checks.
 
 Verification:
 
@@ -47,6 +48,7 @@ Acceptance criteria:
 12. Events persist after redeploy.
 13. Railway logs do not contain passwords, public tokens, invite tokens, or database credentials.
 14. README has local setup, deploy setup, backup/restore, registration, roles, public links, invitations, troubleshooting, and known limitations.
+15. PR checks include the Maven build, database-backed tests, app smoke where deterministic, Docker image build, and enabled security checks.
 
 ## Docker build
 
@@ -115,6 +117,27 @@ docker run --rm \
 ```
 
 On Linux, `host.docker.internal` may need extra configuration. If it fails, run the app and PostgreSQL in one Docker network or use the host IP.
+
+## GitHub PR checks after M3
+
+M3 should make production packaging visible in PRs.
+
+Required PR checks should include:
+
+1. Maven wrapper build: `./mvnw -B -ntp clean test package`.
+2. PostgreSQL-backed migration and service tests.
+3. App smoke against a running Liberty app when M2 route checks are deterministic.
+4. Docker image build: `docker build -t shared-calendar:ci .`.
+
+Add a container smoke check after the Docker image can reliably connect to the CI PostgreSQL service. The smoke should confirm `/health` and one or two stable application routes, not perform deployment.
+
+Security checks:
+
+1. Add GitHub Dependency Review on pull requests if the repository has Dependency Review available. Configure it to fail on new vulnerable dependencies, not on unrelated existing alerts.
+2. Add CodeQL Java analysis on pull requests, pushes to `main`, and a weekly schedule if code scanning is available for the repository.
+3. Add Dependabot configuration for Maven dependencies and GitHub Actions updates after the initial workflow is stable.
+
+Do not deploy to Railway from pull requests. Production deploys should remain manual or protected on `main` until the owner explicitly asks for automated deployment. PR workflows must not require Railway secrets.
 
 ## Railway deployment plan
 

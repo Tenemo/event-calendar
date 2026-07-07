@@ -16,6 +16,7 @@ Tasks:
 4. Add Jakarta Security configuration, web security constraints, login view logic, registration view logic, current-user helper, and logout support.
 5. Generate public calendar tokens and invite tokens with UUID v4 or stronger random values.
 6. Add focused tests for password policy, registration validation, calendar creation, role checks, invite acceptance, last-admin protection, event validation, token generation, and time handling.
+7. Extend CI with a PostgreSQL-backed job once migrations and database-backed tests exist.
 
 Verification:
 
@@ -52,6 +53,7 @@ Acceptance criteria:
 9. Calendar creation grants exactly one initial `ADMIN` membership to the creator.
 10. Roles load from `calendar_member`.
 11. Service methods enforce calendar membership and role checks, not only UI controls.
+12. PostgreSQL-backed CI fails on migration, persistence, or service authorization regressions without using repository secrets.
 
 ## Persistence configuration
 
@@ -217,7 +219,7 @@ startup/DatabaseMigration.java
 
 Use `javax.sql.DataSource` for the injected data source because it is part of Java SE, not old Java EE.
 
-Do not create a bootstrap admin in this product model. Registered users create their own calendars and become calendar admins for those calendars.
+Do not create a first-user application administrator in this product model. Registered users create their own calendars and become calendar admins for those calendars.
 
 ## Authentication and registration
 
@@ -378,3 +380,18 @@ Add JUnit 5 tests for:
 10. Invite acceptance assigns the intended role.
 11. Revoked, expired, and reused invites are rejected.
 12. Event blank title and end-before-start are rejected.
+
+## GitHub PR checks after M1
+
+Keep the M0 Maven build check required. Add a database-backed CI job after the Flyway migrations and persistence tests exist.
+
+The database job should:
+
+1. Run on `pull_request` and pushes to `main`.
+2. Use PostgreSQL 17, matching local Docker Compose.
+3. Wait for PostgreSQL readiness with a health check, not a fixed sleep.
+4. Use test-only database credentials defined in the workflow environment.
+5. Run the focused migration, persistence, and service tests through the Maven wrapper.
+6. Fail on authorization, password, token, migration, and validation regressions.
+
+Prefer a GitHub Actions PostgreSQL service container for this lane. Use Docker Compose only if the application test command needs the same Compose wiring as local development. Do not make this job required until it is deterministic locally and in CI.

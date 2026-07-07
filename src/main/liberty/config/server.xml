@@ -24,7 +24,7 @@
 
     <library id="postgresqlDriver">
         <fileset dir="${server.config.dir}/resources"
-                 includes="postgresql-*.jar"/>
+                 includes="postgresql.jar"/>
     </library>
 
     <dataSource id="CalendarDS" jndiName="jdbc/CalendarDS">

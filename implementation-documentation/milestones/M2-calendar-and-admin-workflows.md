@@ -21,6 +21,7 @@ Tasks:
 11. Implement invite acceptance for signed-in users and newly registered users.
 12. Implement calendar settings page with name, description, timezone, public-link enable/disable, and public-link rotation.
 13. Style the UI as a modern flat app, not a marketing page.
+14. Add or prepare a deterministic CI app-smoke check for the real HTTP routes.
 
 Verification:
 
@@ -60,6 +61,7 @@ Acceptance criteria:
 9. Member-management actions persist and are audited.
 10. Last-admin protection is enforced in the service layer.
 11. The UI is responsive and uses the flat design system from M0.
+12. App-smoke CI covers health and stable route-level behavior without brittle sleeps or flaky browser automation.
 
 ## JSF / PrimeFaces UI plan
 
@@ -180,3 +182,17 @@ Calendar admins can:
 5. Rotate the public link.
 
 Rotating the public link invalidates the previous public URL and must be audited.
+
+## GitHub PR checks after M2
+
+Keep the M0 Maven build check and the M1 PostgreSQL-backed check required. Add an app-smoke lane once the real pages are implemented and can start reliably in CI.
+
+The app-smoke lane should:
+
+1. Start PostgreSQL with the same test environment values used by the database lane.
+2. Start Open Liberty from the Maven wrapper or the same committed project task used locally.
+3. Wait for `/health` with a bounded readiness loop.
+4. Check stable HTTP behavior for public calendar, registration, login, authenticated workspace, and invalid public-token routes.
+5. Keep assertions route-level at first; do not require full browser end-to-end tests until the UI flows are deterministic.
+
+Do not add retries to mask route or startup flakiness. If the app-smoke lane flakes, fix startup readiness, test isolation, database state, or session handling before making it required.

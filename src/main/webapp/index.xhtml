@@ -6,25 +6,53 @@
     <ui:define name="title">Shared calendar</ui:define>
 
     <ui:define name="content">
-        <section class="page-section">
-            <div class="section-header">
-                <div>
-                    <p class="eyebrow">Foundation</p>
-                    <h1>Shared calendar</h1>
+        <section class="home-layout">
+            <div class="intro-panel">
+                <div class="section-header">
+                    <div>
+                        <h1>Shared event calendars for real plans</h1>
+                        <p class="lead-text">
+                            Create a calendar, share the public read-only link, and invite the people who can help keep events current.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="action-row">
+                    <h:link outcome="/register" value="Create a calendar" styleClass="button-link primary-link"/>
+                    <h:link outcome="/public-calendar" value="View public example" styleClass="button-link secondary-link"/>
                 </div>
             </div>
 
-            <p:panel header="Application shell" styleClass="surface-panel">
-                <p>
-                    The Jakarta Faces and PrimeFaces shell is running. Calendar, authentication, and administration workflows are added in the next milestones.
-                </p>
-                <h:form>
-                    <p:commandButton value="Open calendar"
-                                     action="/app/calendar.xhtml?faces-redirect=true"
-                                     ajax="false"
-                                     styleClass="primary-action"/>
-                </h:form>
-            </p:panel>
+            <section class="calendar-preview" aria-label="Calendar preview">
+                <div class="preview-header">
+                    <div>
+                        <h2>Kayaking weekend</h2>
+                        <p>Public link preview</p>
+                    </div>
+                    <span class="role-chip">Read-only</span>
+                </div>
+                <div class="month-grid" aria-hidden="true">
+                    <span>Mon</span>
+                    <span>Tue</span>
+                    <span>Wed</span>
+                    <span>Thu</span>
+                    <span>Fri</span>
+                    <span>Sat</span>
+                    <span>Sun</span>
+                    <b>8</b>
+                    <b>9</b>
+                    <b class="has-event">10</b>
+                    <b>11</b>
+                    <b>12</b>
+                    <b class="has-event">13</b>
+                    <b>14</b>
+                </div>
+                <p:dataTable value="#{requestScope.emptyEventRows}" var="event" emptyMessage="Event storage is added after the foundation is in place." styleClass="compact-table">
+                    <p:column headerText="Event"/>
+                    <p:column headerText="Time"/>
+                    <p:column headerText="Place"/>
+                </p:dataTable>
+            </section>
         </section>
     </ui:define>
 </ui:composition>

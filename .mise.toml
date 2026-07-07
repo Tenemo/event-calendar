@@ -1,21 +1,31 @@
 [tools]
 java = "temurin-25.0.3+9.0.LTS"
+maven = "3.9.11"
 
-[env]
-POSTGRESQL_VERSION = "42.7.13"
+[tasks.check-toolchain]
+description = "Check local toolchain commands"
+run = "java scripts/calendar-tool.java check-toolchain"
+
+[tasks.prepare-liberty-dev]
+description = "Prepare Liberty runtime resources"
+run = "java scripts/calendar-tool.java prepare-liberty-dev"
 
 [tasks.setup]
 description = "Prepare local tools and Liberty runtime resources"
-run = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\setup.ps1"
+run = "java scripts/calendar-tool.java setup"
 
 [tasks.db]
 description = "Start the local PostgreSQL service"
-run = "docker compose up -d postgres"
+run = "java scripts/calendar-tool.java db"
 
 [tasks.dev]
 description = "Start Open Liberty dev mode"
-run = ".\\mvnw.cmd liberty:dev"
+run = "java scripts/calendar-tool.java dev"
 
 [tasks.package]
 description = "Build and test the WAR"
-run = ".\\mvnw.cmd clean test package"
+run = "java scripts/calendar-tool.java package"
+
+[tasks.verify-local]
+description = "Verify the local build, database, and running app"
+run = "java scripts/calendar-tool.java verify-local"

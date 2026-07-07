@@ -41,6 +41,17 @@ The app is multi-calendar from v1.
 
 Local PostgreSQL runs through Docker Compose with `postgres:17`. PostgreSQL client commands use `docker compose exec postgres` or a temporary `postgres:17` container; host-installed `psql`, `pg_dump`, and `pg_restore` are not prerequisites.
 
+## CI strategy
+
+GitHub PR checks should grow with the milestones:
+
+1. M0: required Maven wrapper build plus a PrimeFaces `jakarta` classifier check.
+2. M1: PostgreSQL-backed migration, persistence, and service tests once those tests exist.
+3. M2: deterministic app smoke checks for health and stable HTTP routes once the real workflows exist.
+4. M3: Docker image build, optional container smoke, Dependency Review, CodeQL, and Dependabot where repository features allow them.
+
+Do not deploy to Railway from pull requests, and do not require secrets for PR checks.
+
 ## Source boundaries
 
 This folder is private planning material. Public docs should use final product wording and should not expose planning-only file paths, milestone labels, unfinished notes, or private implementation names.

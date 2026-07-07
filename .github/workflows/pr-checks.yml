@@ -1,0 +1,46 @@
+name: pr checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: maven build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Make Maven wrapper executable
+        run: chmod +x mvnw
+
+      - name: Build and test WAR
+        run: ./mvnw -B -ntp clean test package
+
+      - name: Check PrimeFaces Jakarta classifier
+        run: |
+          ./mvnw -B -ntp dependency:tree \
+            "-Dincludes=org.primefaces:primefaces" \
+            "-DoutputFile=target/primefaces-dependency-tree.txt"
+          cat target/primefaces-dependency-tree.txt
+          if ! grep -q "org.primefaces:primefaces:jar:jakarta:" target/primefaces-dependency-tree.txt; then
+            echo "PrimeFaces must use the jakarta classifier." >&2
+            exit 1
+          fi

@@ -19,6 +19,7 @@
         <flyway.version>12.10.0</flyway.version>
         <junit.version>5.11.4</junit.version>
         <liberty.maven.plugin.version>3.12.0</liberty.maven.plugin.version>
+        <maven.dependency.plugin.version>3.8.1</maven.dependency.plugin.version>
     </properties>
 
     <dependencies>
@@ -88,6 +89,35 @@
                 <configuration>
                     <useModulePath>false</useModulePath>
                 </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>${maven.dependency.plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>copy-liberty-postgresql-driver</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>copy</goal>
+                        </goals>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>org.postgresql</groupId>
+                                    <artifactId>postgresql</artifactId>
+                                    <version>${postgresql.version}</version>
+                                    <type>jar</type>
+                                    <outputDirectory>${project.basedir}/src/main/liberty/config/resources</outputDirectory>
+                                    <destFileName>postgresql.jar</destFileName>
+                                </artifactItem>
+                            </artifactItems>
+                            <overWriteReleases>true</overWriteReleases>
+                            <overWriteSnapshots>true</overWriteSnapshots>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
             <plugin>

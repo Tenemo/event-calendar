@@ -9,22 +9,41 @@
         <section class="page-section">
             <div class="section-header">
                 <div>
-                    <p class="eyebrow">Calendar</p>
-                    <h1>Shared plans</h1>
+                    <h1>Kayaking weekend</h1>
+                    <p class="lead-text">Authenticated calendar workspace placeholder</p>
                 </div>
-                <h:link outcome="/app/admin/users" value="Manage users" styleClass="text-link"/>
+                <div class="action-row compact-actions">
+                    <h:link outcome="/app/calendar-members" value="Members" styleClass="button-link secondary-link"/>
+                    <h:link outcome="/public-calendar" value="Public link" styleClass="button-link secondary-link"/>
+                </div>
             </div>
 
-            <p:panel header="Calendar placeholder" styleClass="surface-panel">
-                <p>
-                    This page proves that authenticated app routes, templates, and PrimeFaces components can render before event storage is added.
-                </p>
+            <p:panel header="Events" styleClass="surface-panel">
                 <p:tabView>
                     <p:tab title="Month">
-                        <p>Calendar event rendering is added after the persistence and security core is ready.</p>
+                        <div class="event-board">
+                            <article class="event-item">
+                                <span class="event-date">Jul 10</span>
+                                <div>
+                                    <h2>Gear check</h2>
+                                    <p>Editor/admin event controls are added with the calendar workflow.</p>
+                                </div>
+                            </article>
+                            <article class="event-item">
+                                <span class="event-date">Jul 13</span>
+                                <div>
+                                    <h2>River launch</h2>
+                                    <p>Event persistence is added after the schema and services are ready.</p>
+                                </div>
+                            </article>
+                        </div>
                     </p:tab>
                     <p:tab title="List">
-                        <p>No events are loaded in the foundation milestone.</p>
+                        <p:dataTable value="#{requestScope.emptyEventRows}" var="event" emptyMessage="No stored events are available in the foundation milestone.">
+                            <p:column headerText="Title"/>
+                            <p:column headerText="Starts"/>
+                            <p:column headerText="Role"/>
+                        </p:dataTable>
                     </p:tab>
                 </p:tabView>
             </p:panel>
