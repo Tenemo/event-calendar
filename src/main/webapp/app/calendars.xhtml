@@ -15,7 +15,7 @@
                 <h:link outcome="/register" value="Create calendar" styleClass="button-link primary-link"/>
             </div>
 
-            <p:dataTable value="#{requestScope.emptyCalendarRows}" var="calendar" emptyMessage="Calendar storage is added with the persistence core." styleClass="surface-table">
+            <p:dataTable value="#{[]}" var="calendar" emptyMessage="Calendar storage is added with the persistence core." styleClass="surface-table">
                 <p:column headerText="Calendar"/>
                 <p:column headerText="Role"/>
                 <p:column headerText="Public link"/>

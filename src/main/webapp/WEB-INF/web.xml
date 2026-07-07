@@ -5,11 +5,6 @@
 
     <display-name>Shared calendar</display-name>
 
-    <context-param>
-        <param-name>jakarta.faces.PROJECT_STAGE</param-name>
-        <param-value>Development</param-value>
-    </context-param>
-
     <servlet>
         <servlet-name>Faces servlet</servlet-name>
         <servlet-class>jakarta.faces.webapp.FacesServlet</servlet-class>
