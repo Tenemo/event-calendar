@@ -1,24 +1,23 @@
-﻿# M3: production readiness
+# M3: production readiness
 
-Use this milestone to make the app packageable, deployable, recoverable, and documented for real use.
+Use this milestone to make the app packageable, deployable, recoverable, documented, and safe enough for real personal use.
 
 ## Milestone checklist
 
-
-Outcome: the app is packaged, deployable to Railway, recoverable from backup, and documented for real use.
+Outcome: the app is packaged, deployable to Railway, recoverable from backup, and documented for real use with registration, public calendar links, invite links, calendar roles, and event workflows.
 
 Tasks:
 
 1. Build the production Docker image.
 2. Run the app container locally against Dockerized PostgreSQL.
-3. Confirm health, login, calendar, admin, environment variables, and `COOKIE_SECURE=false` locally.
+3. Confirm health, registration, login, calendar creation, public links, invite links, event CRUD, member management, environment variables, and `COOKIE_SECURE=false` locally.
 4. Add Dockerized backup and restore scripts.
 5. Test backup and restore against a fresh local Docker Compose database.
 6. Create the Railway project, PostgreSQL service, and web service.
 7. Configure Railway variables and deploy.
 8. Confirm generated Railway domain, then custom domain and HTTPS.
-9. Log in as bootstrap admin, change the password, remove the bootstrap password variable, and redeploy.
-10. Update README with local setup, deployment, environment variables, roles, backup/restore, troubleshooting, and known limitations.
+9. Register a real account, create a calendar, create a public link, create an invite link, accept the invite with a second account, and verify events persist across redeploy.
+10. Update README with local setup, deployment, environment variables, roles, registration, public links, invitations, backup/restore, troubleshooting, and known limitations.
 
 Verification:
 
@@ -41,18 +40,15 @@ Acceptance criteria:
 5. Dockerized backup and restore work without host PostgreSQL client utilities.
 6. `https://<railway-domain>/health` returns `ok`.
 7. Custom domain works over HTTPS.
-8. Login works after redeploy.
-9. Events persist after redeploy.
-10. Railway logs do not contain passwords.
-11. README has local setup, deploy setup, backup/restore, admin bootstrap notes, troubleshooting, and known limitations.
+8. Registration works in production.
+9. Login works after redeploy.
+10. Calendar public links work after redeploy.
+11. Invite links work after redeploy.
+12. Events persist after redeploy.
+13. Railway logs do not contain passwords, public tokens, invite tokens, or database credentials.
+14. README has local setup, deploy setup, backup/restore, registration, roles, public links, invitations, troubleshooting, and known limitations.
 
----
-
-
-
-## Implementation details
-
-## 16. Docker build
+## Docker build
 
 Create `.dockerignore`:
 
@@ -114,19 +110,13 @@ docker run --rm \
   -e PGPASSWORD=calendar \
   -e APP_TIMEZONE=Europe/Warsaw \
   -e APP_BASE_URL=http://localhost:9080 \
-  -e APP_BOOTSTRAP_ADMIN_USERNAME=admin \
-  -e APP_BOOTSTRAP_ADMIN_PASSWORD=change-me-before-real-use \
+  -e APP_REGISTRATION_ENABLED=true \
   shared-calendar:local
 ```
 
 On Linux, `host.docker.internal` may need extra configuration. If it fails, run the app and PostgreSQL in one Docker network or use the host IP.
 
----
-
-
-## 17. Railway deployment plan
-
-### 17.1 Railway services
+## Railway deployment plan
 
 Create one Railway project with two services:
 
@@ -135,11 +125,7 @@ shared-calendar-web
 postgres
 ```
 
-`shared-calendar-web` uses the repository root `Dockerfile`.
-
-`postgres` is a Railway PostgreSQL service.
-
-### 17.2 Web service variables
+The web service uses the repository root `Dockerfile`. PostgreSQL is a Railway PostgreSQL service.
 
 Set these variables on the web service:
 
@@ -155,20 +141,10 @@ PGPASSWORD=${{Postgres.PGPASSWORD}}
 
 APP_TIMEZONE=Europe/Warsaw
 APP_BASE_URL=https://calendar.example.com
-APP_BOOTSTRAP_ADMIN_USERNAME=<your-admin-username>
-APP_BOOTSTRAP_ADMIN_PASSWORD=<temporary-long-random-password>
+APP_REGISTRATION_ENABLED=true
 ```
 
 Adjust the `${{Postgres.*}}` namespace to match the actual Railway PostgreSQL service name.
-
-After first successful login:
-
-1. Change the admin password in the app.
-2. Remove `APP_BOOTSTRAP_ADMIN_PASSWORD` from Railway variables.
-3. Redeploy.
-4. Confirm login still works.
-
-### 17.3 Railway public networking
 
 Railway requirements:
 
@@ -176,9 +152,7 @@ Railway requirements:
 2. The container must listen on the injected `PORT`.
 3. The Dockerfile must be named `Dockerfile` with capital `D` at the repo root unless you configure a custom path.
 
-The `server.xml` in this plan satisfies the host and port requirements.
-
-### 17.4 Custom domain
+## Custom domain
 
 For a subdomain such as `calendar.example.com`:
 
@@ -193,94 +167,12 @@ For a subdomain such as `calendar.example.com`:
 
 Do not skip the TXT record; Railway uses it to verify ownership before routing traffic.
 
----
-
-
-## 18. Backup and restore
-
-A calendar app is only useful if the database is recoverable.
+## Backup and restore
 
 Backup and restore must not depend on host-installed PostgreSQL client tools. Use Dockerized clients:
 
 1. For the local Docker Compose database, run `pg_dump` and `pg_restore` inside the `postgres` service container.
 2. For remote databases, run a temporary `postgres:17` client container and connect with `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, and `PGPASSWORD`.
-
-Create `scripts/backup-postgres.sh`:
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-BACKUP_DIR="${BACKUP_DIR:-./backups}"
-mkdir -p "$BACKUP_DIR"
-
-STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-OUT="$BACKUP_DIR/calendar-$STAMP.dump"
-
-if [ "${PGHOST:-localhost}" = "localhost" ] || [ "${PGHOST:-localhost}" = "127.0.0.1" ]; then
-  docker compose exec -T postgres pg_dump \
-    --format=custom \
-    --no-owner \
-    --no-acl \
-    --username="${PGUSER:-calendar}" \
-    --dbname="${PGDATABASE:-calendar}" \
-    > "$OUT"
-else
-  docker run --rm \
-    -e PGPASSWORD="$PGPASSWORD" \
-    postgres:17 \
-    pg_dump \
-      --format=custom \
-      --no-owner \
-      --no-acl \
-      --host="$PGHOST" \
-      --port="${PGPORT:-5432}" \
-      --username="$PGUSER" \
-      --dbname="$PGDATABASE" \
-    > "$OUT"
-fi
-
-echo "Backup written to $OUT"
-```
-
-Create `scripts/restore-postgres.sh`:
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-if [ "$#" -ne 1 ]; then
-  echo "Usage: $0 path/to/backup.dump" >&2
-  exit 1
-fi
-
-BACKUP_FILE="$1"
-
-if [ "${PGHOST:-localhost}" = "localhost" ] || [ "${PGHOST:-localhost}" = "127.0.0.1" ]; then
-  docker compose exec -T postgres pg_restore \
-    --clean \
-    --if-exists \
-    --no-owner \
-    --no-acl \
-    --username="${PGUSER:-calendar}" \
-    --dbname="${PGDATABASE:-calendar}" \
-    < "$BACKUP_FILE"
-else
-  docker run --rm -i \
-    -e PGPASSWORD="$PGPASSWORD" \
-    postgres:17 \
-    pg_restore \
-      --clean \
-      --if-exists \
-      --no-owner \
-      --no-acl \
-      --host="$PGHOST" \
-      --port="${PGPORT:-5432}" \
-      --username="$PGUSER" \
-      --dbname="$PGDATABASE" \
-    < "$BACKUP_FILE"
-fi
-```
 
 Acceptance criteria for backups:
 
@@ -290,17 +182,15 @@ Acceptance criteria for backups:
 4. README states that host PostgreSQL client utilities are not required.
 5. Do not claim production readiness until a restore has been tested.
 
----
+## README requirements
 
-
-## 20. README requirements
-
-Create a README with these sections:
+README must include:
 
 ```text
 # Shared calendar
 
 ## Stack
+## Product model
 ## Local development
 ## Environment variables
 ## Database migrations
@@ -308,8 +198,10 @@ Create a README with these sections:
 ## Running with Liberty dev mode
 ## Building Docker image
 ## Deploying to Railway
-## First admin bootstrap
-## Roles
+## Registration
+## Calendar roles
+## Public calendar links
+## Invitations
 ## Backup and restore
 ## Troubleshooting
 ## Known limitations
@@ -344,6 +236,15 @@ Likely causes:
 3. Domain/HTTPS mismatch.
 4. Session lost after redeploy.
 
+### Public link does not work
+
+Likely causes:
+
+1. Calendar public access disabled.
+2. Token was rotated.
+3. Wrong `APP_BASE_URL`.
+4. Route mapping mismatch.
+
 ### Tables missing
 
 Likely causes:
@@ -351,8 +252,3 @@ Likely causes:
 1. Flyway did not run.
 2. Wrong database variables.
 3. PostgreSQL driver not copied into Liberty config resources.
-
----
-
-
-

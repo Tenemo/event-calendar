@@ -1,53 +1,43 @@
-﻿# Project reference
+# Project reference
 
-This file contains planning context and standards. Executable implementation work belongs in the files under `milestones/`.
+This file contains planning context and standards. Milestone files contain the executable implementation detail.
 
 ## 1. Non-negotiable decisions
 
 Use these decisions unless the repository owner explicitly changes them later.
 
-| Area                         | Decision                                                                                                             |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Runtime Java                 | Java 25 LTS                                                                                                          |
+| Area | Decision |
+| ---- | -------- |
+| Runtime Java | Java 25 LTS |
 | Compiler compatibility level | Java 21 by default; Java 17 only if employer parity requires it; Java 25 only after MVP if portability is not a goal |
-| Build tool                   | Maven                                                                                                                |
-| Packaging                    | WAR                                                                                                                  |
-| Runtime                      | Open Liberty container                                                                                               |
-| Enterprise profile           | Jakarta EE 10 Web Profile                                                                                            |
-| UI                           | Jakarta Faces 4.0 / JSF + PrimeFaces 15.x `jakarta` classifier                                                       |
-| Dependency injection         | CDI                                                                                                                  |
-| Service layer                | Stateless Enterprise Beans / EJB Lite where method security is needed                                                |
-| Persistence                  | Jakarta Persistence / JPA, provider-neutral code, Liberty default EclipseLink provider                               |
-| Database                     | Dockerized PostgreSQL for local development, Railway PostgreSQL for production                                       |
-| Migrations                   | Flyway                                                                                                               |
-| Auth                         | Username/password, no OAuth/SSO                                                                                      |
-| Roles                        | `VIEWER`, `EDITOR`, `ADMIN`                                                                                          |
-| Deployment                   | Dockerfile to Railway first                                                                                          |
-| Frontend hosting             | None; do not use Netlify for the app UI                                                                              |
-| Date/time storage            | UTC-aware PostgreSQL `timestamptz`, Java `OffsetDateTime` or carefully tested `Instant`                              |
-| Recurrence                   | Out of scope for v1                                                                                                  |
+| Build tool | Maven |
+| Packaging | WAR |
+| Runtime | Open Liberty container |
+| Enterprise profile | Jakarta EE 10 Web Profile |
+| UI | Jakarta Faces 4.0 / JSF + PrimeFaces 15.x `jakarta` classifier |
+| Dependency injection | CDI |
+| Service layer | Stateless Enterprise Beans / EJB Lite where method security is useful |
+| Persistence | Jakarta Persistence / JPA, provider-neutral code, Liberty default EclipseLink provider |
+| Database | Dockerized PostgreSQL for local development, Railway PostgreSQL for production |
+| Migrations | Flyway |
+| Auth | Username/password with self-registration, no OAuth/SSO |
+| Calendar access | Public read-only token links plus authenticated member roles |
+| Calendar roles | `VIEWER`, `EDITOR`, `ADMIN`, scoped to one calendar |
+| Deployment | Dockerfile to Railway first |
+| Frontend hosting | None; do not use Netlify for the app UI |
+| Date/time storage | UTC-aware PostgreSQL `timestamptz`, Java `OffsetDateTime` or carefully tested `Instant` |
+| Recurrence | Out of scope for v1 |
+| Notifications | Out of scope for v1 |
 
-The most important compatibility rule: **everything must be Jakarta-era code**.
+Everything must be Jakarta-era code. Do not introduce `javax.*` enterprise imports or old JSF XML namespaces. `javax.sql.DataSource` is acceptable because it is part of Java SE.
 
-Do not use:
-
-```java
-import javax.*;
-```
-
-Do use:
+Use:
 
 ```java
 import jakarta.*;
 ```
 
-Do not use old JSF XML namespaces such as:
-
-```xml
-xmlns:h="http://java.sun.com/jsf/html"
-```
-
-Do use Jakarta Faces namespaces:
+Use Jakarta Faces namespaces:
 
 ```xml
 xmlns:h="jakarta.faces.html"
@@ -57,95 +47,70 @@ xmlns:p="primefaces"
 
 ### 1.1 Java 25 policy
 
-Use **Java 25 LTS** for the local developer JDK and for the production Open Liberty container runtime. Java 25 is acceptable for this application because Open Liberty supports Java 25 and publishes Java 25 OpenJ9 container images.
-
-Compile application code with this property unless the owner explicitly changes it:
+Use Java 25 LTS for the local developer JDK and production Open Liberty runtime. Compile application code with:
 
 ```xml
 <maven.compiler.release>21</maven.compiler.release>
 ```
 
-Rationale:
-
-1. Running on Java 25 gives the application the current JVM/runtime behavior.
-2. Compiling with release 21 keeps source code more conservative and easier to understand for enterprise Java work.
-3. Switching `maven.compiler.release` to `17` is valid if employer parity becomes more important.
-4. Switching `maven.compiler.release` to `25` is valid only after the MVP is deployed and only if the owner wants to deliberately use Java 25 language/API features.
-5. Do not use preview features in this project.
-
-Multiple Java processes can run on the same machine at the same time. The project should not modify global `JAVA_HOME`; it should use repository-scoped tooling.
+Do not use preview features. Do not modify global `JAVA_HOME`; use repository-scoped tooling.
 
 ### 1.2 CLI-first reproducibility policy
 
-The repository must be usable without IntelliJ. IntelliJ may be used by humans later, but all required workflows must be expressible through source-controlled CLI files.
+The repository must be usable without IntelliJ. Required workflows must be expressible through source-controlled CLI files.
 
 Required pattern:
 
 ```text
 Git clone
   -> install mise once if missing
-  -> create wrapper files if this is the first repository initialization
   -> mise trust
   -> mise run setup
+  -> mise run db
   -> mise run dev
-```
-
-Create these source-controlled files early:
-
-```text
-.mise.toml
-.java-version
-.mvn/wrapper/maven-wrapper.properties
-mvnw
-mvnw.cmd
-docker-compose.yml
-.env.example
-scripts/bootstrap-unix.sh
-scripts/check-toolchain.sh
 ```
 
 Do not put downloaded JDKs, Maven distributions, PostgreSQL driver jars, PostgreSQL data volumes, `.env`, `target/`, or IDE state in source control.
 
 ### 1.3 Milestone structure
 
-Implement the project as four milestones. Each milestone must leave the repository in a runnable, verified state.
+Each milestone must leave the repository runnable and verified.
 
 | Milestone | Outcome | Includes |
 | --------- | ------- | -------- |
-| M0: project foundation | A reproducible Jakarta EE web app that builds and starts locally | Repository skeleton, Maven wrapper, `mise`, Docker Compose PostgreSQL, Open Liberty config, health endpoint, placeholder JSF/PrimeFaces pages |
-| M1: persistence and security core | Database-backed authentication and authorization with tested service logic | Flyway migrations, JPA entities, password hashing, bootstrap admin, role enforcement, audit foundation, focused unit tests |
-| M2: calendar and admin workflows | The calendar and user-management workflows are usable end to end | Calendar event CRUD, viewer/editor/admin behavior, admin user management, validation, audit logging, manual role checks |
+| M0: project foundation | A reproducible Jakarta EE web app that builds and starts locally | Repository skeleton, Maven wrapper, `mise`, Docker Compose PostgreSQL, Open Liberty config, health endpoint, placeholder JSF/PrimeFaces pages, flat responsive shell |
+| M1: persistence and security core | Database-backed registration, login, calendars, memberships, public tokens, invitations, and audit foundation | Flyway migrations, JPA entities, password hashing, registration, calendar-level authorization, focused tests |
+| M2: calendar and member workflows | Public calendar view, authenticated calendar workspace, event CRUD, calendar creation, invite links, member management | PrimeFaces calendar UI, role-aware event actions, settings, invite acceptance, audit logging, manual role checks |
 | M3: production readiness | The app is packaged, deployable, and recoverable | Docker production image, local Docker runtime test, Railway deployment, custom domain, Dockerized backup/restore, README runbook |
 
-Do not move to the next milestone until the current milestone's verification commands pass and its acceptance criteria are satisfied.
-
----
-
-
-## 2. Scope
+## 2. Product scope
 
 ### 2.1 MVP features
 
 The first deployed version must include:
 
-1. Login with username/password.
-2. Logout.
+1. Public self-registration with username/password.
+2. Login and logout.
 3. Password hashes stored in PostgreSQL.
-4. One-time bootstrap admin user from environment variables.
-5. Viewer/editor/admin roles.
-6. Calendar page using PrimeFaces.
-7. View events.
-8. Create events as editor/admin.
-9. Edit events as editor/admin.
-10. Delete events as editor/admin, with admin allowed to delete all events.
-11. Admin user-management page.
-12. Admin role assignment.
-13. Audit log for event and user-management changes.
-14. Flyway-managed schema.
-15. Health endpoint.
-16. Dockerized production build.
-17. Railway deployment with custom domain and HTTPS.
-18. Basic backup/restore procedure documented.
+4. Registered users can create calendars.
+5. Calendar creators become calendar admins.
+6. Calendar-level roles: `VIEWER`, `EDITOR`, and `ADMIN`.
+7. Public read-only calendar links backed by long random tokens.
+8. Public calendar pages marked `noindex` and not included in navigation indexes or generated sitemaps.
+9. Calendar admins can create invite links for editor and viewer access.
+10. Invite links can be accepted by existing users or newly registered users.
+11. Calendar list for signed-in users.
+12. Calendar page using PrimeFaces.
+13. View events on public links and authenticated calendar pages.
+14. Create, edit, and delete events as calendar editor/admin.
+15. Calendar settings and member management for calendar admins.
+16. Audit log for calendar, invite, member, and event changes.
+17. Flyway-managed schema.
+18. Health endpoint.
+19. Dockerized production build.
+20. Railway deployment with custom domain and HTTPS.
+21. Basic backup/restore procedure documented.
+22. Modern, flat, sleek UI suitable for a practical event calendar.
 
 ### 2.2 Explicitly out of scope for v1
 
@@ -159,17 +124,12 @@ Do not build these in the first version:
 6. Recurring events / RRULE.
 7. ICS import/export.
 8. Email reminders.
-9. Multi-calendar support.
-10. Multiple app instances / horizontal scaling.
-11. Kubernetes.
-12. Keycloak.
-13. Full observability stack.
-14. Mobile app.
-
-Add these only after the core app is deployed and stable.
-
----
-
+9. Push notifications.
+10. Native mobile app.
+11. Multiple app instances / horizontal scaling.
+12. Kubernetes.
+13. Keycloak.
+14. Full observability stack.
 
 ## 3. Architecture
 
@@ -196,16 +156,19 @@ Use this package structure:
 ```text
 com.example.calendar
   audit
+  calendar
   config
   event
   health
+  invitation
+  membership
   security
   startup
   user
   util
 ```
 
-Use feature-oriented packages. Avoid putting every entity in `model`, every service in `service`, and every view bean in `controller` if that makes navigation harder. This app is small; feature locality is more maintainable.
+Use feature-oriented packages. Backing beans coordinate UI only. Services own business rules.
 
 ### 3.2 Web resource layout
 
@@ -216,63 +179,88 @@ src/main/webapp
   index.xhtml
   login.xhtml
   login-error.xhtml
+  register.xhtml
+  public-calendar.xhtml
+  invite.xhtml
   app
+    calendars.xhtml
     calendar.xhtml
-    admin
-      users.xhtml
+    calendar-members.xhtml
+    calendar-settings.xhtml
   WEB-INF
     web.xml
     templates
       main.xhtml
-      admin.xhtml
   resources
     css
       app.css
 ```
 
-Pages under `/app/*` require authentication. Pages under `/app/admin/*` require `ADMIN`.
+Public calendar routes must be reachable without authentication. Authenticated app routes under `/app/*` require login. Calendar mutation and member management are enforced in services with calendar-specific authorization.
 
----
+### 3.3 URL model
 
+Use a public calendar URL shape that is easy to share and hard to guess:
 
+```text
+/calendar/{publicToken}
+```
 
-## 21. Security checklist
+If JSF routing makes that shape awkward in the first implementation, use a temporary equivalent such as:
+
+```text
+/public-calendar.xhtml?token={publicToken}
+```
+
+Do not expose sequential calendar ids in public read URLs. Do not use calendar names or slugs as access secrets.
+
+## 4. Authorization model
+
+Application authentication answers "who is signed in." Calendar authorization answers "what can this user do on this calendar."
+
+1. Public visitors with a valid public token may view events only.
+2. Signed-in users may create calendars.
+3. Calendar creators receive `ADMIN` membership on the new calendar.
+4. `VIEWER` members can view a calendar through the authenticated workspace.
+5. `EDITOR` members can create, edit, and delete events.
+6. `ADMIN` members can do everything editors can do, plus manage calendar settings, invite links, and members.
+7. At least one active `ADMIN` membership must remain on every active calendar.
+8. UI controls may hide unavailable actions, but services must enforce membership and role checks.
+9. Public tokens and invite tokens are bearer secrets; store only random, unguessable values and allow rotation/revocation.
+
+## 5. Security checklist
 
 Before first real use:
 
-1. Use a long random bootstrap password.
-2. Change bootstrap admin password immediately after first login.
-3. Remove `APP_BOOTSTRAP_ADMIN_PASSWORD` after first setup.
-4. Confirm password hashes are not plaintext.
-5. Confirm `/app/*` requires login.
-6. Confirm `/app/admin/*` requires admin.
-7. Confirm service methods have `@RolesAllowed`.
-8. Confirm viewers cannot mutate events.
-9. Confirm editors cannot manage users.
-10. Confirm last admin cannot be disabled.
-11. Confirm cookies are HttpOnly.
-12. Confirm production cookies are Secure.
-13. Confirm URL rewriting is disabled.
-14. Do not log passwords.
-15. Do not log full database URLs with credentials.
-16. Keep one app instance unless session handling is reviewed.
+1. Confirm password hashes are not plaintext.
+2. Confirm registration never logs plaintext passwords.
+3. Confirm public calendar pages are read-only.
+4. Confirm public calendar pages include `noindex`.
+5. Confirm public links use random UUID or stronger tokens, not database ids.
+6. Confirm invite links use random UUID or stronger tokens and can be revoked.
+7. Confirm `/app/*` requires login.
+8. Confirm service methods enforce calendar membership.
+9. Confirm public visitors cannot mutate events.
+10. Confirm viewers cannot mutate events.
+11. Confirm editors cannot manage members or settings.
+12. Confirm last calendar admin cannot be disabled or demoted.
+13. Confirm cookies are HttpOnly.
+14. Confirm production cookies are Secure.
+15. Confirm URL rewriting is disabled.
+16. Do not log passwords, public tokens, invite tokens, or full database URLs with credentials.
+17. Keep one app instance unless session handling is reviewed.
 
 Optional v1.1 hardening:
 
 1. Login attempt throttling by username and IP.
-2. Password change screen for all users.
-3. Admin-forced password reset flow.
+2. Registration throttling.
+3. Password change screen.
 4. Session timeout tuning.
 5. Content Security Policy headers.
 6. `/ready` endpoint with DB check.
 7. Dependency vulnerability scan in CI.
 
----
-
-
-## 22. Maintainability rules
-
-Follow these rules throughout implementation:
+## 6. Maintainability rules
 
 1. Backing beans coordinate UI only.
 2. Services own business rules.
@@ -283,144 +271,106 @@ Follow these rules throughout implementation:
 7. Use templates to avoid duplicated page chrome.
 8. Keep role names centralized.
 9. Keep password hashing parameters centralized.
-10. Use small verified checkpoints inside each milestone.
-11. Prefer boring code over clever abstractions.
-12. Do not introduce Spring Boot into this repo.
-13. Do not introduce a JavaScript frontend framework into this repo.
-14. Do not introduce Hibernate-specific code unless explicitly required later.
+10. Keep public token and invite token generation centralized.
+11. Use small verified checkpoints inside each milestone.
+12. Prefer boring code over clever abstractions.
+13. Do not introduce Spring Boot into this repo.
+14. Do not introduce a JavaScript frontend framework into this repo.
+15. Do not introduce Hibernate-specific code unless explicitly required later.
 
----
+## 7. UI direction
 
+The app should feel modern, flat, sleek, and practical:
 
-## 23. Testing plan
+1. Build app screens first, not a marketing landing page.
+2. Prefer open layouts, clear tables/lists, and restrained panels over decorative card-heavy pages.
+3. Use a white/light neutral background, strong readable text, subtle borders, and one or two accent colors.
+4. Keep PrimeFaces components styled consistently with the app shell.
+5. Use sentence-case UI copy.
+6. Avoid oversized hero sections, decorative gradients, nested cards, and one-note color palettes.
+7. Make mobile web responsive, but do not build a mobile app.
 
-### 23.1 Automated tests for v1
+## 8. Testing plan
 
-Minimum tests:
+Minimum automated tests:
 
 1. Password policy validation.
-2. Event time validation.
-3. Event title validation.
-4. Last-admin protection logic.
-5. Role helper logic if extracted into pure Java.
+2. Registration validation.
+3. Calendar creation grants the creator `ADMIN`.
+4. Public token generation is non-blank, unique at service level, and not derived from sequential ids.
+5. Invite token acceptance assigns the intended calendar role.
+6. Event title validation.
+7. Event time validation.
+8. Calendar role checks for public viewer, member viewer, editor, and admin paths.
+9. Last-calendar-admin protection.
+10. Timezone display helpers if extracted into pure Java.
 
-Use JUnit 5.
+Manual acceptance checks before deployment and after deployment:
 
-Do not attempt full JSF browser automation in the first pass unless time permits. Manual acceptance checks are acceptable for a personal v1.
+| Scenario | Expected result |
+| -------- | --------------- |
+| Public visitor opens valid calendar link | Calendar visible read-only |
+| Public visitor opens invalid calendar link | Generic not-found page |
+| Public visitor tries mutation URL/action | Rejected |
+| New user registers | Account is created |
+| Registered user creates calendar | User becomes calendar admin |
+| Calendar admin creates editor invite | Invite link is generated |
+| Invitee accepts editor invite | Invitee can edit that calendar |
+| Viewer opens authenticated calendar | Calendar visible, edit controls hidden |
+| Viewer attempts direct edit action | Server rejects |
+| Editor creates event | Event appears and persists |
+| Editor edits event | Changes persist |
+| Editor deletes event | Event removed |
+| Calendar admin manages members | Changes persist and are audited |
+| Calendar admin removes last admin role | Rejected |
+| App redeploy | Existing users, calendars, memberships, and events remain |
+| `/health` | Returns 200 `ok` |
 
-### 23.2 Manual acceptance test matrix
-
-Run this matrix before deployment and after deployment.
-
-| Scenario                                     | Expected result                        |
-| -------------------------------------------- | -------------------------------------- |
-| Logged out user visits `/app/calendar.xhtml` | Redirected to login                    |
-| Wrong login                                  | Generic error                          |
-| Admin login                                  | Calendar visible                       |
-| Viewer login                                 | Calendar visible, edit controls hidden |
-| Viewer attempts direct edit action           | Server rejects                         |
-| Editor creates event                         | Event appears and persists             |
-| Editor edits event                           | Changes persist                        |
-| Editor deletes event                         | Event removed                          |
-| Admin visits users page                      | Page visible                           |
-| Editor visits users page                     | Forbidden or redirected                |
-| Admin creates viewer                         | Viewer can log in                      |
-| Admin removes last admin role                | Rejected                               |
-| App redeploy                                 | Existing users/events remain           |
-| `/health`                                    | Returns 200 `ok`                       |
-
----
-
-
-## 24. CI plan, optional but recommended
-
-If GitHub Actions is available, add `.github/workflows/ci.yml`:
-
-```yaml
-name: CI
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: maven
-      - run: ./mvnw clean test package
-      - run: docker build -t shared-calendar:ci .
-```
-
-Add vulnerability scanning later. Do not block the initial app on a perfect CI pipeline.
-
----
-
-
-## 25. Production operating model
+## 9. Production operating model
 
 For the first deployed version:
 
 ```text
 Instances: 1
 Database: Railway PostgreSQL
-Backups: Dockerized manual `pg_dump` first, automated later
+Backups: Dockerized manual pg_dump first, automated later
 Logs: Railway logs
 Metrics: Railway metrics
 Domain: Railway custom domain
 HTTPS: Railway-managed certificate
 ```
 
-Do not scale to multiple instances until you have reviewed:
+Do not scale to multiple instances until you have reviewed JSF view state, session stickiness, concurrent edits, and database connection pool sizing.
 
-1. JSF view state.
-2. Session replication/stickiness.
-3. File upload/storage if added later.
-4. Concurrent edits.
-5. Database connection pool sizing.
-
----
-
-
-## 26. Future roadmap
+## 10. Future roadmap
 
 ### v1.1
 
 1. Password change screen.
-2. Login throttling.
-3. Better event filtering.
-4. User timezone preference.
-5. `/ready` endpoint checking DB.
-6. Automated nightly backups.
-7. Basic CI.
+2. Login and registration throttling.
+3. Public link rotation UI.
+4. Better event filtering.
+5. User timezone preference.
+6. `/ready` endpoint checking DB.
+7. Automated nightly backups.
+8. Basic CI.
 
 ### v1.2
 
 1. ICS export.
-2. Calendar list filters.
-3. Event color/category.
-4. Better audit viewer.
-5. Dependency scanning.
+2. Event color/category.
+3. Better audit viewer.
+4. Dependency scanning.
 
 ### v2
 
 1. Recurring events.
 2. Email reminders.
-3. Multiple calendars.
-4. Public read-only sharing links.
+3. Private calendars.
+4. Public read-only sharing links with optional display names.
 5. Optional migration to a VPS if Railway cost is not acceptable.
 
----
-
-
-## 27. Agent completion definition
+## 11. Agent completion definition
 
 The local agent is done only when all of these are true:
 
@@ -428,25 +378,26 @@ The local agent is done only when all of these are true:
 2. `docker compose up -d postgres` starts local DB.
 3. `mise run dev` starts the app locally.
 4. `/health` returns `200 ok` locally.
-5. First admin bootstraps from env vars.
-6. Admin can log in.
-7. Viewer/editor/admin role behavior works.
-8. Calendar event CRUD works.
-9. Admin user management works.
-10. Docker image builds.
-11. Docker image runs locally.
-12. App deploys to Railway.
-13. Custom domain works over HTTPS.
-14. Backup script has been tested against the local Docker Compose database.
-15. README documents setup, deploy, backup, and troubleshooting.
-16. There are no accidental `javax.*` enterprise imports.
-17. PrimeFaces dependency uses the `jakarta` classifier.
-18. JPA code is provider-neutral and does not depend on Hibernate.
+5. Users can register.
+6. Users can log in.
+7. Registered users can create calendars.
+8. Calendar creators become calendar admins.
+9. Public calendar links work read-only.
+10. Calendar invite links work for viewer/editor access.
+11. Calendar role behavior works.
+12. Event CRUD works for editor/admin and is rejected for viewer/public users.
+13. Calendar member management works for calendar admins.
+14. Docker image builds.
+15. Docker image runs locally.
+16. App deploys to Railway.
+17. Custom domain works over HTTPS.
+18. Backup script has been tested against the local Docker Compose database.
+19. README documents setup, deploy, backup, troubleshooting, roles, invitations, public links, and known limitations.
+20. There are no accidental `javax.*` enterprise imports.
+21. PrimeFaces dependency uses the `jakarta` classifier.
+22. JPA code is provider-neutral and does not depend on Hibernate.
 
----
-
-
-## 28. Reference links for the agent
+## 12. Reference links
 
 Use these documentation sources when stuck:
 
@@ -460,15 +411,3 @@ Use these documentation sources when stuck:
 8. Railway application host/port troubleshooting: `https://docs.railway.com/networking/troubleshooting/application-failed-to-respond`
 9. Railway PostgreSQL: `https://docs.railway.com/databases/postgresql`
 10. Railway custom domains: `https://docs.railway.com/networking/domains/working-with-domains`
-
----
-
-
-## 29. Final instruction to the local agent
-
-Build the app in the milestone order listed in the main plan index. After each milestone, run the verification commands and confirm the acceptance criteria. If a later task requires changing an earlier architectural decision, stop and record the reason in `README.md` under `Architecture notes` before proceeding.
-
-Do not replace this stack with Spring Boot, React, Node.js, or Netlify. The purpose of this repository is to learn and maintain a Liberty/Jakarta Faces/PrimeFaces application that resembles the JEAP-style environment while remaining simple enough for personal production use.
-
-
-

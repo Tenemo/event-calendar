@@ -1,0 +1,21 @@
+[tools]
+java = "temurin-25.0.3+9.0.LTS"
+
+[env]
+POSTGRESQL_VERSION = "42.7.13"
+
+[tasks.setup]
+description = "Prepare local tools and Liberty runtime resources"
+run = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\setup.ps1"
+
+[tasks.db]
+description = "Start the local PostgreSQL service"
+run = "docker compose up -d postgres"
+
+[tasks.dev]
+description = "Start Open Liberty dev mode"
+run = ".\\mvnw.cmd liberty:dev"
+
+[tasks.package]
+description = "Build and test the WAR"
+run = ".\\mvnw.cmd clean test package"

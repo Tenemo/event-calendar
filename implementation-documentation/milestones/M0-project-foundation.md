@@ -1,11 +1,12 @@
-﻿# M0: project foundation
+# M0: project foundation
 
-Use this milestone to create the runnable skeleton, project tooling, Dockerized local PostgreSQL, Open Liberty configuration, placeholder JSF/PrimeFaces pages, and the health endpoint.
+Use this milestone to create the runnable skeleton, project tooling, Dockerized local PostgreSQL, Open Liberty configuration, placeholder JSF/PrimeFaces pages, a modern flat app shell, and the health endpoint.
+
+M0 must not implement persistence, registration, login, invitations, calendar membership, or event storage. It should only prove that the chosen stack starts cleanly and that the visible shell points toward the intended product.
 
 ## Milestone checklist
 
-
-Outcome: a CLI-first Jakarta EE web app that builds, starts locally, and proves JSF/PrimeFaces rendering against Dockerized PostgreSQL.
+Outcome: a CLI-first Jakarta EE web app that builds, starts locally, proves JSF/PrimeFaces rendering, and shows placeholders for public calendars, self-registration, owned calendars, invite-based membership, and event pages.
 
 Tasks:
 
@@ -13,8 +14,10 @@ Tasks:
 2. Create `.gitignore`, `.editorconfig`, `.env.example`, `README.md`, `pom.xml`, `docker-compose.yml`, and Open Liberty `server.xml`.
 3. Create `.mise.toml`, `.java-version`, Maven wrapper files, and thin setup/check scripts.
 4. Configure Docker Compose with `postgres:17` for the local PostgreSQL service.
-5. Create placeholder XHTML pages, shared templates, app CSS, and a `HealthServlet`.
-6. Add a minimal PrimeFaces component to prove the Jakarta classifier and assets are loading.
+5. Create placeholder XHTML pages, a shared template, app CSS, and a `HealthServlet`.
+6. Add minimal PrimeFaces components to prove the Jakarta classifier and assets are loading.
+7. Make the shell visually aligned with a modern, flat, sleek calendar app.
+8. Show placeholder navigation for public calendar links, registration, signed-in calendar list, calendar detail, and calendar member management.
 
 Verification:
 
@@ -35,6 +38,10 @@ Manual checks:
 1. Open `http://localhost:9080/`.
 2. Confirm the page renders.
 3. Confirm PrimeFaces CSS and JavaScript load.
+4. Open the public calendar placeholder.
+5. Open the registration placeholder.
+6. Open the authenticated workspace placeholders.
+7. Confirm the UI uses a clean flat layout and remains usable on narrow screens.
 
 Acceptance criteria:
 
@@ -44,204 +51,97 @@ Acceptance criteria:
 4. No host PostgreSQL server or host `psql` installation is required.
 5. No `javax.*` enterprise imports exist except `javax.sql.DataSource` when needed.
 6. PrimeFaces dependency output shows the `jakarta` classifier.
+7. Placeholder copy does not promise implemented registration, login, persistence, invites, or event storage before M1/M2.
+8. Public docs describe the current foundation accurately.
 
+## Repository setup
 
-
-## Implementation details
-
-## 4. Repository setup
-
-The agent should create this structure in the empty repository:
+Create this structure for M0:
 
 ```text
 .
-â”œâ”€â”€ .dockerignore
-â”œâ”€â”€ .editorconfig
-â”œâ”€â”€ .env.example
-â”œâ”€â”€ .gitignore
-â”œâ”€â”€ Dockerfile
-â”œâ”€â”€ README.md
-â”œâ”€â”€ docker-compose.yml
-â”œâ”€â”€ pom.xml
-â”œâ”€â”€ scripts
-â”‚   â”œâ”€â”€ backup-postgres.sh
-â”‚   â”œâ”€â”€ restore-postgres.sh
-â”‚   â””â”€â”€ verify-local.sh
-â””â”€â”€ src
-    â”œâ”€â”€ main
-    â”‚   â”œâ”€â”€ java
-    â”‚   â”‚   â””â”€â”€ com
-    â”‚   â”‚       â””â”€â”€ example
-    â”‚   â”‚           â””â”€â”€ calendar
-    â”‚   â”‚               â”œâ”€â”€ audit
-    â”‚   â”‚               â”œâ”€â”€ config
-    â”‚   â”‚               â”œâ”€â”€ event
-    â”‚   â”‚               â”œâ”€â”€ health
-    â”‚   â”‚               â”œâ”€â”€ security
-    â”‚   â”‚               â”œâ”€â”€ startup
-    â”‚   â”‚               â”œâ”€â”€ user
-    â”‚   â”‚               â””â”€â”€ util
-    â”‚   â”œâ”€â”€ liberty
-    â”‚   â”‚   â””â”€â”€ config
-    â”‚   â”‚       â””â”€â”€ server.xml
-    â”‚   â”œâ”€â”€ resources
-    â”‚   â”‚   â”œâ”€â”€ META-INF
-    â”‚   â”‚   â”‚   â””â”€â”€ persistence.xml
-    â”‚   â”‚   â””â”€â”€ db
-    â”‚   â”‚       â””â”€â”€ migration
-    â”‚   â”‚           â”œâ”€â”€ V1__initial_schema.sql
-    â”‚   â”‚           â”œâ”€â”€ V2__seed_audit_indexes.sql
-    â”‚   â”‚           â””â”€â”€ V3__user_password_reset_fields.sql
-    â”‚   â””â”€â”€ webapp
-    â”‚       â”œâ”€â”€ app
-    â”‚       â”‚   â”œâ”€â”€ admin
-    â”‚       â”‚   â”‚   â””â”€â”€ users.xhtml
-    â”‚       â”‚   â””â”€â”€ calendar.xhtml
-    â”‚       â”œâ”€â”€ index.xhtml
-    â”‚       â”œâ”€â”€ login-error.xhtml
-    â”‚       â”œâ”€â”€ login.xhtml
-    â”‚       â”œâ”€â”€ resources
-    â”‚       â”‚   â””â”€â”€ css
-    â”‚       â”‚       â””â”€â”€ app.css
-    â”‚       â””â”€â”€ WEB-INF
-    â”‚           â”œâ”€â”€ templates
-    â”‚           â”‚   â”œâ”€â”€ admin.xhtml
-    â”‚           â”‚   â””â”€â”€ main.xhtml
-    â”‚           â””â”€â”€ web.xml
-    â””â”€â”€ test
-        â””â”€â”€ java
-            â””â”€â”€ com
-                â””â”€â”€ example
-                    â””â”€â”€ calendar
+|-- .dockerignore
+|-- .editorconfig
+|-- .env.example
+|-- .gitignore
+|-- README.md
+|-- docker-compose.yml
+|-- pom.xml
+|-- .mise.toml
+|-- .java-version
+|-- .mvn
+|   `-- wrapper
+|       `-- maven-wrapper.properties
+|-- mvnw
+|-- mvnw.cmd
+|-- scripts
+|   |-- bootstrap-unix.sh
+|   |-- check-toolchain.sh
+|   |-- check-toolchain.ps1
+|   |-- prepare-liberty-dev.sh
+|   |-- prepare-liberty-dev.ps1
+|   |-- setup.ps1
+|   `-- verify-local.sh
+`-- src
+    `-- main
+        |-- java
+        |   `-- com
+        |       `-- example
+        |           `-- calendar
+        |               |-- config
+        |               `-- health
+        |-- liberty
+        |   `-- config
+        |       `-- server.xml
+        `-- webapp
+            |-- index.xhtml
+            |-- login.xhtml
+            |-- login-error.xhtml
+            |-- register.xhtml
+            |-- public-calendar.xhtml
+            |-- app
+            |   |-- calendars.xhtml
+            |   |-- calendar.xhtml
+            |   `-- calendar-members.xhtml
+            |-- resources
+            |   `-- css
+            |       `-- app.css
+            `-- WEB-INF
+                |-- beans.xml
+                |-- templates
+                |   `-- main.xhtml
+                `-- web.xml
 ```
 
----
+Do not create Flyway migrations, JPA entities, login services, registration services, or calendar services in M0.
 
+## Maven plan
 
-## 5. Maven plan
-
-Create `pom.xml` with pinned versions. The exact patch versions can be updated by the agent after checking Maven Central, but the first implementation should start with the following known-good baseline:
+Create `pom.xml` with pinned versions:
 
 ```xml
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-
-    <groupId>com.example</groupId>
-    <artifactId>shared-calendar</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
-    <packaging>war</packaging>
-
-    <properties>
-        <maven.compiler.release>21</maven.compiler.release>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-
-        <jakartaee.version>10.0.0</jakartaee.version>
-        <primefaces.version>15.0.16</primefaces.version>
-        <postgresql.version>42.7.13</postgresql.version>
-        <flyway.version>12.10.0</flyway.version>
-        <junit.version>5.11.4</junit.version>
-        <liberty.maven.plugin.version>3.12.0</liberty.maven.plugin.version>
-    </properties>
-
-    <dependencies>
-        <dependency>
-            <groupId>jakarta.platform</groupId>
-            <artifactId>jakarta.jakartaee-web-api</artifactId>
-            <version>${jakartaee.version}</version>
-            <scope>provided</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.primefaces</groupId>
-            <artifactId>primefaces</artifactId>
-            <version>${primefaces.version}</version>
-            <classifier>jakarta</classifier>
-        </dependency>
-
-        <dependency>
-            <groupId>org.postgresql</groupId>
-            <artifactId>postgresql</artifactId>
-            <version>${postgresql.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-core</artifactId>
-            <version>${flyway.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-database-postgresql</artifactId>
-            <version>${flyway.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <version>${junit.version}</version>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
-
-    <build>
-        <finalName>shared-calendar</finalName>
-
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
-                <configuration>
-                    <release>${maven.compiler.release}</release>
-                </configuration>
-            </plugin>
-
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-war-plugin</artifactId>
-                <version>3.4.0</version>
-            </plugin>
-
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.5.2</version>
-                <configuration>
-                    <useModulePath>false</useModulePath>
-                </configuration>
-            </plugin>
-
-            <plugin>
-                <groupId>io.openliberty.tools</groupId>
-                <artifactId>liberty-maven-plugin</artifactId>
-                <version>${liberty.maven.plugin.version}</version>
-            </plugin>
-        </plugins>
-    </build>
-</project>
+<properties>
+    <maven.compiler.release>21</maven.compiler.release>
+    <jakartaee.version>10.0.0</jakartaee.version>
+    <primefaces.version>15.0.16</primefaces.version>
+    <postgresql.version>42.7.13</postgresql.version>
+    <flyway.version>12.10.0</flyway.version>
+    <junit.version>5.11.4</junit.version>
+    <liberty.maven.plugin.version>3.12.0</liberty.maven.plugin.version>
+</properties>
 ```
 
-Important Maven checks:
+Dependencies:
 
-```bash
-./mvnw -version
-./mvnw dependency:tree | grep primefaces
-./mvnw dependency:tree | grep jakarta
-./mvnw clean test package
-```
+1. `jakarta.jakartaee-web-api` with provided scope.
+2. `org.primefaces:primefaces` with classifier `jakarta`.
+3. PostgreSQL driver.
+4. Flyway core and PostgreSQL support for later milestones.
+5. JUnit 5 for later focused tests.
 
 The PrimeFaces dependency output must show the `jakarta` classifier. If it does not, stop and fix that before writing more code.
 
----
-
-
-## 6. Local development environment
-
-### 6.6 Required local tools
+## Local development environment
 
 The developer machine should have:
 
@@ -254,39 +154,11 @@ Git
 No host PostgreSQL installation required
 ```
 
-### 6.7 Local PostgreSQL
+Local PostgreSQL is infrastructure, not a host prerequisite. Run it through Docker Compose and use Dockerized client commands for inspection, backup, and restore.
 
-PostgreSQL is local infrastructure, not a host prerequisite. Run it through Docker Compose and use Dockerized client commands for inspection, backup, and restore.
-
-Create `docker-compose.yml`:
-
-```yaml
-services:
-  postgres:
-    image: postgres:17
-    container_name: shared-calendar-postgres
-    environment:
-      POSTGRES_DB: calendar
-      POSTGRES_USER: calendar
-      POSTGRES_PASSWORD: calendar
-    ports:
-      - "5432:5432"
-    volumes:
-      - calendar_postgres:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U calendar -d calendar"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-volumes:
-  calendar_postgres:
-```
-
-Create `.env.example`:
+Create `.env.example` with local defaults:
 
 ```bash
-# Local development values
 PORT=9080
 COOKIE_SECURE=false
 PGHOST=localhost
@@ -296,128 +168,39 @@ PGUSER=calendar
 PGPASSWORD=calendar
 APP_TIMEZONE=Europe/Warsaw
 APP_BASE_URL=http://localhost:9080
-APP_BOOTSTRAP_ADMIN_USERNAME=admin
-APP_BOOTSTRAP_ADMIN_PASSWORD=change-me-before-real-use
+APP_REGISTRATION_ENABLED=true
 ```
 
-Local commands:
+## Open Liberty configuration
 
-```bash
-cp .env.example .env
-set -a
-source .env
-set +a
+Use `webProfile-10.0` first. It ensures the needed Jakarta EE 10 web features are available.
 
-mise run db
-mise run dev
-```
+`server.xml` must:
 
-Smoke check:
+1. Bind the endpoint to `host="*"`.
+2. Use the `${PORT}` variable.
+3. Keep local `COOKIE_SECURE=false`.
+4. Configure `cookieHttpOnly="true"`, `cookieSameSite="Lax"`, and `urlRewritingEnabled="false"`.
+5. Define `jdbc/CalendarDS` using the PostgreSQL driver copied into Liberty config resources.
+6. Deploy `shared-calendar.war` at context root `/`.
 
-```bash
-curl -i http://localhost:9080/health
-```
+The PostgreSQL JDBC driver must be visible to Liberty as a server resource, not only as a WAR dependency. The local setup task copies it into `src/main/liberty/config/resources`; keep copied jars out of Git.
 
-Database inspection uses the Compose service:
+## Placeholder pages
 
-```bash
-docker compose exec postgres psql -U calendar -d calendar -c '\dt'
-docker compose exec postgres psql -U calendar -d calendar -c 'select * from flyway_schema_history order by installed_rank;'
-```
+M0 pages should communicate product direction without pretending later workflows already work.
 
----
+1. `index.xhtml`: app-first overview with a public calendar preview and links to registration and the calendar workspace.
+2. `public-calendar.xhtml`: read-only public calendar placeholder showing the long-link model.
+3. `register.xhtml`: disabled registration form placeholder that explains registration is added in M1.
+4. `login.xhtml`: disabled sign-in form placeholder that explains sign-in is added in M1.
+5. `app/calendars.xhtml`: signed-in calendar list placeholder.
+6. `app/calendar.xhtml`: calendar detail/event placeholder.
+7. `app/calendar-members.xhtml`: invite/member placeholder.
 
+Use PrimeFaces components on these pages so PrimeFaces CSS and JavaScript are loaded.
 
-
-## 7. Open Liberty configuration
-
-Create `src/main/liberty/config/server.xml`.
-
-Use `webProfile-10.0` first. It is simpler and ensures the needed Jakarta EE 10 web features are available. Do not prematurely micro-optimize by listing individual features unless there is a specific conflict.
-
-```xml
-<server description="shared-calendar">
-
-    <featureManager>
-        <feature>webProfile-10.0</feature>
-    </featureManager>
-
-    <variable name="PORT" defaultValue="9080"/>
-    <variable name="COOKIE_SECURE" defaultValue="false"/>
-
-    <variable name="PGHOST" defaultValue="localhost"/>
-    <variable name="PGPORT" defaultValue="5432"/>
-    <variable name="PGDATABASE" defaultValue="calendar"/>
-    <variable name="PGUSER" defaultValue="calendar"/>
-    <variable name="PGPASSWORD" defaultValue="calendar"/>
-
-    <httpEndpoint id="defaultHttpEndpoint"
-                  host="*"
-                  httpPort="${PORT}"/>
-
-    <httpSession cookieHttpOnly="true"
-                 cookieSecure="${COOKIE_SECURE}"
-                 cookieSameSite="Lax"
-                 urlRewritingEnabled="false"/>
-
-    <library id="postgresqlDriver">
-        <fileset dir="${server.config.dir}/resources"
-                 includes="postgresql-*.jar"/>
-    </library>
-
-    <dataSource id="CalendarDS" jndiName="jdbc/CalendarDS">
-        <jdbcDriver libraryRef="postgresqlDriver"/>
-        <properties.postgresql serverName="${PGHOST}"
-                               portNumber="${PGPORT}"
-                               databaseName="${PGDATABASE}"
-                               user="${PGUSER}"
-                               password="${PGPASSWORD}"/>
-    </dataSource>
-
-    <webApplication location="shared-calendar.war"
-                    contextRoot="/"/>
-
-</server>
-```
-
-Notes:
-
-1. Use `host="*"`; Railway cannot reach an app bound only to localhost.
-2. Use `${PORT}`. Railway injects `PORT`; Liberty environment-variable substitution can override the default.
-3. Keep `COOKIE_SECURE=false` locally; set `COOKIE_SECURE=true` in production.
-4. Do not hardcode production database credentials.
-5. The PostgreSQL JDBC driver must be visible to Liberty as a server resource, not only as a WAR dependency. The Dockerfile below copies the driver into `/config/resources`. For local `mise run dev`, create a helper script that copies the same driver into `src/main/liberty/config/resources`; keep the copied JAR out of Git.
-
-Create `scripts/prepare-liberty-dev.sh`:
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-POSTGRESQL_VERSION="${POSTGRESQL_VERSION:-42.7.13}"
-mkdir -p src/main/liberty/config/resources
-./mvnw -q dependency:copy \
-  -Dartifact="org.postgresql:postgresql:${POSTGRESQL_VERSION}" \
-  -DoutputDirectory=src/main/liberty/config/resources
-```
-
-Add this to `.gitignore`:
-
-```gitignore
-src/main/liberty/config/resources/*.jar
-```
-
-Run this once before the first local Liberty startup and whenever the PostgreSQL driver version changes:
-
-```bash
-chmod +x scripts/prepare-liberty-dev.sh
-./scripts/prepare-liberty-dev.sh
-```
-
----
-
-
-## 15. Health endpoint
+## Health endpoint
 
 Create `health/HealthServlet.java`:
 
@@ -442,10 +225,4 @@ public class HealthServlet extends HttpServlet {
 }
 ```
 
-Do not require database access for `/health`. This is a liveness check. Add a separate `/ready` database readiness endpoint later if needed.
-
----
-
-
-
-
+Do not require database access for `/health`. This is a liveness check.

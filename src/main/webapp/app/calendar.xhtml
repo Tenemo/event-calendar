@@ -1,0 +1,33 @@
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:h="jakarta.faces.html"
+                xmlns:ui="jakarta.faces.facelets"
+                xmlns:p="primefaces"
+                template="/WEB-INF/templates/main.xhtml">
+    <ui:define name="title">Calendar - Shared calendar</ui:define>
+
+    <ui:define name="content">
+        <section class="page-section">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Calendar</p>
+                    <h1>Shared plans</h1>
+                </div>
+                <h:link outcome="/app/admin/users" value="Manage users" styleClass="text-link"/>
+            </div>
+
+            <p:panel header="Calendar placeholder" styleClass="surface-panel">
+                <p>
+                    This page proves that authenticated app routes, templates, and PrimeFaces components can render before event storage is added.
+                </p>
+                <p:tabView>
+                    <p:tab title="Month">
+                        <p>Calendar event rendering is added after the persistence and security core is ready.</p>
+                    </p:tab>
+                    <p:tab title="List">
+                        <p>No events are loaded in the foundation milestone.</p>
+                    </p:tab>
+                </p:tabView>
+            </p:panel>
+        </section>
+    </ui:define>
+</ui:composition>

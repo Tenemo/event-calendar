@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:h="jakarta.faces.html"
+      xmlns:ui="jakarta.faces.facelets"
+      xmlns:p="primefaces">
+<h:head>
+    <title><ui:insert name="title">Shared calendar</ui:insert></title>
+    <h:outputStylesheet library="css" name="app.css"/>
+</h:head>
+<h:body>
+    <header class="app-header">
+        <div>
+            <h:link outcome="/index" value="Shared calendar" styleClass="app-brand"/>
+            <p class="app-subtitle">A private calendar for shared plans.</p>
+        </div>
+        <nav class="app-nav" aria-label="Main navigation">
+            <h:link outcome="/index" value="Home"/>
+            <h:link outcome="/app/calendar" value="Calendar"/>
+            <h:link outcome="/app/admin/users" value="Users"/>
+            <h:link outcome="/login" value="Sign in"/>
+        </nav>
+    </header>
+
+    <main class="app-main">
+        <p:messages id="messages" showDetail="true" closable="true"/>
+        <ui:insert name="content"/>
+    </main>
+</h:body>
+</html>

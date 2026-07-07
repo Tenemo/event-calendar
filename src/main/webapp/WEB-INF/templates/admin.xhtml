@@ -1,0 +1,17 @@
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:ui="jakarta.faces.facelets"
+                xmlns:h="jakarta.faces.html"
+                template="/WEB-INF/templates/main.xhtml">
+    <ui:define name="content">
+        <section class="page-section">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Administration</p>
+                    <h1><ui:insert name="admin-title">Users</ui:insert></h1>
+                </div>
+                <h:link outcome="/app/calendar" value="Back to calendar" styleClass="text-link"/>
+            </div>
+            <ui:insert name="admin-content"/>
+        </section>
+    </ui:define>
+</ui:composition>

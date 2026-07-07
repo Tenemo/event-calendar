@@ -1,0 +1,30 @@
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:h="jakarta.faces.html"
+                xmlns:ui="jakarta.faces.facelets"
+                xmlns:p="primefaces"
+                template="/WEB-INF/templates/main.xhtml">
+    <ui:define name="title">Shared calendar</ui:define>
+
+    <ui:define name="content">
+        <section class="page-section">
+            <div class="section-header">
+                <div>
+                    <p class="eyebrow">Foundation</p>
+                    <h1>Shared calendar</h1>
+                </div>
+            </div>
+
+            <p:panel header="Application shell" styleClass="surface-panel">
+                <p>
+                    The Jakarta Faces and PrimeFaces shell is running. Calendar, authentication, and administration workflows are added in the next milestones.
+                </p>
+                <h:form>
+                    <p:commandButton value="Open calendar"
+                                     action="/app/calendar.xhtml?faces-redirect=true"
+                                     ajax="false"
+                                     styleClass="primary-action"/>
+                </h:form>
+            </p:panel>
+        </section>
+    </ui:define>
+</ui:composition>

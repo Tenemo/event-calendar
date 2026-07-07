@@ -1,20 +1,21 @@
-﻿# M1: persistence and security core
+# M1: persistence and security core
 
-Use this milestone to implement schema migrations, persistence, authentication, authorization, bootstrap admin setup, domain services, password handling, audit foundation, and focused tests.
+Use this milestone to implement schema migrations, JPA persistence, self-registration, login, password handling, calendar creation, calendar membership authorization, public calendar tokens, invite tokens, audit foundation, and focused tests.
+
+Do not build the full PrimeFaces calendar workflow in M1. M1 should establish the data model and service rules that M2 can safely expose.
 
 ## Milestone checklist
 
-
-Outcome: database schema, JPA domain, authentication, bootstrap admin, role checks, password hashing, and audit foundation are implemented with focused tests.
+Outcome: users can register, log in, create calendars, receive calendar `ADMIN` membership, and rely on tested service-layer authorization for public viewing, member roles, invite acceptance, and event validation.
 
 Tasks:
 
 1. Add Flyway migrations and a startup migration bean.
 2. Add `persistence.xml` and provider-neutral JPA entities.
-3. Add event, user, role, password, and audit services.
-4. Add bootstrap admin creation from environment variables.
-5. Add Jakarta security configuration, web security constraints, login view logic, current-user helper, and logout support.
-6. Add unit tests for password policy, event validation, role helpers, last-admin protection, and time handling.
+3. Add user, password, registration, calendar, membership, invitation, event, and audit services.
+4. Add Jakarta Security configuration, web security constraints, login view logic, registration view logic, current-user helper, and logout support.
+5. Generate public calendar tokens and invite tokens with UUID v4 or stronger random values.
+6. Add focused tests for password policy, registration validation, calendar creation, role checks, invite acceptance, last-admin protection, event validation, token generation, and time handling.
 
 Verification:
 
@@ -29,12 +30,14 @@ curl -i http://localhost:9080/health
 
 Manual checks:
 
-1. App starts with no users and bootstrap environment variables.
-2. Admin user exists after startup.
-3. Login works.
-4. `/app/calendar.xhtml` is inaccessible when logged out.
-5. Logout works.
-6. Wrong password shows a generic failure.
+1. App starts with an empty database.
+2. A new user can register.
+3. Login works after registration.
+4. A registered user can create a calendar.
+5. The calendar creator receives `ADMIN` membership.
+6. A public token is generated for the calendar.
+7. Logout works.
+8. Wrong password shows a generic failure.
 
 Acceptance criteria:
 
@@ -44,15 +47,13 @@ Acceptance criteria:
 4. No Hibernate-specific imports are used.
 5. `@Version` is used for event optimistic locking.
 6. No plaintext passwords are stored or logged.
-7. Bootstrap is ignored once users exist.
-8. Roles load from `app_user_role`.
-9. Service methods enforce roles, not only UI controls.
+7. No public calendar tokens or invite tokens are logged.
+8. Registration validates username and password policy.
+9. Calendar creation grants exactly one initial `ADMIN` membership to the creator.
+10. Roles load from `calendar_member`.
+11. Service methods enforce calendar membership and role checks, not only UI controls.
 
-
-
-## Implementation details
-
-## 8. Persistence configuration
+## Persistence configuration
 
 Create `src/main/resources/META-INF/persistence.xml`:
 
@@ -78,12 +79,9 @@ Rules:
 
 1. Flyway owns schema changes.
 2. JPA must not auto-create, update, or drop schema in production.
-3. Keep entity code provider-neutral. Avoid Hibernate-specific annotations.
+3. Keep entity code provider-neutral.
 
----
-
-
-## 9. Database schema
+## Database schema
 
 Create `src/main/resources/db/migration/V1__initial_schema.sql`.
 
@@ -96,30 +94,76 @@ create table app_user (
     display_name varchar(160) not null,
     password_hash text not null,
     active boolean not null default true,
-    must_change_password boolean not null default false,
     created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now()
+    updated_at timestamptz not null default now(),
+    check (length(trim(username)) > 0),
+    check (length(trim(display_name)) > 0)
 );
 
-create table app_user_role (
+create table calendar (
+    id bigserial primary key,
+    name varchar(160) not null,
+    description text,
+    public_token varchar(80) not null unique,
+    timezone varchar(80) not null default 'Europe/Warsaw',
+    public_access_enabled boolean not null default true,
+    active boolean not null default true,
+    created_by_user_id bigint not null references app_user(id),
+    version integer not null default 0,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    check (length(trim(name)) > 0),
+    check (length(trim(public_token)) >= 36)
+);
+
+create index idx_calendar_created_by_user_id
+    on calendar(created_by_user_id);
+
+create table calendar_member (
+    calendar_id bigint not null references calendar(id) on delete cascade,
     user_id bigint not null references app_user(id) on delete cascade,
     role_name varchar(20) not null,
-    primary key (user_id, role_name),
+    active boolean not null default true,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    primary key (calendar_id, user_id),
     check (role_name in ('VIEWER', 'EDITOR', 'ADMIN'))
 );
 
-create index idx_app_user_role_role_name
-    on app_user_role(role_name);
+create index idx_calendar_member_user_id
+    on calendar_member(user_id);
+
+create index idx_calendar_member_role_name
+    on calendar_member(role_name);
+
+create table calendar_invitation (
+    id bigserial primary key,
+    calendar_id bigint not null references calendar(id) on delete cascade,
+    invite_token varchar(80) not null unique,
+    role_name varchar(20) not null,
+    created_by_user_id bigint not null references app_user(id),
+    accepted_by_user_id bigint references app_user(id),
+    revoked_at timestamptz,
+    accepted_at timestamptz,
+    expires_at timestamptz,
+    created_at timestamptz not null default now(),
+    check (role_name in ('VIEWER', 'EDITOR')),
+    check (length(trim(invite_token)) >= 36)
+);
+
+create index idx_calendar_invitation_calendar_id
+    on calendar_invitation(calendar_id);
 
 create table calendar_event (
     id bigserial primary key,
+    calendar_id bigint not null references calendar(id) on delete cascade,
     title varchar(200) not null,
     description text,
     location varchar(200),
     start_at timestamptz not null,
     end_at timestamptz not null,
     all_day boolean not null default false,
-    created_by_user_id bigint not null references app_user(id),
+    created_by_user_id bigint references app_user(id),
     updated_by_user_id bigint references app_user(id),
     version integer not null default 0,
     created_at timestamptz not null default now(),
@@ -128,18 +172,16 @@ create table calendar_event (
     check (end_at > start_at)
 );
 
-create index idx_calendar_event_start_at
-    on calendar_event(start_at);
+create index idx_calendar_event_calendar_start
+    on calendar_event(calendar_id, start_at);
 
-create index idx_calendar_event_end_at
-    on calendar_event(end_at);
-
-create index idx_calendar_event_range
-    on calendar_event(start_at, end_at);
+create index idx_calendar_event_calendar_end
+    on calendar_event(calendar_id, end_at);
 
 create table audit_log (
     id bigserial primary key,
     actor_user_id bigint references app_user(id),
+    calendar_id bigint references calendar(id),
     entity_type varchar(80) not null,
     entity_id bigint,
     action varchar(80) not null,
@@ -150,486 +192,54 @@ create table audit_log (
 create index idx_audit_log_created_at
     on audit_log(created_at);
 
+create index idx_audit_log_calendar_id
+    on audit_log(calendar_id);
+
 create index idx_audit_log_entity
     on audit_log(entity_type, entity_id);
 ```
 
 Do not add recurring-event tables in v1.
 
----
+## Startup sequence
 
-
-## 10. Startup sequence
-
-Create two startup beans:
+Create one startup bean:
 
 ```text
 startup/DatabaseMigration.java
-startup/BootstrapAdmin.java
 ```
-
-### 10.1 Database migration bean
 
 `DatabaseMigration` responsibilities:
 
 1. Run Flyway migrations during application startup.
 2. Fail startup if migrations fail.
-3. Log the applied migration version.
+3. Log the applied migration version without logging database credentials.
 
-Implementation shape:
+Use `javax.sql.DataSource` for the injected data source because it is part of Java SE, not old Java EE.
 
-```java
-package com.example.calendar.startup;
+Do not create a bootstrap admin in this product model. Registered users create their own calendars and become calendar admins for those calendars.
 
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.Resource;
-import jakarta.ejb.Singleton;
-import jakarta.ejb.Startup;
-import javax.sql.DataSource;
-import org.flywaydb.core.Flyway;
+## Authentication and registration
 
-@Singleton(name = "DatabaseMigration")
-@Startup
-public class DatabaseMigration {
+Use custom JSF login backed by Jakarta Security. Do not post to `j_security_check`.
 
-    @Resource(lookup = "jdbc/CalendarDS")
-    private DataSource dataSource;
+Security configuration should declare an authenticated application role such as `USER`, while calendar roles are enforced by application services from `calendar_member`.
 
-    @PostConstruct
-    public void migrate() {
-        Flyway.configure()
-            .dataSource(dataSource)
-            .locations("classpath:db/migration")
-            .baselineOnMigrate(false)
-            .load()
-            .migrate();
-    }
-}
-```
+The database identity store can return a constant `USER` group for active registered users. Calendar `VIEWER`, `EDITOR`, and `ADMIN` roles must not be treated as global app roles.
 
-`javax.sql.DataSource` is correct here because it is part of Java SE, not old Java EE. Do not replace it with `jakarta.sql.DataSource`; that type does not exist.
+Registration responsibilities:
 
-### 10.2 Bootstrap admin bean
+1. Accept username, display name, password, and initial calendar name.
+2. Validate username and display name are not blank.
+3. Validate password policy before hashing.
+4. Create the user.
+5. Create the first calendar unless the user explicitly chooses to do that later.
+6. Generate the calendar public token.
+7. Grant the creator calendar `ADMIN`.
+8. Log account and calendar creation without logging password or tokens.
+9. Sign the user in or redirect to login after success.
 
-`BootstrapAdmin` responsibilities:
-
-1. Run after migrations.
-2. Check if any users exist.
-3. If no users exist, read:
-   - `APP_BOOTSTRAP_ADMIN_USERNAME`
-   - `APP_BOOTSTRAP_ADMIN_PASSWORD`
-4. Create first admin user with roles `ADMIN`, `EDITOR`, `VIEWER`.
-5. Set `must_change_password=true`.
-6. Log that bootstrap happened, without logging the password.
-7. If no users exist and bootstrap variables are missing, fail startup with a clear message.
-8. If users already exist, ignore bootstrap variables.
-
-Use `@DependsOn("DatabaseMigration")`.
-
----
-
-
-
-## 11. Authentication and authorization
-
-### 11.1 Chosen login model
-
-Use **custom JSF login backed by Jakarta Security**.
-
-This is still a Jakarta Security pattern, but it avoids brittle `j_security_check` form wiring and keeps the UI readable. Do not mix this with container-form-login conventions. In particular:
-
-1. Do not post to `j_security_check`.
-2. Do not depend on fields named `j_username` and `j_password`.
-3. Do not add a second login mechanism later.
-
-### 11.2 Security configuration
-
-Create `config/SecurityConfig.java`:
-
-```java
-package com.example.calendar.config;
-
-import jakarta.annotation.security.DeclareRoles;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.faces.annotation.FacesConfig;
-import jakarta.security.enterprise.authentication.mechanism.http.CustomFormAuthenticationMechanismDefinition;
-import jakarta.security.enterprise.authentication.mechanism.http.LoginToContinue;
-import jakarta.security.enterprise.identitystore.DatabaseIdentityStoreDefinition;
-import jakarta.security.enterprise.identitystore.Pbkdf2PasswordHash;
-
-@ApplicationScoped
-@FacesConfig
-@DeclareRoles({"VIEWER", "EDITOR", "ADMIN"})
-@CustomFormAuthenticationMechanismDefinition(
-    loginToContinue = @LoginToContinue(
-        loginPage = "/login.xhtml",
-        errorPage = "/login-error.xhtml"
-    )
-)
-@DatabaseIdentityStoreDefinition(
-    dataSourceLookup = "jdbc/CalendarDS",
-    callerQuery = "select password_hash from app_user where username = ? and active = true",
-    groupsQuery = "select r.role_name " +
-                  "from app_user_role r " +
-                  "join app_user u on u.id = r.user_id " +
-                  "where u.username = ? and u.active = true",
-    hashAlgorithm = Pbkdf2PasswordHash.class,
-    hashAlgorithmParameters = {
-        "Pbkdf2PasswordHash.Algorithm=PBKDF2WithHmacSHA512",
-        "Pbkdf2PasswordHash.Iterations=210000",
-        "Pbkdf2PasswordHash.SaltSizeBytes=32",
-        "Pbkdf2PasswordHash.KeySizeBytes=32"
-    }
-)
-public class SecurityConfig {
-}
-```
-
-### 11.3 Web security constraints
-
-Create `src/main/webapp/WEB-INF/web.xml`:
-
-```xml
-<web-app version="6.0"
-         xmlns="https://jakarta.ee/xml/ns/jakartaee"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee https://jakarta.ee/xml/ns/jakartaee/web-app_6_0.xsd">
-
-    <display-name>Shared calendar</display-name>
-
-    <welcome-file-list>
-        <welcome-file>index.xhtml</welcome-file>
-    </welcome-file-list>
-
-    <security-constraint>
-        <web-resource-collection>
-            <web-resource-name>Authenticated app</web-resource-name>
-            <url-pattern>/app/*</url-pattern>
-        </web-resource-collection>
-        <auth-constraint>
-            <role-name>VIEWER</role-name>
-            <role-name>EDITOR</role-name>
-            <role-name>ADMIN</role-name>
-        </auth-constraint>
-    </security-constraint>
-
-    <security-constraint>
-        <web-resource-collection>
-            <web-resource-name>Admin area</web-resource-name>
-            <url-pattern>/app/admin/*</url-pattern>
-        </web-resource-collection>
-        <auth-constraint>
-            <role-name>ADMIN</role-name>
-        </auth-constraint>
-    </security-constraint>
-
-    <security-role>
-        <role-name>VIEWER</role-name>
-    </security-role>
-    <security-role>
-        <role-name>EDITOR</role-name>
-    </security-role>
-    <security-role>
-        <role-name>ADMIN</role-name>
-    </security-role>
-</web-app>
-```
-
-### 11.4 Login view bean
-
-Create `security/LoginView.java`.
-
-Responsibilities:
-
-1. Receive username/password from `login.xhtml`.
-2. Trim username.
-3. Call `SecurityContext.authenticate`.
-4. Redirect to `/app/calendar.xhtml` on success.
-5. Show generic error on failure.
-6. Never reveal whether username or password was wrong.
-
-Implementation shape:
-
-```java
-package com.example.calendar.security;
-
-import jakarta.enterprise.context.RequestScoped;
-import jakarta.faces.application.FacesMessage;
-import jakarta.faces.context.FacesContext;
-import jakarta.inject.Inject;
-import jakarta.inject.Named;
-import jakarta.security.enterprise.AuthenticationStatus;
-import jakarta.security.enterprise.SecurityContext;
-import jakarta.security.enterprise.authentication.mechanism.http.AuthenticationParameters;
-import jakarta.security.enterprise.credential.Password;
-import jakarta.security.enterprise.credential.UsernamePasswordCredential;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-
-@Named
-@RequestScoped
-public class LoginView {
-
-    @Inject
-    private SecurityContext securityContext;
-
-    @Inject
-    private FacesContext facesContext;
-
-    private String username;
-    private String password;
-
-    public String login() {
-        HttpServletRequest request =
-            (HttpServletRequest) facesContext.getExternalContext().getRequest();
-        HttpServletResponse response =
-            (HttpServletResponse) facesContext.getExternalContext().getResponse();
-
-        AuthenticationStatus status = securityContext.authenticate(
-            request,
-            response,
-            AuthenticationParameters.withParams()
-                .credential(new UsernamePasswordCredential(username, new Password(password)))
-        );
-
-        if (status == AuthenticationStatus.SUCCESS) {
-            return "/app/calendar.xhtml?faces-redirect=true";
-        }
-
-        facesContext.addMessage(null,
-            new FacesMessage(FacesMessage.SEVERITY_ERROR,
-                "Invalid username or password.", null));
-
-        return null;
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = username == null ? null : username.trim();
-    }
-
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
-    }
-}
-```
-
-### 11.5 Current user helper
-
-Create `security/CurrentUser.java`:
-
-```java
-package com.example.calendar.security;
-
-import jakarta.enterprise.context.RequestScoped;
-import jakarta.faces.context.FacesContext;
-import jakarta.inject.Inject;
-import jakarta.inject.Named;
-import jakarta.security.enterprise.SecurityContext;
-import jakarta.servlet.http.HttpServletRequest;
-import java.security.Principal;
-
-@Named
-@RequestScoped
-public class CurrentUser {
-
-    @Inject
-    private SecurityContext securityContext;
-
-    @Inject
-    private FacesContext facesContext;
-
-    public String getUsername() {
-        Principal principal = securityContext.getCallerPrincipal();
-        return principal == null ? null : principal.getName();
-    }
-
-    public boolean isViewer() {
-        return securityContext.isCallerInRole("VIEWER")
-            || securityContext.isCallerInRole("EDITOR")
-            || securityContext.isCallerInRole("ADMIN");
-    }
-
-    public boolean isEditor() {
-        return securityContext.isCallerInRole("EDITOR")
-            || securityContext.isCallerInRole("ADMIN");
-    }
-
-    public boolean isAdmin() {
-        return securityContext.isCallerInRole("ADMIN");
-    }
-
-    public String logout() throws Exception {
-        HttpServletRequest request =
-            (HttpServletRequest) facesContext.getExternalContext().getRequest();
-        request.logout();
-        request.getSession().invalidate();
-        return "/login.xhtml?faces-redirect=true";
-    }
-}
-```
-
----
-
-
-## 12. Domain model
-
-### 12.1 Entities
-
-Create these JPA entities:
-
-```text
-event/CalendarEvent.java
-user/AppUser.java
-user/AppUserRole.java
-audit/AuditLog.java
-```
-
-Use `@Version` on `CalendarEvent.version` for optimistic locking.
-
-Use `OffsetDateTime` for timestamps unless the agent has tested `Instant` mapping successfully with the chosen Liberty/EclipseLink version.
-
-Example field style:
-
-```java
-@Column(name = "start_at", nullable = false)
-private OffsetDateTime startAt;
-
-@Column(name = "end_at", nullable = false)
-private OffsetDateTime endAt;
-
-@Version
-@Column(nullable = false)
-private int version;
-```
-
-Entity rules:
-
-1. Keep entities persistence-focused.
-2. Put UI form state in DTOs, not directly in entities.
-3. Do not expose mutable entity collections to JSF pages unless necessary.
-4. Validate business rules in services, not only in database constraints.
-
-### 12.2 DTOs and command records
-
-Create small DTOs/records:
-
-```text
-event/CalendarEventForm.java
-event/CreateCalendarEventCommand.java
-event/UpdateCalendarEventCommand.java
-user/UserForm.java
-user/CreateUserCommand.java
-user/UpdateUserRolesCommand.java
-```
-
-Use Java records for immutable command inputs where convenient:
-
-```java
-public record CreateCalendarEventCommand(
-    String title,
-    String description,
-    String location,
-    OffsetDateTime startAt,
-    OffsetDateTime endAt,
-    boolean allDay
-) {}
-```
-
----
-
-
-## 13. Service layer
-
-Use EJB Lite `@Stateless` for services that need method-level role enforcement.
-
-Create:
-
-```text
-event/CalendarService.java
-user/UserService.java
-audit/AuditService.java
-security/PasswordService.java
-```
-
-### 13.1 CalendarService
-
-Responsibilities:
-
-1. Find events in date range.
-2. Create event.
-3. Update event.
-4. Delete event.
-5. Validate title, start, end, role permissions.
-6. Write audit logs.
-
-Method security:
-
-```java
-@RolesAllowed({"VIEWER", "EDITOR", "ADMIN"})
-public List<CalendarEvent> findEvents(OffsetDateTime from, OffsetDateTime to) { ... }
-
-@RolesAllowed({"EDITOR", "ADMIN"})
-public CalendarEvent createEvent(CreateCalendarEventCommand command) { ... }
-
-@RolesAllowed({"EDITOR", "ADMIN"})
-public CalendarEvent updateEvent(UpdateCalendarEventCommand command) { ... }
-
-@RolesAllowed({"EDITOR", "ADMIN"})
-public void deleteEvent(long eventId) { ... }
-```
-
-Deletion rule for v1:
-
-1. `ADMIN` may delete any event.
-2. `EDITOR` may delete any event in v1 unless you decide to enforce owner-only editing.
-3. If owner-only editing is desired later, add that as v1.1, not in the first pass.
-
-### 13.2 UserService
-
-Responsibilities:
-
-1. Find users.
-2. Create users.
-3. Disable users.
-4. Reset passwords.
-5. Assign roles.
-6. Prevent the last admin from being disabled or stripped of `ADMIN`.
-7. Prevent an admin from accidentally disabling themselves without another admin existing.
-8. Write audit logs.
-
-Method security:
-
-```java
-@RolesAllowed("ADMIN")
-public List<AppUser> findUsers() { ... }
-
-@RolesAllowed("ADMIN")
-public AppUser createUser(CreateUserCommand command) { ... }
-
-@RolesAllowed("ADMIN")
-public void updateRoles(UpdateUserRolesCommand command) { ... }
-
-@RolesAllowed("ADMIN")
-public void disableUser(long userId) { ... }
-```
-
-### 13.3 PasswordService
-
-Responsibilities:
-
-1. Hash passwords with the same parameters used by `DatabaseIdentityStoreDefinition`.
-2. Validate password policy before hashing.
-3. Provide bootstrap/admin reset support.
-
-Minimum password policy for this personal app:
+Minimum password policy:
 
 ```text
 length >= 14
@@ -637,9 +247,134 @@ not blank
 not equal to username
 ```
 
-Do not implement complex composition rules. Length and non-reuse matter more.
+Do not implement complex composition rules.
 
----
+## Domain model
 
+Create these JPA entities:
 
+```text
+audit/AuditLog.java
+calendar/Calendar.java
+event/CalendarEvent.java
+invitation/CalendarInvitation.java
+membership/CalendarMember.java
+user/AppUser.java
+```
 
+Use `@Version` on `Calendar.version` and `CalendarEvent.version`.
+
+Use `OffsetDateTime` for timestamps unless `Instant` mapping has been tested successfully with the chosen Liberty/EclipseLink version.
+
+Entity rules:
+
+1. Keep entities persistence-focused.
+2. Put UI form state in DTOs, not directly in entities.
+3. Validate business rules in services, not only in database constraints.
+4. Do not expose public tokens or invite tokens in logs or audit details.
+
+## Service layer
+
+Use EJB Lite `@Stateless` for services that need transaction boundaries and method-level authenticated-user checks.
+
+Create:
+
+```text
+audit/AuditService.java
+calendar/CalendarService.java
+event/CalendarEventService.java
+invitation/InvitationService.java
+membership/CalendarAccessService.java
+membership/CalendarMembershipService.java
+security/PasswordService.java
+security/TokenService.java
+user/RegistrationService.java
+user/UserService.java
+```
+
+### CalendarService
+
+Responsibilities:
+
+1. Create calendar.
+2. Generate public token.
+3. Find calendar by public token.
+4. Find calendars for signed-in user.
+5. Update calendar settings.
+6. Rotate public token.
+7. Write audit logs.
+
+Rules:
+
+1. Any active registered user may create calendars.
+2. The creator receives active `ADMIN` membership.
+3. Public token must be generated by `TokenService`.
+4. Public token must not be derived from calendar id or name.
+
+### CalendarAccessService
+
+Responsibilities:
+
+1. Check whether a user can view, edit, or administer a calendar.
+2. Distinguish public-token read access from authenticated member access.
+3. Reject mutations for public visitors and viewers.
+4. Enforce last-admin protection.
+
+### InvitationService
+
+Responsibilities:
+
+1. Create viewer/editor invite links for calendar admins.
+2. Revoke invite links for calendar admins.
+3. Accept invite links for signed-in users.
+4. Accept invite links after registration.
+5. Reject expired, revoked, already accepted, or invalid invites.
+6. Write audit logs.
+
+Do not send email in v1. The UI should show copyable invite links.
+
+### CalendarEventService
+
+Responsibilities:
+
+1. Find events by public token and date range.
+2. Find events by member calendar and date range.
+3. Create event.
+4. Update event.
+5. Delete event.
+6. Validate title, start, end, and role permissions.
+7. Write audit logs.
+
+Rules:
+
+1. Public token users may read only.
+2. `VIEWER` members may read only.
+3. `EDITOR` members may create, edit, and delete events.
+4. `ADMIN` members may create, edit, and delete events.
+
+### CalendarMembershipService
+
+Responsibilities:
+
+1. List members for calendar admins.
+2. Change member roles for calendar admins.
+3. Disable member access for calendar admins.
+4. Prevent the final active calendar admin from being disabled or demoted.
+5. Write audit logs.
+
+## Focused tests
+
+Add JUnit 5 tests for:
+
+1. Password policy edge cases.
+2. Registration rejects duplicate and blank usernames.
+3. Calendar creation grants creator `ADMIN`.
+4. Token generation returns unique non-sequential values.
+5. Public read access cannot mutate.
+6. Viewer cannot mutate.
+7. Editor can mutate events but cannot manage members.
+8. Admin can manage members.
+9. Last-admin protection rejects demotion and removal.
+10. Invite acceptance assigns the intended role.
+11. Revoked, expired, and reused invites are rejected.
+12. Event blank title and end-before-start are rejected.

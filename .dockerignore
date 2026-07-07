@@ -1,0 +1,9 @@
+.git
+.idea
+.vscode
+target
+.env
+.env.*
+*.log
+temp
+src/main/liberty/config/resources/*.jar
