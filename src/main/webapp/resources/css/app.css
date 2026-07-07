@@ -275,7 +275,7 @@ a {
 }
 
 .event-board,
-.placeholder-list,
+.calendar-list,
 .invite-grid {
     display: grid;
     gap: 0.75rem;

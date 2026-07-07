@@ -1,7 +1,6 @@
 services:
   postgres:
     image: postgres:17
-    container_name: shared-calendar-postgres
     environment:
       POSTGRES_DB: calendar
       POSTGRES_USER: calendar

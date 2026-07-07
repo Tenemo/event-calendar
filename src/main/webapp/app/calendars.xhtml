@@ -10,18 +10,18 @@
             <div class="section-header">
                 <div>
                     <h1>My calendars</h1>
-                    <p class="lead-text">Signed-in calendar workspace placeholder</p>
+                    <p class="lead-text">Signed-in calendar workspace preview</p>
                 </div>
                 <h:link outcome="/register" value="Create calendar" styleClass="button-link primary-link"/>
             </div>
 
-            <p:dataTable value="#{[]}" var="calendar" emptyMessage="Calendar storage is added with the persistence core." styleClass="surface-table">
+            <p:dataTable value="#{[]}" var="calendar" emptyMessage="Calendars are not available yet." styleClass="surface-table">
                 <p:column headerText="Calendar"/>
                 <p:column headerText="Role"/>
                 <p:column headerText="Public link"/>
             </p:dataTable>
 
-            <div class="placeholder-list">
+            <div class="calendar-list">
                 <h:link outcome="/app/calendar" styleClass="calendar-row">
                     <span>Kayaking weekend</span>
                     <strong>Admin</strong>
