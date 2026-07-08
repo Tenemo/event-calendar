@@ -1,0 +1,92 @@
+package app.user;
+
+import app.security.PasswordService;
+import app.util.NotFoundException;
+import app.util.ValidationException;
+import jakarta.ejb.Stateless;
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.NoResultException;
+import jakarta.persistence.PersistenceContext;
+import java.time.OffsetDateTime;
+import java.util.Locale;
+import java.util.Optional;
+
+@Stateless
+public class UserService {
+    @PersistenceContext(unitName = "calendarPU")
+    private EntityManager entityManager;
+
+    @Inject
+    private PasswordService passwordService;
+
+    public AppUser createUser(String username, String displayName, String password) {
+        String normalizedUsername = normalizeUsername(username);
+        String normalizedDisplayName = normalizeDisplayName(displayName);
+
+        if (normalizedUsername.isBlank()) {
+            throw new ValidationException("Username is required.");
+        }
+        if (normalizedDisplayName.isBlank()) {
+            throw new ValidationException("Display name is required.");
+        }
+        if (findByUsername(normalizedUsername).isPresent()) {
+            throw new ValidationException("Username is already registered.");
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        AppUser user = new AppUser();
+        user.setUsername(normalizedUsername);
+        user.setDisplayName(normalizedDisplayName);
+        user.setPasswordHash(passwordService.hashPassword(normalizedUsername, password));
+        user.setActive(true);
+        user.setCreatedAt(now);
+        user.setUpdatedAt(now);
+        entityManager.persist(user);
+        entityManager.flush();
+        return user;
+    }
+
+    public Optional<AppUser> findByUsername(String username) {
+        String normalizedUsername = normalizeUsername(username);
+        if (normalizedUsername.isBlank()) {
+            return Optional.empty();
+        }
+
+        try {
+            AppUser user = entityManager
+                    .createQuery("select appUser from AppUser appUser where appUser.username = :username", AppUser.class)
+                    .setParameter("username", normalizedUsername)
+                    .getSingleResult();
+            return Optional.of(user);
+        } catch (NoResultException exception) {
+            return Optional.empty();
+        }
+    }
+
+    public Optional<AppUser> findActiveByUsername(String username) {
+        return findByUsername(username).filter(AppUser::isActive);
+    }
+
+    public AppUser requireActiveUser(Long userId) {
+        AppUser user = entityManager.find(AppUser.class, userId);
+        if (user == null || !user.isActive()) {
+            throw new NotFoundException("User was not found.");
+        }
+        return user;
+    }
+
+    public String normalizeUsername(String username) {
+        if (username == null) {
+            return "";
+        }
+        return username.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeDisplayName(String displayName) {
+        if (displayName == null) {
+            return "";
+        }
+        return displayName.trim();
+    }
+}

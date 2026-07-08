@@ -8,27 +8,40 @@
     <ui:define name="content">
         <section class="narrow-section">
             <p:panel header="Create your calendar" styleClass="surface-panel form-panel">
-                <p:staticMessage severity="info"
-                                 summary="Registration is unavailable."
-                                 detail="Calendar creation is not available yet."/>
                 <h:form styleClass="stacked-form">
                     <p:outputLabel for="username" value="Username"/>
-                    <p:inputText id="username" disabled="true"/>
+                    <p:inputText id="username"
+                                 value="#{registrationView.username}"
+                                 autocomplete="username"
+                                 required="true"
+                                 requiredMessage="Username is required."/>
 
                     <p:outputLabel for="displayName" value="Display name"/>
-                    <p:inputText id="displayName" disabled="true"/>
+                    <p:inputText id="displayName"
+                                 value="#{registrationView.displayName}"
+                                 autocomplete="name"
+                                 required="true"
+                                 requiredMessage="Display name is required."/>
 
                     <p:outputLabel for="calendarName" value="Calendar name"/>
-                    <p:inputText id="calendarName" disabled="true"/>
+                    <p:inputText id="calendarName"
+                                 value="#{registrationView.calendarName}"
+                                 required="true"
+                                 requiredMessage="Calendar name is required."/>
 
                     <p:outputLabel for="password" value="Password"/>
-                    <p:password id="password" disabled="true" feedback="false"/>
+                    <p:password id="password"
+                                value="#{registrationView.password}"
+                                autocomplete="new-password"
+                                feedback="false"
+                                required="true"
+                                requiredMessage="Password is required."/>
 
-                    <p:commandButton value="Register" disabled="true"/>
+                    <p:commandButton value="Register" action="#{registrationView.register}" ajax="false"/>
                 </h:form>
                 <p class="form-footer">
                     Already registered?
-                    <h:link outcome="/login" value="Sign in"/>
+                    <h:outputLink value="#{request.contextPath}/login">Sign in</h:outputLink>
                 </p>
             </p:panel>
         </section>

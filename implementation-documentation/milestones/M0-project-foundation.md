@@ -62,6 +62,7 @@ Acceptance criteria:
 7. Placeholder copy does not promise implemented registration, login, persistence, invites, or event storage before M1/M2.
 8. Public docs describe the current foundation accurately.
 9. GitHub PR checks run on pull requests and pushes to `master`, use least-privilege read permissions, and do not require secrets or deployment access.
+10. Browser-facing routes are extensionless; `.xhtml` remains the Facelets file suffix rather than the canonical URL shape.
 
 ## Repository setup
 
@@ -91,12 +92,9 @@ Create this structure for M0:
 `-- src
     `-- main
         |-- java
-        |   `-- io
-        |       `-- github
-        |           `-- tenemo
-        |               `-- calendar
-        |                   |-- config
-        |                   `-- health
+        |   `-- app
+        |       |-- config
+        |       `-- health
         |-- liberty
         |   `-- config
         |       `-- server.xml
@@ -220,12 +218,14 @@ M0 pages should communicate product direction without pretending later workflows
 
 Use PrimeFaces components on these pages so PrimeFaces CSS and JavaScript are loaded.
 
+Enable Jakarta Faces automatic extensionless mapping in `web.xml` and use extensionless links in rendered UI and browser tests. For example, users should see `/login`, `/register`, `/public-calendar`, `/app/calendars`, `/app/calendar`, and `/app/calendar-members` rather than `.xhtml` URLs.
+
 ## Health endpoint
 
 Create `health/HealthServlet.java`:
 
 ```java
-package io.github.tenemo.calendar.health;
+package app.health;
 
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;

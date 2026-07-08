@@ -60,10 +60,10 @@ Acceptance criteria:
 Create `src/main/resources/META-INF/persistence.xml`:
 
 ```xml
-<persistence version="3.1"
+<persistence version="3.0"
              xmlns="https://jakarta.ee/xml/ns/persistence"
              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-             xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence https://jakarta.ee/xml/ns/persistence/persistence_3_1.xsd">
+             xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence https://jakarta.ee/xml/ns/persistence/persistence_3_0.xsd">
 
     <persistence-unit name="calendarPU" transaction-type="JTA">
         <jta-data-source>jdbc/CalendarDS</jta-data-source>
@@ -82,6 +82,8 @@ Rules:
 1. Flyway owns schema changes.
 2. JPA must not auto-create, update, or drop schema in production.
 3. Keep entity code provider-neutral.
+4. Use the valid Jakarta Persistence 3.0 XML schema for `persistence.xml`; the runtime feature still provides Jakarta Persistence 3.1.
+5. Include `flyway.location` marker files under Flyway classpath locations so Open Liberty can discover migrations reliably.
 
 ## Database schema
 

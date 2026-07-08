@@ -23,8 +23,7 @@
                  urlRewritingEnabled="false"/>
 
     <library id="postgresqlDriver">
-        <fileset dir="${shared.resource.dir}/postgresql"
-                 includes="postgresql.jar"/>
+        <file name="${shared.resource.dir}/postgresql/postgresql.jar"/>
     </library>
 
     <dataSource id="CalendarDS" jndiName="jdbc/CalendarDS">

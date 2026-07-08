@@ -141,6 +141,7 @@ final class CalendarTool {
     private static void verifyRunningApplication() throws IOException, InterruptedException {
         checkApplicationHealth();
         checkDatabaseConnection();
+        checkDatabaseSchema();
     }
 
     private static void checkDatabaseConnection() throws IOException, InterruptedException {
@@ -158,6 +159,37 @@ final class CalendarTool {
                 databaseName(),
                 "-c",
                 "select current_database(), current_user;");
+    }
+
+    private static void checkDatabaseSchema() throws IOException, InterruptedException {
+        runCommand(
+                "PostgreSQL table check",
+                "docker",
+                "compose",
+                "exec",
+                "-T",
+                DATABASE_SERVICE_NAME,
+                "psql",
+                "-U",
+                databaseUser(),
+                "-d",
+                databaseName(),
+                "-c",
+                "\\dt");
+        runCommand(
+                "Flyway migration history check",
+                "docker",
+                "compose",
+                "exec",
+                "-T",
+                DATABASE_SERVICE_NAME,
+                "psql",
+                "-U",
+                databaseUser(),
+                "-d",
+                databaseName(),
+                "-c",
+                "select installed_rank, version, description, success from flyway_schema_history order by installed_rank;");
     }
 
     private static void waitForDatabase() throws IOException, InterruptedException {

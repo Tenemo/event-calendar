@@ -6,28 +6,28 @@ This file contains planning context and standards. Milestone files contain the e
 
 Use these decisions unless the repository owner explicitly changes them later.
 
-| Area | Decision |
-| ---- | -------- |
-| Runtime Java | Java 25 LTS |
-| Compiler compatibility level | Java 21 by default; Java 17 only if employer parity requires it; Java 25 only after MVP if portability is not a goal |
-| Build tool | Maven |
-| Packaging | WAR |
-| Runtime | Open Liberty container |
-| Enterprise profile | Jakarta EE 10 Web Profile |
-| UI | Jakarta Faces 4.0 / JSF + PrimeFaces 15.x `jakarta` classifier |
-| Dependency injection | CDI |
-| Service layer | Stateless Enterprise Beans / EJB Lite where method security is useful |
-| Persistence | Jakarta Persistence / JPA, provider-neutral code, Liberty default EclipseLink provider |
-| Database | Dockerized PostgreSQL for local development, Railway PostgreSQL for production |
-| Migrations | Flyway |
-| Auth | Username/password with self-registration, no OAuth/SSO |
-| Calendar access | Public read-only token links plus authenticated member roles |
-| Calendar roles | `VIEWER`, `EDITOR`, `ADMIN`, scoped to one calendar |
-| Deployment | Dockerfile to Railway first |
-| Frontend hosting | None; do not use Netlify for the app UI |
-| Date/time storage | UTC-aware PostgreSQL `timestamptz`, Java `OffsetDateTime` or carefully tested `Instant` |
-| Recurrence | Out of scope for v1 |
-| Notifications | Out of scope for v1 |
+| Area                         | Decision                                                                                                     |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Runtime Java                 | Java 25 LTS                                                                                                  |
+| Compiler compatibility level | Java 21 by default; later Java 17 if required after all; Java 25 only after MVP if portability is not a goal |
+| Build tool                   | Maven                                                                                                        |
+| Packaging                    | WAR                                                                                                          |
+| Runtime                      | Open Liberty container                                                                                       |
+| Enterprise profile           | Jakarta EE 10 Web Profile                                                                                    |
+| UI                           | Jakarta Faces 4.0 / JSF + PrimeFaces 15.x `jakarta` classifier                                               |
+| Dependency injection         | CDI                                                                                                          |
+| Service layer                | Stateless Enterprise Beans / EJB Lite where method security is useful                                        |
+| Persistence                  | Jakarta Persistence / JPA, provider-neutral code, Liberty default EclipseLink provider                       |
+| Database                     | Dockerized PostgreSQL for local development, Railway PostgreSQL for production                               |
+| Migrations                   | Flyway                                                                                                       |
+| Auth                         | Username/password with self-registration, no OAuth/SSO                                                       |
+| Calendar access              | Public read-only token links plus authenticated member roles                                                 |
+| Calendar roles               | `VIEWER`, `EDITOR`, `ADMIN`, scoped to one calendar                                                          |
+| Deployment                   | Dockerfile to Railway first                                                                                  |
+| Frontend hosting             | None; do not use Netlify for the app UI                                                                      |
+| Date/time storage            | UTC-aware PostgreSQL `timestamptz`, Java `OffsetDateTime` or carefully tested `Instant`                      |
+| Recurrence                   | Out of scope for v1                                                                                          |
+| Notifications                | Out of scope for v1                                                                                          |
 
 Everything must be Jakarta-era code. Do not introduce `javax.*` enterprise imports or old JSF XML namespaces. `javax.sql.DataSource` is acceptable because it is part of Java SE.
 
@@ -76,12 +76,12 @@ Do not put downloaded JDKs, Maven distributions, PostgreSQL driver jars, Postgre
 
 Each milestone must leave the repository runnable and verified.
 
-| Milestone | Outcome | Includes |
-| --------- | ------- | -------- |
-| M0: project foundation | A reproducible Jakarta EE web app that builds and starts locally | Repository skeleton, Maven wrapper, `mise`, Docker Compose PostgreSQL, Open Liberty config, health endpoint, placeholder JSF/PrimeFaces pages, flat responsive shell |
-| M1: persistence and security core | Database-backed registration, login, calendars, memberships, public tokens, invitations, and audit foundation | Flyway migrations, JPA entities, password hashing, registration, calendar-level authorization, focused tests |
-| M2: calendar and member workflows | Public calendar view, authenticated calendar workspace, event CRUD, calendar creation, invite links, member management | PrimeFaces calendar UI, role-aware event actions, settings, invite acceptance, audit logging, manual role checks |
-| M3: production readiness | The app is packaged, deployable, and recoverable | Docker production image, local Docker runtime test, Railway deployment, custom domain, Dockerized backup/restore, README runbook |
+| Milestone                         | Outcome                                                                                                                | Includes                                                                                                                                                             |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M0: project foundation            | A reproducible Jakarta EE web app that builds and starts locally                                                       | Repository skeleton, Maven wrapper, `mise`, Docker Compose PostgreSQL, Open Liberty config, health endpoint, placeholder JSF/PrimeFaces pages, flat responsive shell |
+| M1: persistence and security core | Database-backed registration, login, calendars, memberships, public tokens, invitations, and audit foundation          | Flyway migrations, JPA entities, password hashing, registration, calendar-level authorization, focused tests                                                         |
+| M2: calendar and member workflows | Public calendar view, authenticated calendar workspace, event CRUD, calendar creation, invite links, member management | PrimeFaces calendar UI, role-aware event actions, settings, invite acceptance, audit logging, manual role checks                                                     |
+| M3: production readiness          | The app is packaged, deployable, and recoverable                                                                       | Docker production image, local Docker runtime test, Railway deployment, custom domain, Dockerized backup/restore, README runbook                                     |
 
 ## 2. Product scope
 
@@ -154,7 +154,7 @@ There is no separate frontend service.
 Use this package structure:
 
 ```text
-io.github.tenemo.calendar
+app
   audit
   calendar
   config
@@ -198,6 +198,8 @@ src/main/webapp
 
 Public calendar routes must be reachable without authentication. Authenticated app routes under `/app/*` require login. Calendar mutation and member management are enforced in services with calendar-specific authorization.
 
+Jakarta Faces extensionless routing is enabled. User-facing links should prefer clean paths such as `/login`, `/register`, `/public-calendar`, `/app/calendars`, `/app/calendar`, and `/app/calendar-members`; `.xhtml` remains an implementation file suffix, not the canonical browser route.
+
 ### 3.3 URL model
 
 Use a public calendar URL shape that is easy to share and hard to guess:
@@ -209,7 +211,7 @@ Use a public calendar URL shape that is easy to share and hard to guess:
 If JSF routing makes that shape awkward in the first implementation, use a temporary equivalent such as:
 
 ```text
-/public-calendar.xhtml?token={publicToken}
+/public-calendar?token={publicToken}
 ```
 
 Do not expose sequential calendar ids in public read URLs. Do not use calendar names or slugs as access secrets.
@@ -307,24 +309,24 @@ Minimum automated tests:
 
 Manual acceptance checks before deployment and after deployment:
 
-| Scenario | Expected result |
-| -------- | --------------- |
-| Public visitor opens valid calendar link | Calendar visible read-only |
-| Public visitor opens invalid calendar link | Generic not-found page |
-| Public visitor tries mutation URL/action | Rejected |
-| New user registers | Account is created |
-| Registered user creates calendar | User becomes calendar admin |
-| Calendar admin creates editor invite | Invite link is generated |
-| Invitee accepts editor invite | Invitee can edit that calendar |
-| Viewer opens authenticated calendar | Calendar visible, edit controls hidden |
-| Viewer attempts direct edit action | Server rejects |
-| Editor creates event | Event appears and persists |
-| Editor edits event | Changes persist |
-| Editor deletes event | Event removed |
-| Calendar admin manages members | Changes persist and are audited |
-| Calendar admin removes last admin role | Rejected |
-| App redeploy | Existing users, calendars, memberships, and events remain |
-| `/health` | Returns 200 `ok` |
+| Scenario                                   | Expected result                                           |
+| ------------------------------------------ | --------------------------------------------------------- |
+| Public visitor opens valid calendar link   | Calendar visible read-only                                |
+| Public visitor opens invalid calendar link | Generic not-found page                                    |
+| Public visitor tries mutation URL/action   | Rejected                                                  |
+| New user registers                         | Account is created                                        |
+| Registered user creates calendar           | User becomes calendar admin                               |
+| Calendar admin creates editor invite       | Invite link is generated                                  |
+| Invitee accepts editor invite              | Invitee can edit that calendar                            |
+| Viewer opens authenticated calendar        | Calendar visible, edit controls hidden                    |
+| Viewer attempts direct edit action         | Server rejects                                            |
+| Editor creates event                       | Event appears and persists                                |
+| Editor edits event                         | Changes persist                                           |
+| Editor deletes event                       | Event removed                                             |
+| Calendar admin manages members             | Changes persist and are audited                           |
+| Calendar admin removes last admin role     | Rejected                                                  |
+| App redeploy                               | Existing users, calendars, memberships, and events remain |
+| `/health`                                  | Returns 200 `ok`                                          |
 
 ## 9. Production operating model
 
