@@ -13,6 +13,7 @@
                     <p:inputText id="username"
                                  value="#{registrationView.username}"
                                  autocomplete="username"
+                                 maxlength="80"
                                  required="true"
                                  requiredMessage="Username is required."/>
 
@@ -20,12 +21,14 @@
                     <p:inputText id="displayName"
                                  value="#{registrationView.displayName}"
                                  autocomplete="name"
+                                 maxlength="160"
                                  required="true"
                                  requiredMessage="Display name is required."/>
 
                     <p:outputLabel for="calendarName" value="Calendar name"/>
                     <p:inputText id="calendarName"
                                  value="#{registrationView.calendarName}"
+                                 maxlength="160"
                                  required="true"
                                  requiredMessage="Calendar name is required."/>
 
@@ -34,6 +37,7 @@
                                 value="#{registrationView.password}"
                                 autocomplete="new-password"
                                 feedback="false"
+                                maxlength="#{passwordService.maximumPasswordLength}"
                                 required="true"
                                 requiredMessage="Password is required."/>
 

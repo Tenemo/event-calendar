@@ -17,6 +17,7 @@ import app.testsupport.ServiceTestSupport.EntityManagerStub;
 import app.user.AppUser;
 import app.util.ValidationException;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
 
 final class CalendarEventServiceTest {
@@ -41,6 +42,29 @@ final class CalendarEventServiceTest {
                 () -> assertThrows(ValidationException.class, () -> calendarEventService.validateEvent("Kayaking", startAt, null)),
                 () -> assertThrows(ValidationException.class, () -> calendarEventService.validateEvent("Kayaking", startAt, startAt)),
                 () -> assertThrows(ValidationException.class, () -> calendarEventService.validateEvent("Kayaking", startAt, startAt.minusMinutes(1))));
+    }
+
+    @Test
+    void rejectsTitleAndLocationLongerThanTheSchemaAllowsBeforePersistence() {
+        OffsetDateTime startAt = OffsetDateTime.parse("2026-07-08T12:00:00Z");
+        CalendarEventService eventService = new CalendarEventService();
+        setField(eventService, "calendarAccessService", new AllowingAccessService());
+
+        assertAll(
+                () -> assertThrows(
+                        ValidationException.class,
+                        () -> calendarEventService.validateEvent("K".repeat(201), startAt, startAt.plusHours(2))),
+                () -> assertThrows(
+                        ValidationException.class,
+                        () -> eventService.createEvent(
+                                activeUser(100L),
+                                200L,
+                                "Kayaking",
+                                null,
+                                "R".repeat(201),
+                                startAt,
+                                startAt.plusHours(2),
+                                false)));
     }
 
     @Test
@@ -71,7 +95,9 @@ final class CalendarEventServiceTest {
                 () -> assertEquals(1, entityManagerStub.flushCount()),
                 () -> assertEquals(event.getId(), auditService.entityId),
                 () -> assertEquals("calendar_event", auditService.entityType),
-                () -> assertEquals("created", auditService.action));
+                () -> assertEquals("created", auditService.action),
+                () -> assertEquals(ZoneOffset.UTC, event.getCreatedAt().getOffset()),
+                () -> assertEquals(ZoneOffset.UTC, event.getUpdatedAt().getOffset()));
     }
 
     private static Calendar activeCalendar(Long id) {

@@ -2,6 +2,7 @@ package app.security;
 
 import app.util.ValidationException;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Named;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.util.Base64;
@@ -9,15 +10,21 @@ import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.PBEKeySpec;
 
 @ApplicationScoped
+@Named
 public class PasswordService {
     private static final String HASH_PREFIX = "pbkdf2_sha256";
     private static final String KEY_DERIVATION_ALGORITHM = "PBKDF2WithHmacSHA256";
-    private static final int MINIMUM_PASSWORD_LENGTH = 14;
+    public static final int MINIMUM_PASSWORD_LENGTH = 14;
+    public static final int MAXIMUM_PASSWORD_LENGTH = 512;
     private static final int SALT_BYTES = 16;
     private static final int HASH_BYTES = 32;
-    private static final int ITERATIONS = 310_000;
+    private static final int ITERATIONS = 600_000;
 
     private final SecureRandom secureRandom = new SecureRandom();
+
+    public int getMaximumPasswordLength() {
+        return MAXIMUM_PASSWORD_LENGTH;
+    }
 
     public void validatePasswordPolicy(String username, String password) {
         if (password == null || password.isBlank()) {
@@ -25,6 +32,9 @@ public class PasswordService {
         }
         if (password.length() < MINIMUM_PASSWORD_LENGTH) {
             throw new ValidationException("Password must be at least " + MINIMUM_PASSWORD_LENGTH + " characters.");
+        }
+        if (password.length() > MAXIMUM_PASSWORD_LENGTH) {
+            throw new ValidationException("Password must be " + MAXIMUM_PASSWORD_LENGTH + " characters or fewer.");
         }
         if (username != null && password.equalsIgnoreCase(username.trim())) {
             throw new ValidationException("Password must not match the username.");
@@ -44,6 +54,9 @@ public class PasswordService {
 
     public boolean verifyPassword(String password, String storedHash) {
         if (password == null || password.isBlank() || storedHash == null || storedHash.isBlank()) {
+            return false;
+        }
+        if (password.length() > MAXIMUM_PASSWORD_LENGTH) {
             return false;
         }
 

@@ -19,6 +19,7 @@
                     <p:outputLabel for="calendarName" value="Calendar name"/>
                     <p:inputText id="calendarName"
                                  value="#{calendarListView.calendarName}"
+                                 maxlength="160"
                                  required="true"
                                  requiredMessage="Calendar name is required."/>
                     <p:commandButton value="Create calendar" action="#{calendarListView.createCalendar}" ajax="false"/>

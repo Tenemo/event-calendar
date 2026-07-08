@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.audit.AuditService;
 import app.calendar.Calendar;
@@ -15,12 +16,12 @@ import app.membership.CalendarAccessService;
 import app.membership.CalendarMember;
 import app.membership.CalendarMembershipService;
 import app.membership.CalendarRole;
-import app.membership.CalendarRolePolicy;
 import app.security.TokenService;
 import app.testsupport.ServiceTestSupport.EntityManagerStub;
 import app.user.AppUser;
 import app.util.ValidationException;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
@@ -41,7 +42,8 @@ final class InvitationServiceTest {
                 () -> assertEquals(acceptingUser, membershipService.grantedUser),
                 () -> assertEquals(CalendarRole.EDITOR, membershipService.grantedRole),
                 () -> assertEquals(acceptingUser, invitation.getAcceptedByUser()),
-                () -> assertNotNull(invitation.getAcceptedAt()));
+                () -> assertNotNull(invitation.getAcceptedAt()),
+                () -> assertEquals(ZoneOffset.UTC, invitation.getAcceptedAt().getOffset()));
     }
 
     @Test
@@ -63,7 +65,8 @@ final class InvitationServiceTest {
         assertAll(
                 () -> assertEquals(CalendarRole.ADMIN, existingMembership.getRole()),
                 () -> assertEquals(acceptingUser, invitation.getAcceptedByUser()),
-                () -> assertNotNull(invitation.getAcceptedAt()));
+                () -> assertNotNull(invitation.getAcceptedAt()),
+                () -> assertEquals(ZoneOffset.UTC, invitation.getAcceptedAt().getOffset()));
     }
 
     @Test
@@ -74,6 +77,31 @@ final class InvitationServiceTest {
         InvitationService invitationService = invitationService(openInvitation(activeCalendar(200L), CalendarRole.VIEWER), membershipService);
 
         assertThrows(ValidationException.class, () -> invitationService.acceptInvitation("invite-token", inactiveUser));
+    }
+
+    @Test
+    void inviteAcceptanceLocksTheInvitationBeforeGrantingMembership() {
+        AppUser acceptingUser = activeUser(100L);
+        CalendarInvitation invitation = openInvitation(activeCalendar(200L), CalendarRole.VIEWER);
+        EntityManagerStub entityManagerStub = entityManagerStub()
+                .singleResult("from CalendarInvitation", invitation);
+        RecordingMembershipService membershipService = new RecordingMembershipService(Optional.empty());
+        InvitationService invitationService = new InvitationService();
+
+        setField(invitationService, "entityManager", entityManagerStub.entityManager());
+        setField(invitationService, "calendarMembershipService", membershipService);
+        setField(invitationService, "invitationPolicy", new InvitationPolicy());
+        setField(invitationService, "auditService", new NoopAuditService());
+
+        invitationService.acceptInvitation("invite-token", acceptingUser);
+
+        assertAll(
+                () -> assertTrue(
+                        entityManagerStub.lockedQueryTexts().stream()
+                                .anyMatch(queryText -> queryText.contains("from CalendarInvitation")
+                                        && queryText.contains("inviteToken")),
+                        "Invitation acceptance should lock the token row before checking acceptedAt."),
+                () -> assertEquals(CalendarRole.VIEWER, membershipService.grantedRole));
     }
 
     @Test
@@ -89,7 +117,6 @@ final class InvitationServiceTest {
         setField(invitationService, "entityManager", entityManagerStub.entityManager());
         setField(invitationService, "calendarAccessService", new AllowingAccessService());
         setField(invitationService, "calendarService", new FixedCalendarService(calendar));
-        setField(invitationService, "calendarRolePolicy", new CalendarRolePolicy());
         setField(invitationService, "invitationPolicy", new InvitationPolicy());
         setField(invitationService, "tokenService", new FixedTokenService());
         setField(invitationService, "auditService", auditService);
@@ -103,7 +130,8 @@ final class InvitationServiceTest {
                 () -> assertEquals("calendar_invitation", auditService.entityType),
                 () -> assertEquals("created", auditService.action),
                 () -> assertEquals(CalendarRole.EDITOR, invitation.getRole()),
-                () -> assertEquals(expiresAt, invitation.getExpiresAt()));
+                () -> assertEquals(expiresAt, invitation.getExpiresAt()),
+                () -> assertEquals(ZoneOffset.UTC, invitation.getCreatedAt().getOffset()));
     }
 
     private static InvitationService invitationService(
@@ -114,7 +142,6 @@ final class InvitationServiceTest {
         InvitationService invitationService = new InvitationService();
         setField(invitationService, "entityManager", entityManagerStub.entityManager());
         setField(invitationService, "calendarMembershipService", membershipService);
-        setField(invitationService, "calendarRolePolicy", new CalendarRolePolicy());
         setField(invitationService, "invitationPolicy", new InvitationPolicy());
         setField(invitationService, "auditService", new NoopAuditService());
         return invitationService;
@@ -166,10 +193,18 @@ final class InvitationServiceTest {
         }
 
         @Override
-        public CalendarMember grantOrUpdateMembership(Calendar calendar, AppUser user, CalendarRole role) {
+        public CalendarMember grantMembershipFromAcceptedInvitation(Calendar calendar, AppUser user, CalendarRole role) {
             grantedCalendar = calendar;
             grantedUser = user;
             grantedRole = role;
+            if (existingMembership.isPresent()) {
+                CalendarMember member = existingMembership.orElseThrow();
+                if (!member.isActive()) {
+                    member.setRole(role);
+                }
+                member.setActive(true);
+                return member;
+            }
             CalendarMember member = new CalendarMember();
             member.setCalendar(calendar);
             member.setUser(user);

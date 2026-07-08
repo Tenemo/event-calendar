@@ -6,6 +6,7 @@ import jakarta.ejb.Stateless;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 
 @Stateless
 public class AuditService {
@@ -20,7 +21,7 @@ public class AuditService {
         auditLog.setEntityId(entityId);
         auditLog.setAction(action);
         auditLog.setDetails(details);
-        auditLog.setCreatedAt(OffsetDateTime.now());
+        auditLog.setCreatedAt(OffsetDateTime.now(ZoneOffset.UTC));
         entityManager.persist(auditLog);
     }
 }

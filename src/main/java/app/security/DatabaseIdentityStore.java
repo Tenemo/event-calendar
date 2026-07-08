@@ -12,6 +12,9 @@ import java.util.Set;
 
 @ApplicationScoped
 public class DatabaseIdentityStore implements IdentityStore {
+    private static final String DUMMY_PASSWORD_HASH =
+            "pbkdf2_sha256$600000$AAECAwQFBgcICQoLDA0ODw$3PaMNY6bFmarXUwH3fGwq2whZDjl6DwkMcg1QGeTv5s";
+
     @Inject
     private UserService userService;
 
@@ -25,10 +28,22 @@ public class DatabaseIdentityStore implements IdentityStore {
         }
 
         String username = userService.normalizeUsername(usernamePasswordCredential.getCaller());
+        String password = usernamePasswordCredential.getPasswordAsString();
         return userService.findActiveByUsername(username)
-                .filter(user -> passwordService.verifyPassword(usernamePasswordCredential.getPasswordAsString(), user.getPasswordHash()))
-                .map(this::validUser)
-                .orElse(CredentialValidationResult.INVALID_RESULT);
+                .map(user -> validatePassword(user, password))
+                .orElseGet(() -> validateMissingUserPassword(password));
+    }
+
+    private CredentialValidationResult validatePassword(AppUser user, String password) {
+        if (passwordService.verifyPassword(password, user.getPasswordHash())) {
+            return validUser(user);
+        }
+        return CredentialValidationResult.INVALID_RESULT;
+    }
+
+    private CredentialValidationResult validateMissingUserPassword(String password) {
+        passwordService.verifyPassword(password, DUMMY_PASSWORD_HASH);
+        return CredentialValidationResult.INVALID_RESULT;
     }
 
     private CredentialValidationResult validUser(AppUser user) {

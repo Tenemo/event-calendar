@@ -13,6 +13,7 @@ import app.testsupport.ServiceTestSupport.EntityManagerStub;
 import app.util.ValidationException;
 import jakarta.persistence.PersistenceException;
 import java.sql.SQLException;
+import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
 
 final class UserServiceTest {
@@ -27,6 +28,19 @@ final class UserServiceTest {
                 () -> assertThrows(
                         ValidationException.class,
                         () -> userService.createUser("piotr", "   ", "correct horse battery staple")));
+    }
+
+    @Test
+    void rejectsValuesLongerThanTheSchemaAllowsBeforePersisting() {
+        UserService userService = new UserService();
+
+        assertAll(
+                () -> assertThrows(
+                        ValidationException.class,
+                        () -> userService.createUser("u".repeat(81), "Display name", "correct horse battery staple")),
+                () -> assertThrows(
+                        ValidationException.class,
+                        () -> userService.createUser("piotr", "D".repeat(161), "correct horse battery staple")));
     }
 
     @Test
@@ -61,6 +75,8 @@ final class UserServiceTest {
         assertAll(
                 () -> assertEquals("piotr", createdUser.getUsername()),
                 () -> assertEquals("Piotr Tenemo", createdUser.getDisplayName()),
+                () -> assertEquals(ZoneOffset.UTC, createdUser.getCreatedAt().getOffset()),
+                () -> assertEquals(ZoneOffset.UTC, createdUser.getUpdatedAt().getOffset()),
                 () -> assertTrue(passwordService.verifyPassword("correct horse battery staple", createdUser.getPasswordHash())),
                 () -> assertEquals(1, entityManagerStub.persistedObjects().size()),
                 () -> assertEquals(1, entityManagerStub.flushCount()));

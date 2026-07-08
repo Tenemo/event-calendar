@@ -6,7 +6,6 @@ import app.calendar.CalendarService;
 import app.membership.CalendarAccessService;
 import app.membership.CalendarMembershipService;
 import app.membership.CalendarRole;
-import app.membership.CalendarRolePolicy;
 import app.security.TokenService;
 import app.user.AppUser;
 import app.util.NotFoundException;
@@ -14,9 +13,12 @@ import app.util.ValidationException;
 import jakarta.ejb.Stateless;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.NoResultException;
 import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.TypedQuery;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 
 @Stateless
 public class InvitationService {
@@ -33,9 +35,6 @@ public class InvitationService {
 
     @Inject
     private CalendarMembershipService calendarMembershipService;
-
-    @Inject
-    private CalendarRolePolicy calendarRolePolicy;
 
     @Inject
     private InvitationPolicy invitationPolicy;
@@ -57,7 +56,7 @@ public class InvitationService {
         invitation.setRole(role);
         invitation.setCreatedByUser(actor);
         invitation.setExpiresAt(expiresAt);
-        invitation.setCreatedAt(OffsetDateTime.now());
+        invitation.setCreatedAt(OffsetDateTime.now(ZoneOffset.UTC));
         entityManager.persist(invitation);
         entityManager.flush();
         auditService.record(actor, calendar, "calendar_invitation", invitation.getId(), "created", "Invitation created.");
@@ -65,13 +64,13 @@ public class InvitationService {
     }
 
     public void revokeInvitation(AppUser actor, Long invitationId) {
-        CalendarInvitation invitation = requireInvitation(invitationId);
+        CalendarInvitation invitation = requireInvitationForUpdate(invitationId);
         calendarAccessService.requireCanAdminister(actor, invitation.getCalendar().getId());
         if (invitation.getAcceptedAt() != null) {
             throw new ValidationException("Accepted invitations cannot be revoked.");
         }
         if (invitation.getRevokedAt() == null) {
-            invitation.setRevokedAt(OffsetDateTime.now());
+            invitation.setRevokedAt(OffsetDateTime.now(ZoneOffset.UTC));
             auditService.record(actor, invitation.getCalendar(), "calendar_invitation", invitation.getId(), "revoked", "Invitation revoked.");
         }
     }
@@ -87,37 +86,16 @@ public class InvitationService {
         }
 
         CalendarRole acceptedRole = invitation.getRole();
-        calendarMembershipService.findMembership(invitation.getCalendar().getId(), acceptingUser.getId())
-                .ifPresentOrElse(existingMembership -> {
-                    CalendarRole strongerRole = calendarRolePolicy.strongerRole(existingMembership.getRole(), acceptedRole);
-                    existingMembership.setRole(strongerRole);
-                    existingMembership.setActive(true);
-                    existingMembership.setUpdatedAt(OffsetDateTime.now());
-                }, () -> calendarMembershipService.grantOrUpdateMembership(invitation.getCalendar(), acceptingUser, acceptedRole));
+        calendarMembershipService.grantMembershipFromAcceptedInvitation(invitation.getCalendar(), acceptingUser, acceptedRole);
 
         invitation.setAcceptedByUser(acceptingUser);
-        invitation.setAcceptedAt(OffsetDateTime.now());
+        invitation.setAcceptedAt(OffsetDateTime.now(ZoneOffset.UTC));
         auditService.record(acceptingUser, invitation.getCalendar(), "calendar_invitation", invitation.getId(), "accepted", "Invitation accepted.");
         return invitation;
     }
 
-    private CalendarInvitation requireInvitation(Long invitationId) {
-        CalendarInvitation invitation = entityManager.find(CalendarInvitation.class, invitationId);
-        if (invitation == null) {
-            throw new NotFoundException("Invitation was not found.");
-        }
-        return invitation;
-    }
-
-    private CalendarInvitation requireOpenInvitation(String inviteToken) {
-        CalendarInvitation invitation = findByToken(inviteToken);
-        invitationPolicy.requireOpen(
-                invitation.getRevokedAt(), invitation.getAcceptedAt(), invitation.getExpiresAt(), OffsetDateTime.now());
-        return invitation;
-    }
-
-    private CalendarInvitation findByToken(String inviteToken) {
-        if (inviteToken == null || inviteToken.isBlank()) {
+    private CalendarInvitation requireInvitationForUpdate(Long invitationId) {
+        if (invitationId == null) {
             throw new NotFoundException("Invitation was not found.");
         }
 
@@ -126,10 +104,40 @@ public class InvitationService {
                     .createQuery(
                             "select calendarInvitation from CalendarInvitation calendarInvitation "
                                     + "join fetch calendarInvitation.calendar "
+                                    + "where calendarInvitation.id = :invitationId",
+                            CalendarInvitation.class)
+                    .setParameter("invitationId", invitationId)
+                    .setLockMode(LockModeType.PESSIMISTIC_WRITE)
+                    .getSingleResult();
+        } catch (NoResultException exception) {
+            throw new NotFoundException("Invitation was not found.");
+        }
+    }
+
+    private CalendarInvitation requireOpenInvitation(String inviteToken) {
+        CalendarInvitation invitation = findByTokenForUpdate(inviteToken);
+        invitationPolicy.requireOpen(
+                invitation.getRevokedAt(),
+                invitation.getAcceptedAt(),
+                invitation.getExpiresAt(),
+                OffsetDateTime.now(ZoneOffset.UTC));
+        return invitation;
+    }
+
+    private CalendarInvitation findByTokenForUpdate(String inviteToken) {
+        if (inviteToken == null || inviteToken.isBlank()) {
+            throw new NotFoundException("Invitation was not found.");
+        }
+
+        try {
+            TypedQuery<CalendarInvitation> query = entityManager
+                    .createQuery(
+                            "select calendarInvitation from CalendarInvitation calendarInvitation "
+                                    + "join fetch calendarInvitation.calendar "
                                     + "where calendarInvitation.inviteToken = :inviteToken",
                             CalendarInvitation.class)
-                    .setParameter("inviteToken", inviteToken.trim())
-                    .getSingleResult();
+                    .setParameter("inviteToken", inviteToken.trim());
+            return query.setLockMode(LockModeType.PESSIMISTIC_WRITE).getSingleResult();
         } catch (NoResultException exception) {
             throw new NotFoundException("Invitation was not found.");
         }

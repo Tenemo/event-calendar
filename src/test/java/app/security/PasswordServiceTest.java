@@ -21,6 +21,7 @@ final class PasswordServiceTest {
 
         assertAll(
                 () -> assertNotEquals(firstHash, secondHash, "Two hashes for the same password should use different salts."),
+                () -> assertTrue(firstHash.startsWith("pbkdf2_sha256$600000$"), "New password hashes should use the current work factor."),
                 () -> assertTrue(passwordService.verifyPassword(password, firstHash)),
                 () -> assertTrue(passwordService.verifyPassword(password, secondHash)),
                 () -> assertFalse(passwordService.verifyPassword("correct horse battery staple!", firstHash)),
@@ -30,10 +31,29 @@ final class PasswordServiceTest {
     }
 
     @Test
+    void verifiesExistingHashesWithOlderIterationCounts() {
+        String oldHash = "pbkdf2_sha256$310000$Dw4NDAsKCQgHBgUEAwIBAA$WoLnVJrYQNsIvn9kjgoVwTKIGzSCUXgJfY7_Ypn6Fp0";
+
+        assertAll(
+                () -> assertTrue(passwordService.verifyPassword("correct horse battery staple", oldHash)),
+                () -> assertFalse(passwordService.verifyPassword("correct horse battery staple!", oldHash)));
+    }
+
+    @Test
     void rejectsWeakOrSelfReferentialPasswordsBeforeHashing() {
         assertAll(
                 () -> assertThrows(ValidationException.class, () -> passwordService.hashPassword("piotr", "")),
                 () -> assertThrows(ValidationException.class, () -> passwordService.hashPassword("piotr", "too-short")),
-                () -> assertThrows(ValidationException.class, () -> passwordService.hashPassword("Piotr", "piotr")));
+                () -> assertThrows(ValidationException.class, () -> passwordService.hashPassword("Piotr", "piotr")),
+                () -> assertThrows(
+                        ValidationException.class,
+                        () -> passwordService.hashPassword("piotr", "p".repeat(PasswordService.MAXIMUM_PASSWORD_LENGTH + 1))));
+    }
+
+    @Test
+    void rejectsOversizedPasswordsDuringVerificationBeforeHashing() {
+        String hash = passwordService.hashPassword("piotr", "correct horse battery staple");
+
+        assertFalse(passwordService.verifyPassword("p".repeat(PasswordService.MAXIMUM_PASSWORD_LENGTH + 1), hash));
     }
 }

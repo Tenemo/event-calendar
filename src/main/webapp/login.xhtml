@@ -13,6 +13,7 @@
                     <p:inputText id="username"
                                  value="#{loginView.username}"
                                  autocomplete="username"
+                                 maxlength="80"
                                  required="true"
                                  requiredMessage="Username is required."/>
 
@@ -21,6 +22,7 @@
                                 value="#{loginView.password}"
                                 autocomplete="current-password"
                                 feedback="false"
+                                maxlength="#{passwordService.maximumPasswordLength}"
                                 required="true"
                                 requiredMessage="Password is required."/>
 

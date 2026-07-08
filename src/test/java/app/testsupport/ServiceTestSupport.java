@@ -1,6 +1,7 @@
 package app.testsupport;
 
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.NoResultException;
 import jakarta.persistence.TypedQuery;
 import java.lang.reflect.Field;
@@ -47,6 +48,7 @@ public final class ServiceTestSupport {
     public static final class EntityManagerStub {
         private final EntityManager entityManager;
         private final Map<FindKey, Object> findResults = new HashMap<>();
+        private final List<String> lockedQueryTexts = new ArrayList<>();
         private final List<Object> persistedObjects = new ArrayList<>();
         private final List<Object> removedObjects = new ArrayList<>();
         private final Map<String, QueryBehavior> queryBehaviors = new LinkedHashMap<>();
@@ -67,6 +69,10 @@ public final class ServiceTestSupport {
 
         public List<Object> persistedObjects() {
             return persistedObjects;
+        }
+
+        public List<String> lockedQueryTexts() {
+            return lockedQueryTexts;
         }
 
         public List<Object> removedObjects() {
@@ -163,6 +169,14 @@ public final class ServiceTestSupport {
             InvocationHandler queryHandler = (proxy, method, arguments) -> {
                 String methodName = method.getName();
                 if (methodName.equals("setParameter")) {
+                    return proxy;
+                }
+                if (methodName.equals("setLockMode")) {
+                    if (arguments != null
+                            && arguments.length == 1
+                            && arguments[0] == LockModeType.PESSIMISTIC_WRITE) {
+                        lockedQueryTexts.add(queryText);
+                    }
                     return proxy;
                 }
                 if (methodName.equals("getSingleResult")) {

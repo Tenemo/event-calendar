@@ -13,10 +13,14 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 @Stateless
 public class CalendarEventService {
+    private static final int MAXIMUM_EVENT_TITLE_LENGTH = 200;
+    private static final int MAXIMUM_EVENT_LOCATION_LENGTH = 200;
+
     @PersistenceContext(unitName = "calendarPU")
     private EntityManager entityManager;
 
@@ -49,15 +53,24 @@ public class CalendarEventService {
             OffsetDateTime endAt,
             boolean allDay) {
         calendarAccessService.requireCanEdit(actor, calendarId);
-        validateEvent(title, startAt, endAt);
+        String normalizedTitle = normalizeRequiredText(
+                title,
+                "Event title is required.",
+                MAXIMUM_EVENT_TITLE_LENGTH,
+                "Event title must be 200 characters or fewer.");
+        String normalizedLocation = normalizeOptionalText(
+                location,
+                MAXIMUM_EVENT_LOCATION_LENGTH,
+                "Event location must be 200 characters or fewer.");
+        validateEventTimes(startAt, endAt);
 
-        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         Calendar calendar = calendarService.requireActiveCalendar(calendarId);
         CalendarEvent event = new CalendarEvent();
         event.setCalendar(calendar);
-        event.setTitle(title.trim());
+        event.setTitle(normalizedTitle);
         event.setDescription(normalizeOptionalText(description));
-        event.setLocation(normalizeOptionalText(location));
+        event.setLocation(normalizedLocation);
         event.setStartAt(startAt);
         event.setEndAt(endAt);
         event.setAllDay(allDay);
@@ -82,16 +95,25 @@ public class CalendarEventService {
             boolean allDay) {
         CalendarEvent event = requireEvent(eventId);
         calendarAccessService.requireCanEdit(actor, event.getCalendar().getId());
-        validateEvent(title, startAt, endAt);
+        String normalizedTitle = normalizeRequiredText(
+                title,
+                "Event title is required.",
+                MAXIMUM_EVENT_TITLE_LENGTH,
+                "Event title must be 200 characters or fewer.");
+        String normalizedLocation = normalizeOptionalText(
+                location,
+                MAXIMUM_EVENT_LOCATION_LENGTH,
+                "Event location must be 200 characters or fewer.");
+        validateEventTimes(startAt, endAt);
 
-        event.setTitle(title.trim());
+        event.setTitle(normalizedTitle);
         event.setDescription(normalizeOptionalText(description));
-        event.setLocation(normalizeOptionalText(location));
+        event.setLocation(normalizedLocation);
         event.setStartAt(startAt);
         event.setEndAt(endAt);
         event.setAllDay(allDay);
         event.setUpdatedByUser(actor);
-        event.setUpdatedAt(OffsetDateTime.now());
+        event.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
         auditService.record(actor, event.getCalendar(), "calendar_event", event.getId(), "updated", "Event updated.");
         return event;
     }
@@ -104,9 +126,15 @@ public class CalendarEventService {
     }
 
     public void validateEvent(String title, OffsetDateTime startAt, OffsetDateTime endAt) {
-        if (title == null || title.isBlank()) {
-            throw new ValidationException("Event title is required.");
-        }
+        normalizeRequiredText(
+                title,
+                "Event title is required.",
+                MAXIMUM_EVENT_TITLE_LENGTH,
+                "Event title must be 200 characters or fewer.");
+        validateEventTimes(startAt, endAt);
+    }
+
+    private void validateEventTimes(OffsetDateTime startAt, OffsetDateTime endAt) {
         if (startAt == null) {
             throw new ValidationException("Event start time is required.");
         }
@@ -116,6 +144,17 @@ public class CalendarEventService {
         if (!endAt.isAfter(startAt)) {
             throw new ValidationException("Event end time must be after the start time.");
         }
+    }
+
+    private String normalizeRequiredText(String value, String blankMessage, int maximumLength, String lengthMessage) {
+        if (value == null || value.isBlank()) {
+            throw new ValidationException(blankMessage);
+        }
+        String normalizedValue = value.trim();
+        if (normalizedValue.length() > maximumLength) {
+            throw new ValidationException(lengthMessage);
+        }
+        return normalizedValue;
     }
 
     private List<CalendarEvent> findEvents(Long calendarId, OffsetDateTime rangeStart, OffsetDateTime rangeEnd) {
@@ -154,5 +193,13 @@ public class CalendarEventService {
             return null;
         }
         return value.trim();
+    }
+
+    private String normalizeOptionalText(String value, int maximumLength, String lengthMessage) {
+        String normalizedValue = normalizeOptionalText(value);
+        if (normalizedValue != null && normalizedValue.length() > maximumLength) {
+            throw new ValidationException(lengthMessage);
+        }
+        return normalizedValue;
     }
 }

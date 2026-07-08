@@ -6,6 +6,7 @@ import static app.testsupport.ServiceTestSupport.setField;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.audit.AuditService;
@@ -14,6 +15,8 @@ import app.membership.CalendarRole;
 import app.security.TokenService;
 import app.testsupport.ServiceTestSupport.EntityManagerStub;
 import app.user.AppUser;
+import app.util.ValidationException;
+import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
 
 final class CalendarServiceTest {
@@ -41,13 +44,26 @@ final class CalendarServiceTest {
                 () -> assertEquals("Kayaking", calendar.getName()),
                 () -> assertEquals("River weekend", calendar.getDescription()),
                 () -> assertEquals("public-token-123456789012345678901234567890", calendar.getPublicToken()),
+                () -> assertEquals(ZoneOffset.UTC, calendar.getCreatedAt().getOffset()),
+                () -> assertEquals(ZoneOffset.UTC, calendar.getUpdatedAt().getOffset()),
                 () -> assertTrue(calendar.isPublicAccessEnabled()),
                 () -> assertEquals(CalendarRole.ADMIN, creatorMembership.getRole()),
                 () -> assertTrue(creatorMembership.isActive()),
+                () -> assertEquals(ZoneOffset.UTC, creatorMembership.getCreatedAt().getOffset()),
+                () -> assertEquals(ZoneOffset.UTC, creatorMembership.getUpdatedAt().getOffset()),
                 () -> assertEquals(calendar, creatorMembership.getCalendar()),
                 () -> assertEquals(creator, creatorMembership.getUser()),
                 () -> assertEquals(1, entityManagerStub.persistedObjects().stream().filter(CalendarMember.class::isInstance).count()),
                 () -> assertEquals(1, entityManagerStub.flushCount()));
+    }
+
+    @Test
+    void rejectsCalendarNamesLongerThanTheSchemaAllowsBeforePersistence() {
+        CalendarService calendarService = new CalendarService();
+
+        assertThrows(
+                ValidationException.class,
+                () -> calendarService.createCalendar(activeUser(42L), "K".repeat(161)));
     }
 
     private static AppUser activeUser(Long id) {

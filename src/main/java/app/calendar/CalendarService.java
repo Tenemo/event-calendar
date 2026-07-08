@@ -14,11 +14,14 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.NoResultException;
 import jakarta.persistence.PersistenceContext;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
 @Stateless
 public class CalendarService {
+    private static final int MAXIMUM_CALENDAR_NAME_LENGTH = 160;
+    private static final int MAXIMUM_TIMEZONE_LENGTH = 80;
     private static final int MAXIMUM_TOKEN_GENERATION_ATTEMPTS = 10;
 
     @PersistenceContext(unitName = "calendarPU")
@@ -42,8 +45,12 @@ public class CalendarService {
             throw new ValidationException("An active user is required to create a calendar.");
         }
 
-        String normalizedName = normalizeRequiredName(name, "Calendar name is required.");
-        OffsetDateTime now = OffsetDateTime.now();
+        String normalizedName = normalizeRequiredText(
+                name,
+                "Calendar name is required.",
+                MAXIMUM_CALENDAR_NAME_LENGTH,
+                "Calendar name must be 160 characters or fewer.");
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         AppUser managedCreator = entityManager.find(AppUser.class, creator.getId());
         if (managedCreator == null || !managedCreator.isActive()) {
             throw new ValidationException("An active user is required to create a calendar.");
@@ -128,7 +135,7 @@ public class CalendarService {
         calendarAccessService.requireCanAdminister(actor, calendarId);
         Calendar calendar = requireActiveCalendar(calendarId);
         calendar.setPublicToken(generateUniquePublicToken());
-        calendar.setUpdatedAt(OffsetDateTime.now());
+        calendar.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
         auditService.record(actor, calendar, "calendar", calendar.getId(), "public_token_rotated", "Public token rotated.");
         return calendar.getPublicToken();
     }
@@ -142,11 +149,19 @@ public class CalendarService {
             boolean publicAccessEnabled) {
         calendarAccessService.requireCanAdminister(actor, calendarId);
         Calendar calendar = requireActiveCalendar(calendarId);
-        calendar.setName(normalizeRequiredName(name, "Calendar name is required."));
+        calendar.setName(normalizeRequiredText(
+                name,
+                "Calendar name is required.",
+                MAXIMUM_CALENDAR_NAME_LENGTH,
+                "Calendar name must be 160 characters or fewer."));
         calendar.setDescription(normalizeOptionalText(description));
-        calendar.setTimezone(normalizeRequiredName(timezone, "Timezone is required."));
+        calendar.setTimezone(normalizeRequiredText(
+                timezone,
+                "Timezone is required.",
+                MAXIMUM_TIMEZONE_LENGTH,
+                "Timezone must be 80 characters or fewer."));
         calendar.setPublicAccessEnabled(publicAccessEnabled);
-        calendar.setUpdatedAt(OffsetDateTime.now());
+        calendar.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
         auditService.record(actor, calendar, "calendar", calendar.getId(), "settings_updated", "Calendar settings updated.");
         return calendar;
     }
@@ -167,11 +182,15 @@ public class CalendarService {
         throw new IllegalStateException("Could not generate a unique public token.");
     }
 
-    private String normalizeRequiredName(String value, String message) {
+    private String normalizeRequiredText(String value, String blankMessage, int maximumLength, String lengthMessage) {
         if (value == null || value.isBlank()) {
-            throw new ValidationException(message);
+            throw new ValidationException(blankMessage);
         }
-        return value.trim();
+        String normalizedValue = value.trim();
+        if (normalizedValue.length() > maximumLength) {
+            throw new ValidationException(lengthMessage);
+        }
+        return normalizedValue;
     }
 
     private String normalizeOptionalText(String value) {

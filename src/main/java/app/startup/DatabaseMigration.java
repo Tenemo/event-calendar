@@ -24,7 +24,7 @@ public class DatabaseMigration {
     public void migrate() {
         Flyway flyway = Flyway.configure()
                 .dataSource(dataSource)
-                .locations("classpath:db/migration")
+                .locations("classpath:db/migration", "classpath:db/callback")
                 .load();
         flyway.migrate();
 

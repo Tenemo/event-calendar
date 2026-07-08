@@ -11,11 +11,15 @@ import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.PersistenceException;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Locale;
 import java.util.Optional;
 
 @Stateless
 public class UserService {
+    private static final int MAXIMUM_USERNAME_LENGTH = 80;
+    private static final int MAXIMUM_DISPLAY_NAME_LENGTH = 160;
+
     @PersistenceContext(unitName = "calendarPU")
     private EntityManager entityManager;
 
@@ -32,11 +36,13 @@ public class UserService {
         if (normalizedDisplayName.isBlank()) {
             throw new ValidationException("Display name is required.");
         }
+        requireMaximumLength(normalizedUsername, MAXIMUM_USERNAME_LENGTH, "Username must be 80 characters or fewer.");
+        requireMaximumLength(normalizedDisplayName, MAXIMUM_DISPLAY_NAME_LENGTH, "Display name must be 160 characters or fewer.");
         if (findByUsername(normalizedUsername).isPresent()) {
             throw new ValidationException("Username is already registered.");
         }
 
-        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         AppUser user = new AppUser();
         user.setUsername(normalizedUsername);
         user.setDisplayName(normalizedDisplayName);
@@ -97,6 +103,12 @@ public class UserService {
             return "";
         }
         return displayName.trim();
+    }
+
+    private void requireMaximumLength(String value, int maximumLength, String message) {
+        if (value.length() > maximumLength) {
+            throw new ValidationException(message);
+        }
     }
 
     private boolean isUniqueConstraintViolation(Throwable exception) {
