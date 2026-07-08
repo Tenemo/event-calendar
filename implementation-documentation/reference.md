@@ -47,10 +47,10 @@ xmlns:p="primefaces"
 
 ### 1.1 Java 25 policy
 
-Use Java 25 LTS for the local developer JDK and production Open Liberty runtime. Compile application code with:
+Use Java 25 LTS for the local developer JDK and production Open Liberty runtime. Compile application code with Java 21 compatibility by default:
 
 ```xml
-<maven.compiler.release>25</maven.compiler.release>
+<maven.compiler.release>21</maven.compiler.release>
 ```
 
 Do not use preview features. Do not modify global `JAVA_HOME`; use repository-scoped tooling.

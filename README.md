@@ -15,7 +15,7 @@ The app is intended for shared event calendars: kayaking plans, birthdays, trips
 
 ## Stack
 
-- Java 25 runtime and source target
+- Java 25 runtime with Java 21 source compatibility
 - Maven WAR build
 - Open Liberty with Jakarta EE 10 Web Profile
 - Jakarta Faces / JSF and PrimeFaces with the `jakarta` classifier

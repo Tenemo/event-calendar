@@ -141,7 +141,7 @@ Create `pom.xml` with pinned versions:
 
 ```xml
 <properties>
-    <maven.compiler.release>25</maven.compiler.release>
+    <maven.compiler.release>21</maven.compiler.release>
     <jakartaee.version>10.0.0</jakartaee.version>
     <primefaces.version>15.0.16</primefaces.version>
     <postgresql.version>42.7.13</postgresql.version>
