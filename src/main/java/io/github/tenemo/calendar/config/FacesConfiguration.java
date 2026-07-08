@@ -1,4 +1,4 @@
-package com.example.calendar.config;
+package io.github.tenemo.calendar.config;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.faces.annotation.FacesConfig;

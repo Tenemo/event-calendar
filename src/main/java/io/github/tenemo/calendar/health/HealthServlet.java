@@ -1,4 +1,4 @@
-package com.example.calendar.health;
+package io.github.tenemo.calendar.health;
 
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;

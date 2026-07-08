@@ -3,13 +3,13 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.example</groupId>
+    <groupId>io.github.tenemo</groupId>
     <artifactId>shared-calendar</artifactId>
     <version>0.1.0-SNAPSHOT</version>
     <packaging>war</packaging>
 
     <properties>
-        <maven.compiler.release>21</maven.compiler.release>
+        <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
@@ -109,7 +109,7 @@
                                     <artifactId>postgresql</artifactId>
                                     <version>${postgresql.version}</version>
                                     <type>jar</type>
-                                    <outputDirectory>${project.basedir}/src/main/liberty/config/resources</outputDirectory>
+                                    <outputDirectory>${project.build.directory}/liberty/wlp/usr/shared/resources/postgresql</outputDirectory>
                                     <destFileName>postgresql.jar</destFileName>
                                 </artifactItem>
                             </artifactItems>

@@ -13,9 +13,18 @@ import java.util.Locale;
 
 final class CalendarTool {
     private static final Path PROJECT_DIRECTORY = Path.of("").toAbsolutePath().normalize();
-    private static final Path LIBERTY_RESOURCES_DIRECTORY =
-            PROJECT_DIRECTORY.resolve("src/main/liberty/config/resources");
-    private static final URI HEALTH_URI = URI.create("http://localhost:9080/health");
+    private static final Path LIBERTY_SHARED_POSTGRESQL_DIRECTORY =
+            PROJECT_DIRECTORY.resolve("target/liberty/wlp/usr/shared/resources/postgresql");
+    private static final String APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE = "APP_BASE_URL";
+    private static final String PORT_ENVIRONMENT_VARIABLE = "PORT";
+    private static final String POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE = "PGDATABASE";
+    private static final String POSTGRESQL_USER_ENVIRONMENT_VARIABLE = "PGUSER";
+    private static final String DEFAULT_APPLICATION_PORT = "9080";
+    private static final String DEFAULT_DATABASE_NAME = "calendar";
+    private static final String DEFAULT_DATABASE_USER = "calendar";
+    private static final String DATABASE_SERVICE_NAME = "postgres";
+    private static final Duration DATABASE_READY_TIMEOUT = Duration.ofSeconds(60);
+    private static final Duration DATABASE_READY_POLL_INTERVAL = Duration.ofSeconds(2);
 
     public static void main(String[] arguments) throws Exception {
         requireProjectDirectory();
@@ -33,6 +42,7 @@ final class CalendarTool {
             case "dev" -> startDevelopmentServer();
             case "package" -> packageApplication();
             case "verify-local" -> verifyLocal();
+            case "verify-running-app" -> verifyRunningApplication();
             default -> {
                 System.err.println("Unknown command: " + arguments[0]);
                 printUsage();
@@ -62,12 +72,13 @@ final class CalendarTool {
     }
 
     private static void prepareLibertyDev() throws IOException, InterruptedException {
-        Files.createDirectories(LIBERTY_RESOURCES_DIRECTORY);
+        Files.createDirectories(LIBERTY_SHARED_POSTGRESQL_DIRECTORY);
         runCommand("Liberty resource preparation", "mvn", "-q", "generate-resources");
     }
 
     private static void startDatabase() throws IOException, InterruptedException {
-        runCommand("PostgreSQL startup", "docker", "compose", "up", "-d", "postgres");
+        runCommand("PostgreSQL startup", "docker", "compose", "up", "-d", DATABASE_SERVICE_NAME);
+        waitForDatabase();
     }
 
     private static void startDevelopmentServer() throws IOException, InterruptedException {
@@ -82,28 +93,66 @@ final class CalendarTool {
     private static void verifyLocal() throws IOException, InterruptedException {
         packageApplication();
         startDatabase();
+        verifyRunningApplication();
+    }
+
+    private static void verifyRunningApplication() throws IOException, InterruptedException {
         checkApplicationHealth();
+        checkDatabaseConnection();
+    }
+
+    private static void checkDatabaseConnection() throws IOException, InterruptedException {
         runCommand(
                 "PostgreSQL connection check",
                 "docker",
                 "compose",
                 "exec",
                 "-T",
-                "postgres",
+                DATABASE_SERVICE_NAME,
                 "psql",
                 "-U",
-                "calendar",
+                databaseUser(),
                 "-d",
-                "calendar",
+                databaseName(),
                 "-c",
                 "select current_database(), current_user;");
     }
 
+    private static void waitForDatabase() throws IOException, InterruptedException {
+        long deadlineNanos = System.nanoTime() + DATABASE_READY_TIMEOUT.toNanos();
+
+        while (System.nanoTime() < deadlineNanos) {
+            int readinessExitCode = runCommandForExitCode(
+                    false,
+                    "docker",
+                    "compose",
+                    "exec",
+                    "-T",
+                    DATABASE_SERVICE_NAME,
+                    "pg_isready",
+                    "-U",
+                    databaseUser(),
+                    "-d",
+                    databaseName());
+
+            if (readinessExitCode == 0) {
+                System.out.println("PostgreSQL is ready.");
+                return;
+            }
+
+            Thread.sleep(DATABASE_READY_POLL_INTERVAL.toMillis());
+        }
+
+        throw new IllegalStateException(
+                "PostgreSQL did not become ready within " + DATABASE_READY_TIMEOUT.toSeconds() + " seconds.");
+    }
+
     private static void checkApplicationHealth() throws IOException, InterruptedException {
+        URI healthUri = applicationHealthUri();
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
                 .build();
-        HttpRequest request = HttpRequest.newBuilder(HEALTH_URI)
+        HttpRequest request = HttpRequest.newBuilder(healthUri)
                 .timeout(Duration.ofSeconds(10))
                 .GET()
                 .build();
@@ -112,7 +161,9 @@ final class CalendarTool {
         try {
             response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         } catch (IOException exception) {
-            throw new IOException("Health check failed. Start the app with 'mise run dev' before running verify-local.", exception);
+            throw new IOException(
+                    "Health check failed for " + healthUri + ". Start the app with 'mise run dev' before running this check.",
+                    exception);
         }
 
         int statusCode = response.statusCode();
@@ -120,7 +171,45 @@ final class CalendarTool {
             throw new IllegalStateException("Health check failed with HTTP " + statusCode + ".");
         }
 
-        System.out.println("Health check returned HTTP " + statusCode + ".");
+        System.out.println("Health check returned HTTP " + statusCode + " from " + healthUri + ".");
+    }
+
+    private static URI applicationHealthUri() {
+        String defaultApplicationBaseUrl = "http://localhost:" + applicationPort();
+        String applicationBaseUrl = environmentValueOrDefault(
+                APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE,
+                defaultApplicationBaseUrl);
+        return URI.create(removeTrailingSlashes(applicationBaseUrl) + "/health");
+    }
+
+    private static String applicationPort() {
+        return environmentValueOrDefault(PORT_ENVIRONMENT_VARIABLE, DEFAULT_APPLICATION_PORT);
+    }
+
+    private static String databaseName() {
+        return environmentValueOrDefault(POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE, DEFAULT_DATABASE_NAME);
+    }
+
+    private static String databaseUser() {
+        return environmentValueOrDefault(POSTGRESQL_USER_ENVIRONMENT_VARIABLE, DEFAULT_DATABASE_USER);
+    }
+
+    private static String environmentValueOrDefault(String variableName, String defaultValue) {
+        String configuredValue = System.getenv(variableName);
+        if (configuredValue == null || configuredValue.isBlank()) {
+            return defaultValue;
+        }
+
+        return configuredValue.trim();
+    }
+
+    private static String removeTrailingSlashes(String value) {
+        String normalizedValue = value;
+        while (normalizedValue.endsWith("/")) {
+            normalizedValue = normalizedValue.substring(0, normalizedValue.length() - 1);
+        }
+
+        return normalizedValue;
     }
 
     private static void requireProjectDirectory() {
@@ -131,11 +220,25 @@ final class CalendarTool {
 
     private static void runCommand(String description, String... command)
             throws IOException, InterruptedException {
+        int exitCode = runCommandForExitCode(true, command);
+        if (exitCode != 0) {
+            throw new IllegalStateException(description + " failed with exit code " + exitCode + ".");
+        }
+    }
+
+    private static int runCommandForExitCode(boolean inheritOutput, String... command)
+            throws IOException, InterruptedException {
         List<String> commandLine = new ArrayList<>(Arrays.asList(command));
         commandLine.set(0, platformExecutableName(commandLine.get(0)));
         ProcessBuilder processBuilder = new ProcessBuilder(commandLine)
-                .directory(PROJECT_DIRECTORY.toFile())
-                .inheritIO();
+                .directory(PROJECT_DIRECTORY.toFile());
+
+        if (inheritOutput) {
+            processBuilder.inheritIO();
+        } else {
+            processBuilder.redirectOutput(ProcessBuilder.Redirect.DISCARD);
+            processBuilder.redirectError(ProcessBuilder.Redirect.DISCARD);
+        }
 
         Process process;
         try {
@@ -144,16 +247,14 @@ final class CalendarTool {
             throw new IOException("Required command '" + commandLine.getFirst() + "' was not found on PATH.", exception);
         }
 
-        int exitCode = process.waitFor();
-        if (exitCode != 0) {
-            throw new IllegalStateException(description + " failed with exit code " + exitCode + ".");
-        }
+        return process.waitFor();
     }
 
     private static void printUsage() {
         String executableName = isWindows() ? "java scripts\\calendar-tool.java" : "java scripts/calendar-tool.java";
         System.err.println("Usage: " + executableName + " <command>");
-        System.err.println("Commands: check-toolchain, prepare-liberty-dev, setup, db, dev, package, verify-local");
+        System.err.println(
+                "Commands: check-toolchain, prepare-liberty-dev, setup, db, dev, package, verify-local, verify-running-app");
     }
 
     private static boolean isWindows() {

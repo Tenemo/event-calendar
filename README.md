@@ -15,7 +15,7 @@ The app is intended for shared event calendars: kayaking plans, birthdays, trips
 
 ## Stack
 
-- Java 25 runtime with Java 21 source compatibility
+- Java 25 runtime and source target
 - Maven WAR build
 - Open Liberty with Jakarta EE 10 Web Profile
 - Jakarta Faces / JSF and PrimeFaces with the `jakarta` classifier
@@ -81,9 +81,15 @@ mise run db
 mise run dev
 ```
 
-The setup task copies the PostgreSQL JDBC driver into Liberty's local config resources. The copied jar is ignored by source control.
+The setup task copies the PostgreSQL JDBC driver into Liberty's generated shared resources under `target/`.
 
 The project uses `mise` tasks and a portable Java helper for local orchestration instead of maintaining separate Bash and PowerShell scripts. Java and Maven versions are pinned in `.mise.toml`; the PostgreSQL driver version is centralized in `pom.xml`.
+
+If Liberty is already running, verify the running app and database without rebuilding:
+
+```bash
+mise run verify-running-app
+```
 
 ## Known limitations
 

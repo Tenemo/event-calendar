@@ -34,7 +34,6 @@ target/
 # Local tool and runtime output
 .mise.local.toml
 .liberty/
-src/main/liberty/config/resources/*.jar
 
 # IDE state
 .idea/

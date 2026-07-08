@@ -5,6 +5,11 @@
 
     <display-name>Shared calendar</display-name>
 
+    <context-param>
+        <param-name>primefaces.THEME</param-name>
+        <param-value>saga</param-value>
+    </context-param>
+
     <servlet>
         <servlet-name>Faces servlet</servlet-name>
         <servlet-class>jakarta.faces.webapp.FacesServlet</servlet-class>

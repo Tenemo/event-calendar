@@ -23,7 +23,7 @@
                  urlRewritingEnabled="false"/>
 
     <library id="postgresqlDriver">
-        <fileset dir="${server.config.dir}/resources"
+        <fileset dir="${shared.resource.dir}/postgresql"
                  includes="postgresql.jar"/>
     </library>
 

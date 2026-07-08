@@ -2,15 +2,15 @@ services:
   postgres:
     image: postgres:17
     environment:
-      POSTGRES_DB: calendar
-      POSTGRES_USER: calendar
-      POSTGRES_PASSWORD: calendar
+      POSTGRES_DB: ${PGDATABASE:-calendar}
+      POSTGRES_USER: ${PGUSER:-calendar}
+      POSTGRES_PASSWORD: ${PGPASSWORD:-calendar}
     ports:
-      - "5432:5432"
+      - "${PGPORT:-5432}:5432"
     volumes:
       - calendar_postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U calendar -d calendar"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5

@@ -10,6 +10,7 @@ if [ ! -f "$PROPERTIES_FILE" ]; then
 fi
 
 DISTRIBUTION_URL="$(sed -n 's/^distributionUrl=//p' "$PROPERTIES_FILE" | tail -n 1)"
+DISTRIBUTION_SHA512_SUM="$(sed -n 's/^distributionSha512Sum=//p' "$PROPERTIES_FILE" | tail -n 1)"
 MAVEN_VERSION="$(printf '%s' "$DISTRIBUTION_URL" | sed -n 's#.*/apache-maven-\([^/]*\)-bin\.zip#\1#p')"
 
 if [ -z "$DISTRIBUTION_URL" ] || [ -z "$MAVEN_VERSION" ]; then
@@ -17,9 +18,32 @@ if [ -z "$DISTRIBUTION_URL" ] || [ -z "$MAVEN_VERSION" ]; then
   exit 1
 fi
 
+if [ -z "$DISTRIBUTION_SHA512_SUM" ]; then
+  echo "Missing Maven distribution SHA-512 checksum in $PROPERTIES_FILE" >&2
+  exit 1
+fi
+
 MAVEN_USER_HOME="${MAVEN_USER_HOME:-${HOME}/.m2}"
 MAVEN_BASE="${MAVEN_USER_HOME}/wrapper/dists/apache-maven-${MAVEN_VERSION}"
 MAVEN_HOME="${MAVEN_BASE}/apache-maven-${MAVEN_VERSION}"
+
+verify_maven_archive() {
+  if command -v sha512sum >/dev/null 2>&1; then
+    if ! printf '%s  %s\n' "$DISTRIBUTION_SHA512_SUM" "$MAVEN_ZIP" | sha512sum -c - >/dev/null 2>&1; then
+      echo "Maven distribution checksum mismatch." >&2
+      exit 1
+    fi
+  elif command -v shasum >/dev/null 2>&1; then
+    ACTUAL_SHA512_SUM="$(shasum -a 512 "$MAVEN_ZIP" | sed 's/[[:space:]].*//')"
+    if [ "$ACTUAL_SHA512_SUM" != "$DISTRIBUTION_SHA512_SUM" ]; then
+      echo "Maven distribution checksum mismatch." >&2
+      exit 1
+    fi
+  else
+    echo "Install sha512sum or shasum so the Maven wrapper can verify Maven." >&2
+    exit 1
+  fi
+}
 
 if command -v mise >/dev/null 2>&1 && [ -f "${PROJECT_DIR}/.mise.toml" ]; then
   MISE_JAVA_HOME="$(mise where java 2>/dev/null || true)"
@@ -41,6 +65,8 @@ if [ ! -x "${MAVEN_HOME}/bin/mvn" ]; then
     echo "Install curl or wget so the Maven wrapper can download Maven." >&2
     exit 1
   fi
+
+  verify_maven_archive
 
   if command -v unzip >/dev/null 2>&1; then
     unzip -q -o "$MAVEN_ZIP" -d "$MAVEN_BASE"
