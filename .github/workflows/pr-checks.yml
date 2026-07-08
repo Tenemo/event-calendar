@@ -1,0 +1,103 @@
+name: PR checks
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: maven build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Make Maven wrapper executable
+        run: chmod +x mvnw
+
+      - name: Build and test WAR
+        run: ./mvnw -B -ntp clean test package
+
+      - name: Check PrimeFaces Jakarta classifier
+        run: |
+          ./mvnw -B -ntp dependency:tree \
+            "-Dincludes=org.primefaces:primefaces" \
+            "-DoutputFile=target/primefaces-dependency-tree.txt"
+          cat target/primefaces-dependency-tree.txt
+          if ! grep -q "org.primefaces:primefaces:jar:jakarta:" target/primefaces-dependency-tree.txt; then
+            echo "PrimeFaces must use the jakarta classifier." >&2
+            exit 1
+          fi
+
+  end-to-end:
+    name: playwright e2e
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Make Maven wrapper executable
+        run: chmod +x mvnw
+
+      - name: Build WAR for Liberty
+        run: ./mvnw -B -ntp package
+
+      - name: Start PostgreSQL
+        run: java scripts/calendar-tool.java db
+
+      - name: Install Playwright browsers and Linux dependencies
+        run: |
+          ./mvnw -B -ntp \
+            -Dexec.classpathScope=test \
+            -Dexec.mainClass=com.microsoft.playwright.CLI \
+            "-Dexec.args=install --with-deps" \
+            org.codehaus.mojo:exec-maven-plugin:3.6.3:java
+
+      - name: Start Open Liberty
+        run: |
+          ./mvnw -B -ntp liberty:dev > target/liberty-dev.log 2>&1 &
+          echo "$!" > target/liberty-dev.pid
+
+      - name: Wait for Open Liberty
+        run: java scripts/calendar-tool.java wait-for-app
+
+      - name: Run Playwright end-to-end tests
+        env:
+          APP_BASE_URL: http://localhost:9080
+          BROWSER: chromium
+        run: ./mvnw -B -ntp -Pe2e failsafe:integration-test failsafe:verify
+
+      - name: Show Open Liberty logs on failure
+        if: failure()
+        run: |
+          if [ -f target/liberty-dev.log ]; then
+            cat target/liberty-dev.log
+          fi
+          if [ -f target/liberty/wlp/usr/servers/defaultServer/logs/messages.log ]; then
+            cat target/liberty/wlp/usr/servers/defaultServer/logs/messages.log
+          fi

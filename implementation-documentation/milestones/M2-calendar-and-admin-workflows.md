@@ -1,22 +1,27 @@
-﻿# M2: calendar and admin workflows
+# M2: calendar and member workflows
 
-Use this milestone to build the real calendar workflow, role-aware event CRUD, admin user management, validation, optimistic-locking messages, and audit logging for user-facing actions.
+Use this milestone to build the real user-facing workflows on top of the M1 services: public calendar viewing, registration and login screens, signed-in calendar list, calendar creation, event CRUD, invite links, invite acceptance, calendar settings, and member management.
 
 ## Milestone checklist
 
-
-Outcome: viewers, editors, and admins can use the calendar and admin workflows end to end, with server-side validation and audit logging.
+Outcome: public visitors, registered users, viewers, editors, and calendar admins can use the calendar workflows end to end, with server-side validation and audit logging.
 
 Tasks:
 
-1. Implement `CalendarView`.
-2. Implement `CalendarEventForm`.
-3. Render events in the PrimeFaces schedule.
-4. Add create, edit, and delete flows with confirmation where needed.
-5. Add server-side validation and user-readable optimistic-locking conflict messages.
-6. Add audit logging for event create, update, and delete.
-7. Implement `UserAdminView`, user table, create-user flow, role assignment, password reset, disable user, and last-admin protection.
-8. Add audit logging for user-management changes.
+1. Implement registration and login pages against the M1 services.
+2. Implement `CalendarListView` for signed-in users.
+3. Implement calendar creation flow.
+4. Implement public calendar view by public token.
+5. Implement authenticated calendar detail view.
+6. Render events in the PrimeFaces schedule or a PrimeFaces-backed calendar layout.
+7. Add create, edit, and delete event flows with confirmation where needed.
+8. Add server-side validation and user-readable optimistic-locking conflict messages.
+9. Add audit logging for event create, update, and delete.
+10. Implement calendar member page with member table, invite-link creation, role changes, access removal, and last-admin protection.
+11. Implement invite acceptance for signed-in users and newly registered users.
+12. Implement calendar settings page with name, description, timezone, public-link enable/disable, and public-link rotation.
+13. Style the UI as a modern flat app, not a marketing page.
+14. Add or prepare a deterministic CI app-smoke check for the real HTTP routes.
 
 Verification:
 
@@ -29,50 +34,65 @@ curl -i http://localhost:9080/health
 
 Manual role checks:
 
-1. `VIEWER` can see the calendar.
-2. `VIEWER` cannot create, edit, or delete events.
-3. `EDITOR` can create, edit, and delete events.
-4. `ADMIN` can create, edit, and delete events.
-5. Service methods reject unauthorized mutations even if UI controls are manually triggered.
-6. Admin can create viewer, editor, and admin users.
-7. Viewer cannot access `/app/admin/users.xhtml`.
-8. Editor cannot access `/app/admin/users.xhtml`.
-9. Last admin cannot be disabled.
-10. Last admin cannot lose `ADMIN`.
+1. Public visitor with valid link can see the calendar read-only.
+2. Public visitor cannot create, edit, delete, or manage members.
+3. Invalid public token shows a generic not-found page.
+4. Registered user can create a calendar.
+5. Calendar creator becomes calendar admin.
+6. `VIEWER` member can see the calendar.
+7. `VIEWER` member cannot create, edit, or delete events.
+8. `EDITOR` member can create, edit, and delete events.
+9. `EDITOR` member cannot manage invites or members.
+10. `ADMIN` member can create invite links.
+11. `ADMIN` member can change member roles.
+12. Last calendar admin cannot be disabled or demoted.
+13. Service methods reject unauthorized mutations even if UI controls are manually triggered.
 
 Acceptance criteria:
 
-1. Events persist after restart.
-2. Event time displays correctly in the configured timezone.
-3. Invalid end-before-start is rejected.
-4. Blank title is rejected.
-5. Optimistic locking conflict shows a user-readable message.
-6. User-management actions persist and are audited.
-7. Last-admin protection is enforced in the service layer.
+1. Users, calendars, memberships, invitations, and events persist after restart.
+2. Public calendar links work without login.
+3. Public calendar pages include `noindex`.
+4. Event time displays correctly in the configured calendar timezone.
+5. Invalid end-before-start is rejected.
+6. Blank title is rejected.
+7. Optimistic locking conflict shows a user-readable message.
+8. Invite-link actions persist and are audited.
+9. Member-management actions persist and are audited.
+10. Last-admin protection is enforced in the service layer.
+11. The UI is responsive and uses the flat design system from M0.
+12. App-smoke CI covers health and stable route-level behavior without brittle sleeps or flaky browser automation.
 
+## JSF / PrimeFaces UI plan
 
+### Templates
 
-## Implementation details
-
-## 14. JSF / PrimeFaces UI plan
-
-### 14.1 Templates
-
-Create `/WEB-INF/templates/main.xhtml` with:
+Use `/WEB-INF/templates/main.xhtml` for:
 
 1. `<h:head>` title slot.
-2. PrimeFaces growl/messages area.
-3. Header toolbar.
-4. Navigation links.
-5. Admin link rendered only for admins.
-6. Logout button.
-7. Main content slot.
-
-Create `/WEB-INF/templates/admin.xhtml` extending or mirroring main template with admin navigation.
+2. Shared stylesheet.
+3. PrimeFaces messages area.
+4. Header toolbar.
+5. Navigation links.
+6. Main content slot.
 
 Do not duplicate page shell markup across pages.
 
-### 14.2 Login page
+### Registration page
+
+Create `register.xhtml` with:
+
+1. Username field.
+2. Display name field.
+3. Password field.
+4. Initial calendar name field.
+5. Submit button.
+6. Link to sign in.
+7. Generic, user-readable validation messages.
+
+Use `ajax="false"` for submit unless the authentication flow has been verified with JSF Ajax.
+
+### Login page
 
 Create `login.xhtml` with:
 
@@ -80,125 +100,60 @@ Create `login.xhtml` with:
 2. Password field.
 3. Submit button.
 4. Generic error messages.
-5. No registration link.
+5. Link to register.
 
-Use `ajax="false"` for login submit to avoid JSF/Ajax authentication edge cases.
+Never reveal whether username or password was wrong.
 
-Shape:
+### Public calendar page
 
-```xhtml
-<!DOCTYPE html>
-<html
-  xmlns="http://www.w3.org/1999/xhtml"
-  xmlns:h="jakarta.faces.html"
-  xmlns:p="primefaces"
->
-  <h:head>
-    <title>Sign in - Shared calendar</title>
-  </h:head>
-  <h:body>
-    <h:form id="loginForm">
-      <p:panel header="Shared calendar">
-        <p:messages id="messages" />
+Create `public-calendar.xhtml` or a servlet-backed route for `/calendar/{publicToken}`.
 
-        <p:outputLabel for="username" value="Username" />
-        <p:inputText
-          id="username"
-          value="#{loginView.username}"
-          required="true"
-        />
+Responsibilities:
 
-        <p:outputLabel for="password" value="Password" />
-        <p:password
-          id="password"
-          value="#{loginView.password}"
-          required="true"
-          feedback="false"
-        />
+1. Load calendar by public token.
+2. Return a generic not-found state for invalid, disabled, or inactive public links.
+3. Render calendar name, description, timezone, and events.
+4. Hide all mutation and member controls.
+5. Include a `noindex` meta tag.
 
-        <p:commandButton
-          value="Sign in"
-          action="#{loginView.login}"
-          ajax="false"
-        />
-      </p:panel>
-    </h:form>
-  </h:body>
-</html>
-```
+### Calendar list page
 
-### 14.3 Calendar page
+Create `app/calendars.xhtml` and `calendar/CalendarListView.java`.
 
-Create `event/CalendarView.java`:
+Responsibilities:
 
-1. `@Named`
-2. `@ViewScoped`
-3. Implements `Serializable`
-4. Holds PrimeFaces schedule model.
-5. Holds selected event form.
-6. Delegates to `CalendarService`.
-7. Does not contain business rules.
+1. List calendars where the signed-in user has active membership.
+2. Show each calendar role.
+3. Link to authenticated calendar detail.
+4. Provide create-calendar flow.
+5. Show public-link copy affordance for admins.
 
-Calendar page responsibilities:
+### Calendar detail page
 
-1. Show month/week/day calendar.
-2. Let viewer click events and read details.
-3. Let editor/admin create/edit/delete.
-4. Hide edit controls for viewer.
+Create `app/calendar.xhtml` and `calendar/CalendarView.java`.
+
+Responsibilities:
+
+1. Show month/week/day calendar or a clear event list if PrimeFaces schedule integration needs incremental delivery.
+2. Let public and member viewers read event details.
+3. Let editors/admins create/edit/delete events.
+4. Hide edit controls for viewers.
 5. Still rely on service-layer security for enforcement.
 
-PrimeFaces schedule skeleton:
+The exact PrimeFaces schedule model API can change across versions. Check the PrimeFaces 15 showcase/API and adapt the Java code accordingly.
 
-```xhtml
-<p:schedule
-  id="schedule"
-  value="#{calendarView.eventModel}"
-  widgetVar="calendarWidget"
-  editable="#{currentUser.editor}"
->
-  <p:ajax
-    event="dateSelect"
-    listener="#{calendarView.onDateSelect}"
-    update="eventDialog messages"
-  />
+### Calendar members page
 
-  <p:ajax
-    event="eventSelect"
-    listener="#{calendarView.onEventSelect}"
-    update="eventDialog messages"
-  />
+Create `app/calendar-members.xhtml` and `membership/CalendarMembersView.java`.
 
-  <p:ajax
-    event="eventMove"
-    listener="#{calendarView.onEventMove}"
-    update="schedule messages"
-    disabled="#{!currentUser.editor}"
-  />
+Calendar admins can:
 
-  <p:ajax
-    event="eventResize"
-    listener="#{calendarView.onEventResize}"
-    update="schedule messages"
-    disabled="#{!currentUser.editor}"
-  />
-</p:schedule>
-```
-
-The exact PrimeFaces schedule model API can change across versions. The agent must check the PrimeFaces 15 showcase/API and adapt the Java code accordingly.
-
-### 14.4 Admin users page
-
-Create `app/admin/users.xhtml` and `user/UserAdminView.java`.
-
-Admin page capabilities:
-
-1. List users.
-2. Create user.
-3. Assign/remove roles.
-4. Reset password.
-5. Disable user.
-6. Show active/inactive state.
-7. Prevent deleting users; disable instead.
+1. List members.
+2. Generate viewer/editor invite links.
+3. Revoke invite links.
+4. Change member roles.
+5. Disable member access.
+6. See active/inactive state.
 
 Use PrimeFaces components:
 
@@ -206,14 +161,38 @@ Use PrimeFaces components:
 p:dataTable
 p:dialog
 p:inputText
-p:password
-p:selectManyCheckbox or p:selectManyMenu
+p:selectOneMenu
 p:commandButton
 p:confirmDialog
 p:messages
 ```
 
----
+Do not build email delivery. Invite links are copied manually.
 
+### Calendar settings page
 
+Create `app/calendar-settings.xhtml` and `calendar/CalendarSettingsView.java`.
 
+Calendar admins can:
+
+1. Rename a calendar.
+2. Edit description.
+3. Set timezone.
+4. Enable or disable public link access.
+5. Rotate the public link.
+
+Rotating the public link invalidates the previous public URL and must be audited.
+
+## GitHub PR checks after M2
+
+Keep the M0 Maven build check and the M1 PostgreSQL-backed check required. Add an app-smoke lane once the real pages are implemented and can start reliably in CI.
+
+The app-smoke lane should:
+
+1. Start PostgreSQL with the same test environment values used by the database lane.
+2. Start Open Liberty from the Maven wrapper or the same committed project task used locally.
+3. Wait for `/health` with a bounded readiness loop.
+4. Check stable HTTP behavior for public calendar, registration, login, authenticated workspace, and invalid public-token routes.
+5. Keep assertions route-level at first; do not require full browser end-to-end tests until the UI flows are deterministic.
+
+Do not add retries to mask route or startup flakiness. If the app-smoke lane flakes, fix startup readiness, test isolation, database state, or session handling before making it required.

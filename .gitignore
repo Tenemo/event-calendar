@@ -23,5 +23,21 @@
 hs_err_pid*
 replay_pid*
 
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Build output
+target/
+
+# Local tool and runtime output
+.mise.local.toml
+.liberty/
+
+# IDE state
+.idea/
+.vscode/
+
 # Misc
 temp/

@@ -1,0 +1,16 @@
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:ui="jakarta.faces.facelets"
+                xmlns:p="primefaces"
+                template="/WEB-INF/templates/main.xhtml">
+    <ui:define name="title">Sign-in error - Shared calendar</ui:define>
+
+    <ui:define name="content">
+        <section class="narrow-section">
+            <p:panel header="Sign-in error" styleClass="surface-panel">
+                <p:staticMessage severity="warn"
+                                 summary="Sign-in is unavailable."
+                                 detail="Account sign-in is not available yet."/>
+            </p:panel>
+        </section>
+    </ui:define>
+</ui:composition>

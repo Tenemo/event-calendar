@@ -1,0 +1,36 @@
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:ui="jakarta.faces.facelets"
+                xmlns:p="primefaces"
+                template="/WEB-INF/templates/main.xhtml">
+    <ui:define name="title">Members - Shared calendar</ui:define>
+
+    <ui:define name="content">
+        <section class="page-section">
+            <div class="section-header">
+                <div>
+                    <h1>Members</h1>
+                    <p class="lead-text">Invite and role management preview</p>
+                </div>
+            </div>
+
+            <p:panel header="Invitations" styleClass="surface-panel">
+                <div class="invite-grid">
+                    <div>
+                        <h2>Editor invite</h2>
+                        <p>Editors can add and update events.</p>
+                    </div>
+                    <div>
+                        <h2>Viewer invite</h2>
+                        <p>Viewers can read the authenticated calendar.</p>
+                    </div>
+                </div>
+            </p:panel>
+
+            <p:dataTable value="#{[]}" var="member" emptyMessage="Members are not available yet." styleClass="surface-table">
+                <p:column headerText="Member"/>
+                <p:column headerText="Role"/>
+                <p:column headerText="Status"/>
+            </p:dataTable>
+        </section>
+    </ui:define>
+</ui:composition>

@@ -1,0 +1,56 @@
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:h="jakarta.faces.html"
+                xmlns:ui="jakarta.faces.facelets"
+                xmlns:p="primefaces"
+                template="/WEB-INF/templates/main.xhtml">
+    <ui:define name="title">Public calendar - Shared calendar</ui:define>
+    <ui:define name="head">
+        <meta name="robots" content="noindex, nofollow"/>
+    </ui:define>
+
+    <ui:define name="content">
+        <section class="page-section">
+            <div class="section-header">
+                <div>
+                    <h1>Kayaking weekend</h1>
+                    <p class="lead-text">Read-only public calendar preview</p>
+                </div>
+                <span class="token-sample">/calendar/2f0f6d2e-6b7b-45a9-a56f-2f449f7a2c19</span>
+            </div>
+
+            <div class="public-layout">
+                <section class="calendar-preview large-preview" aria-label="Public calendar preview">
+                    <div class="preview-header">
+                        <div>
+                            <h2>July events</h2>
+                            <p>Public visitors can view events only.</p>
+                        </div>
+                        <span class="role-chip">Public</span>
+                    </div>
+                    <div class="event-board">
+                        <article class="event-item">
+                            <span class="event-date">Jul 10</span>
+                            <div>
+                                <h3>Gear check</h3>
+                                <p>17:30 at the boathouse</p>
+                            </div>
+                        </article>
+                        <article class="event-item">
+                            <span class="event-date">Jul 13</span>
+                            <div>
+                                <h3>River launch</h3>
+                                <p>09:00 at the north landing</p>
+                            </div>
+                        </article>
+                    </div>
+                </section>
+
+                <p:panel header="Access" styleClass="surface-panel slim-panel">
+                    <p>
+                        Public links are long random addresses. Visitors with the link can read the calendar, while editing and invitations require membership.
+                    </p>
+                </p:panel>
+            </div>
+        </section>
+    </ui:define>
+</ui:composition>

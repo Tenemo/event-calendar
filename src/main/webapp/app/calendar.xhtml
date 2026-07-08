@@ -1,0 +1,52 @@
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:h="jakarta.faces.html"
+                xmlns:ui="jakarta.faces.facelets"
+                xmlns:p="primefaces"
+                template="/WEB-INF/templates/main.xhtml">
+    <ui:define name="title">Calendar - Shared calendar</ui:define>
+
+    <ui:define name="content">
+        <section class="page-section">
+            <div class="section-header">
+                <div>
+                    <h1>Kayaking weekend</h1>
+                    <p class="lead-text">Signed-in calendar workspace preview</p>
+                </div>
+                <div class="action-row compact-actions">
+                    <h:link outcome="/app/calendar-members" value="Members" styleClass="button-link secondary-link"/>
+                    <h:link outcome="/public-calendar" value="Public link" styleClass="button-link secondary-link"/>
+                </div>
+            </div>
+
+            <p:panel header="Events" styleClass="surface-panel">
+                <p:tabView>
+                    <p:tab title="Month">
+                        <div class="event-board">
+                            <article class="event-item">
+                                <span class="event-date">Jul 10</span>
+                                <div>
+                                    <h2>Gear check</h2>
+                                    <p>Event editing controls are not available yet.</p>
+                                </div>
+                            </article>
+                            <article class="event-item">
+                                <span class="event-date">Jul 13</span>
+                                <div>
+                                    <h2>River launch</h2>
+                                    <p>Saved event details are not available yet.</p>
+                                </div>
+                            </article>
+                        </div>
+                    </p:tab>
+                    <p:tab title="List">
+                        <p:dataTable value="#{[]}" var="event" emptyMessage="No saved events are available yet.">
+                            <p:column headerText="Title"/>
+                            <p:column headerText="Starts"/>
+                            <p:column headerText="Role"/>
+                        </p:dataTable>
+                    </p:tab>
+                </p:tabView>
+            </p:panel>
+        </section>
+    </ui:define>
+</ui:composition>
