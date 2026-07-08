@@ -18,8 +18,11 @@
         <postgresql.version>42.7.13</postgresql.version>
         <flyway.version>12.10.0</flyway.version>
         <junit.version>5.11.4</junit.version>
+        <playwright.version>1.61.0</playwright.version>
         <liberty.maven.plugin.version>3.12.0</liberty.maven.plugin.version>
         <maven.dependency.plugin.version>3.8.1</maven.dependency.plugin.version>
+        <maven.failsafe.plugin.version>3.5.2</maven.failsafe.plugin.version>
+        <exec.maven.plugin.version>3.6.3</exec.maven.plugin.version>
     </properties>
 
     <dependencies>
@@ -59,6 +62,13 @@
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.microsoft.playwright</groupId>
+            <artifactId>playwright</artifactId>
+            <version>${playwright.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -125,6 +135,41 @@
                 <artifactId>liberty-maven-plugin</artifactId>
                 <version>${liberty.maven.plugin.version}</version>
             </plugin>
+
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>${exec.maven.plugin.version}</version>
+            </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>e2e</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <version>${maven.failsafe.plugin.version}</version>
+                        <configuration>
+                            <useModulePath>false</useModulePath>
+                            <includes>
+                                <include>**/*EndToEndIT.java</include>
+                            </includes>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

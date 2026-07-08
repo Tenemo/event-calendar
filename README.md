@@ -71,6 +71,23 @@ Run the Maven build through the project task:
 mise run package
 ```
 
+Browser end-to-end tests use Playwright Java and expect the app to be running. Start the local services first:
+
+```bash
+mise run setup
+mise run db
+mise run dev
+```
+
+In another terminal, install the Playwright browser binaries and run the browser tests:
+
+```bash
+mise run install-playwright
+mise run e2e
+```
+
+The browser tests use Chromium by default. Set `BROWSER` to `firefox` or `webkit` to use another Playwright browser, and set `APP_BASE_URL` to target a non-default running app URL.
+
 ## Running with Liberty dev mode
 
 Prepare the local Liberty resources, start PostgreSQL, and start Liberty:

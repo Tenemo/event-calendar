@@ -44,3 +44,38 @@ jobs:
             echo "PrimeFaces must use the jakarta classifier." >&2
             exit 1
           fi
+
+      - name: Start PostgreSQL
+        run: java scripts/calendar-tool.java db
+
+      - name: Install Playwright browsers and Linux dependencies
+        run: |
+          ./mvnw -B -ntp \
+            -Dexec.classpathScope=test \
+            -Dexec.mainClass=com.microsoft.playwright.CLI \
+            "-Dexec.args=install --with-deps" \
+            org.codehaus.mojo:exec-maven-plugin:3.6.3:java
+
+      - name: Start Open Liberty
+        run: |
+          ./mvnw -B -ntp liberty:dev > target/liberty-dev.log 2>&1 &
+          echo "$!" > target/liberty-dev.pid
+
+      - name: Wait for Open Liberty
+        run: java scripts/calendar-tool.java wait-for-app
+
+      - name: Run Playwright end-to-end tests
+        env:
+          APP_BASE_URL: http://localhost:9080
+          BROWSER: chromium
+        run: ./mvnw -B -ntp -Pe2e failsafe:integration-test failsafe:verify
+
+      - name: Show Open Liberty logs on failure
+        if: failure()
+        run: |
+          if [ -f target/liberty-dev.log ]; then
+            cat target/liberty-dev.log
+          fi
+          if [ -f target/liberty/wlp/usr/servers/defaultServer/logs/messages.log ]; then
+            cat target/liberty/wlp/usr/servers/defaultServer/logs/messages.log
+          fi

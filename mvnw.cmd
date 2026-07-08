@@ -1,9 +1,37 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 
-set "MAVEN_VERSION=3.9.11"
-set "MAVEN_DISTRIBUTION_URL=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/%MAVEN_VERSION%/apache-maven-%MAVEN_VERSION%-bin.zip"
-set "MAVEN_DISTRIBUTION_SHA512=03e2d65d4483a3396980629f260e25cac0d8b6f7f2791e4dc20bc83f9514db8d0f05b0479e699a5f34679250c49c8e52e961262ded468a20de0be254d8207076"
+set "PROPERTIES_FILE=%~dp0.mvn\wrapper\maven-wrapper.properties"
+
+if not exist "%PROPERTIES_FILE%" (
+    echo Missing Maven wrapper properties: %PROPERTIES_FILE% 1>&2
+    exit /b 1
+)
+
+set "MAVEN_DISTRIBUTION_URL="
+set "MAVEN_DISTRIBUTION_SHA512="
+for /f "usebackq tokens=1,* delims==" %%a in ("%PROPERTIES_FILE%") do (
+    if /i "%%a"=="distributionUrl" set "MAVEN_DISTRIBUTION_URL=%%b"
+    if /i "%%a"=="distributionSha512Sum" set "MAVEN_DISTRIBUTION_SHA512=%%b"
+)
+
+if not defined MAVEN_DISTRIBUTION_URL (
+    echo Could not determine the Maven distribution from %PROPERTIES_FILE% 1>&2
+    exit /b 1
+)
+
+set "MAVEN_ARCHIVE_NAME=%MAVEN_DISTRIBUTION_URL:*apache-maven-=%"
+set "MAVEN_VERSION=%MAVEN_ARCHIVE_NAME:-bin.zip=%"
+
+if "%MAVEN_ARCHIVE_NAME%"=="%MAVEN_DISTRIBUTION_URL%" (
+    echo Could not determine the Maven version from %PROPERTIES_FILE% 1>&2
+    exit /b 1
+)
+
+if not defined MAVEN_DISTRIBUTION_SHA512 (
+    echo Missing Maven distribution SHA-512 checksum in %PROPERTIES_FILE% 1>&2
+    exit /b 1
+)
 set "MAVEN_BASE=%USERPROFILE%\.m2\wrapper\dists\apache-maven-%MAVEN_VERSION%"
 set "MAVEN_HOME=%MAVEN_BASE%\apache-maven-%MAVEN_VERSION%"
 

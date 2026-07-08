@@ -149,6 +149,7 @@ a:focus-visible,
 
 .preview-header h2,
 .event-item h2,
+.event-item h3,
 .invite-grid h2 {
     margin: 0;
     font-size: 1rem;

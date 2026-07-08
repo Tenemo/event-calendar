@@ -387,7 +387,7 @@ Keep the M0 Maven build check required. Add a database-backed CI job after the F
 
 The database job should:
 
-1. Run on `pull_request` and pushes to `main`.
+1. Run on `pull_request` and pushes to `master`.
 2. Use PostgreSQL 17, matching local Docker Compose.
 3. Wait for PostgreSQL readiness with a health check, not a fixed sleep.
 4. Use test-only database credentials defined in the workflow environment.

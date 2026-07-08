@@ -134,10 +134,10 @@ Add a container smoke check after the Docker image can reliably connect to the C
 Security checks:
 
 1. Add GitHub Dependency Review on pull requests if the repository has Dependency Review available. Configure it to fail on new vulnerable dependencies, not on unrelated existing alerts.
-2. Add CodeQL Java analysis on pull requests, pushes to `main`, and a weekly schedule if code scanning is available for the repository.
+2. Add CodeQL Java analysis on pull requests, pushes to `master`, and a weekly schedule if code scanning is available for the repository.
 3. Add Dependabot configuration for Maven dependencies and GitHub Actions updates after the initial workflow is stable.
 
-Do not deploy to Railway from pull requests. Production deploys should remain manual or protected on `main` until the owner explicitly asks for automated deployment. PR workflows must not require Railway secrets.
+Do not deploy to Railway from pull requests. Production deploys should remain manual or protected on `master` until the owner explicitly asks for automated deployment. PR workflows must not require Railway secrets.
 
 ## Railway deployment plan
 

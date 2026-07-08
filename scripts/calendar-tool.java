@@ -23,6 +23,9 @@ final class CalendarTool {
     private static final String DEFAULT_DATABASE_NAME = "calendar";
     private static final String DEFAULT_DATABASE_USER = "calendar";
     private static final String DATABASE_SERVICE_NAME = "postgres";
+    private static final String EXEC_MAVEN_PLUGIN_VERSION = "3.6.3";
+    private static final Duration APPLICATION_READY_TIMEOUT = Duration.ofSeconds(120);
+    private static final Duration APPLICATION_READY_POLL_INTERVAL = Duration.ofSeconds(2);
     private static final Duration DATABASE_READY_TIMEOUT = Duration.ofSeconds(60);
     private static final Duration DATABASE_READY_POLL_INTERVAL = Duration.ofSeconds(2);
 
@@ -41,6 +44,9 @@ final class CalendarTool {
             case "db" -> startDatabase();
             case "dev" -> startDevelopmentServer();
             case "package" -> packageApplication();
+            case "install-playwright" -> installPlaywrightBrowsers();
+            case "e2e" -> runEndToEndTests();
+            case "wait-for-app" -> waitForApplication();
             case "verify-local" -> verifyLocal();
             case "verify-running-app" -> verifyRunningApplication();
             default -> {
@@ -88,6 +94,42 @@ final class CalendarTool {
 
     private static void packageApplication() throws IOException, InterruptedException {
         runCommand("Application package build", "mvn", "package");
+    }
+
+    private static void installPlaywrightBrowsers() throws IOException, InterruptedException {
+        runCommand(
+                "Playwright browser installation",
+                "mvn",
+                "-q",
+                "-Dexec.classpathScope=test",
+                "-Dexec.mainClass=com.microsoft.playwright.CLI",
+                "-Dexec.args=install",
+                "org.codehaus.mojo:exec-maven-plugin:" + EXEC_MAVEN_PLUGIN_VERSION + ":java");
+    }
+
+    private static void runEndToEndTests() throws IOException, InterruptedException {
+        installPlaywrightBrowsers();
+        runCommand("Playwright end-to-end tests", "mvn", "verify", "-Pe2e");
+    }
+
+    private static void waitForApplication() throws InterruptedException {
+        long deadlineNanos = System.nanoTime() + APPLICATION_READY_TIMEOUT.toNanos();
+        Exception lastHealthCheckFailure = null;
+
+        while (System.nanoTime() < deadlineNanos) {
+            try {
+                checkApplicationHealth();
+                return;
+            } catch (IOException | IllegalStateException exception) {
+                lastHealthCheckFailure = exception;
+            }
+
+            Thread.sleep(APPLICATION_READY_POLL_INTERVAL.toMillis());
+        }
+
+        throw new IllegalStateException(
+                "Application did not become healthy within " + APPLICATION_READY_TIMEOUT.toSeconds() + " seconds.",
+                lastHealthCheckFailure);
     }
 
     private static void verifyLocal() throws IOException, InterruptedException {
@@ -254,7 +296,7 @@ final class CalendarTool {
         String executableName = isWindows() ? "java scripts\\calendar-tool.java" : "java scripts/calendar-tool.java";
         System.err.println("Usage: " + executableName + " <command>");
         System.err.println(
-                "Commands: check-toolchain, prepare-liberty-dev, setup, db, dev, package, verify-local, verify-running-app");
+                "Commands: check-toolchain, prepare-liberty-dev, setup, db, dev, package, install-playwright, e2e, wait-for-app, verify-local, verify-running-app");
     }
 
     private static boolean isWindows() {

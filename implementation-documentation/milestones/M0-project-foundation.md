@@ -12,7 +12,7 @@ Tasks:
 
 1. Create the repository file tree.
 2. Create `.gitignore`, `.editorconfig`, `.env.example`, `README.md`, `pom.xml`, `docker-compose.yml`, and Open Liberty `server.xml`.
-3. Create `.mise.toml`, `.java-version`, Maven wrapper files, and thin setup/check scripts.
+3. Create `.mise.toml`, `.java-version`, Maven wrapper files, and the portable Java source-launcher helper.
 4. Configure Docker Compose with `postgres:17` for the local PostgreSQL service.
 5. Create placeholder XHTML pages, a shared template, app CSS, and a `HealthServlet`.
 6. Add minimal PrimeFaces components to prove the Jakarta classifier and assets are loading.
@@ -61,7 +61,7 @@ Acceptance criteria:
 6. PrimeFaces dependency output shows the `jakarta` classifier.
 7. Placeholder copy does not promise implemented registration, login, persistence, invites, or event storage before M1/M2.
 8. Public docs describe the current foundation accurately.
-9. GitHub PR checks run on pull requests and pushes to `main`, use least-privilege read permissions, and do not require secrets or deployment access.
+9. GitHub PR checks run on pull requests and pushes to `master`, use least-privilege read permissions, and do not require secrets or deployment access.
 
 ## Repository setup
 
@@ -87,22 +87,16 @@ Create this structure for M0:
 |-- mvnw
 |-- mvnw.cmd
 |-- scripts
-|   |-- bootstrap-unix.sh
-|   |-- calendar-tool.java
-|   |-- check-toolchain.sh
-|   |-- check-toolchain.ps1
-|   |-- prepare-liberty-dev.sh
-|   |-- prepare-liberty-dev.ps1
-|   |-- setup.ps1
-|   `-- verify-local.sh
+|   `-- calendar-tool.java
 `-- src
     `-- main
         |-- java
-        |   `-- com
-        |       `-- example
-        |           `-- calendar
-        |               |-- config
-        |               `-- health
+        |   `-- io
+        |       `-- github
+        |           `-- tenemo
+        |               `-- calendar
+        |                   |-- config
+        |                   `-- health
         |-- liberty
         |   `-- config
         |       `-- server.xml
@@ -132,7 +126,7 @@ Do not create Flyway migrations, JPA entities, login services, registration serv
 
 M0 should add one required, fast PR check:
 
-1. Run on `pull_request` and pushes to `main`.
+1. Run on `pull_request` and pushes to `master`.
 2. Use `actions/checkout` and `actions/setup-java` with Temurin Java 25 and Maven cache.
 3. Build through the committed Maven wrapper with `./mvnw -B -ntp clean test package`.
 4. Verify the PrimeFaces dependency tree shows the `jakarta` classifier.
@@ -147,7 +141,7 @@ Create `pom.xml` with pinned versions:
 
 ```xml
 <properties>
-    <maven.compiler.release>21</maven.compiler.release>
+    <maven.compiler.release>25</maven.compiler.release>
     <jakartaee.version>10.0.0</jakartaee.version>
     <primefaces.version>15.0.16</primefaces.version>
     <postgresql.version>42.7.13</postgresql.version>
@@ -210,7 +204,7 @@ Use `webProfile-10.0` first. It ensures the needed Jakarta EE 10 web features ar
 5. Define `jdbc/CalendarDS` using the PostgreSQL driver copied into Liberty config resources.
 6. Deploy `shared-calendar.war` at context root `/`.
 
-The PostgreSQL JDBC driver must be visible to Liberty as a server resource, not only as a WAR dependency. The local setup task copies it into `src/main/liberty/config/resources`; keep copied jars out of Git.
+The PostgreSQL JDBC driver must be visible to Liberty as a server resource, not only as a WAR dependency. The local setup task copies it into generated Liberty shared resources under `target/`; keep copied jars out of Git.
 
 ## Placeholder pages
 
@@ -231,7 +225,7 @@ Use PrimeFaces components on these pages so PrimeFaces CSS and JavaScript are lo
 Create `health/HealthServlet.java`:
 
 ```java
-package com.example.calendar.health;
+package io.github.tenemo.calendar.health;
 
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
