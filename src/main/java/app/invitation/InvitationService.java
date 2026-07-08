@@ -59,7 +59,8 @@ public class InvitationService {
         invitation.setExpiresAt(expiresAt);
         invitation.setCreatedAt(OffsetDateTime.now());
         entityManager.persist(invitation);
-        auditService.record(actor, calendar, "calendar_invitation", null, "created", "Invitation created.");
+        entityManager.flush();
+        auditService.record(actor, calendar, "calendar_invitation", invitation.getId(), "created", "Invitation created.");
         return invitation;
     }
 

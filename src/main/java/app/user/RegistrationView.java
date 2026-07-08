@@ -86,10 +86,15 @@ public class RegistrationView {
         if (status == AuthenticationStatus.SUCCESS) {
             facesContext.getExternalContext().redirect(facesContext.getExternalContext().getRequestContextPath() + "/app/calendars");
             facesContext.responseComplete();
+        } else if (status == AuthenticationStatus.SEND_CONTINUE) {
+            facesContext.responseComplete();
         } else {
-            FacesContext.getCurrentInstance().addMessage(
+            facesContext.getExternalContext().getFlash().setKeepMessages(true);
+            facesContext.addMessage(
                     null,
-                    new FacesMessage(FacesMessage.SEVERITY_ERROR, "Registration succeeded.", "Sign in with the new account."));
+                    new FacesMessage(FacesMessage.SEVERITY_INFO, "Registration succeeded.", "Sign in with the new account."));
+            facesContext.getExternalContext().redirect(facesContext.getExternalContext().getRequestContextPath() + "/login");
+            facesContext.responseComplete();
         }
     }
 }

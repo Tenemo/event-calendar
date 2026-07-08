@@ -67,21 +67,32 @@ a {
     gap: 0.3rem;
 }
 
+.nav-form {
+    margin: 0;
+}
+
 .app-nav a,
+.link-button,
 .button-link {
+    appearance: none;
     border-radius: var(--control-radius);
+    border: 0;
     color: var(--text);
+    cursor: pointer;
+    font-family: inherit;
     font-size: 0.92rem;
     font-weight: 650;
     line-height: 1;
     text-decoration: none;
 }
 
-.app-nav a {
+.app-nav a,
+.link-button {
     padding: 0.7rem 0.8rem;
 }
 
-.app-nav a:hover {
+.app-nav a:hover,
+.link-button:hover {
     background: var(--surface-muted);
 }
 
@@ -97,6 +108,7 @@ a {
 }
 
 a:focus-visible,
+.link-button:focus-visible,
 .button-link:focus-visible,
 .calendar-row:focus-visible,
 .ui-button:focus-visible,

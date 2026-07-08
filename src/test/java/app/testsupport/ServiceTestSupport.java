@@ -3,6 +3,7 @@ package app.testsupport;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.NoResultException;
 import jakarta.persistence.TypedQuery;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -49,6 +50,8 @@ public final class ServiceTestSupport {
         private final List<Object> persistedObjects = new ArrayList<>();
         private final List<Object> removedObjects = new ArrayList<>();
         private final Map<String, QueryBehavior> queryBehaviors = new LinkedHashMap<>();
+        private RuntimeException flushException;
+        private long nextGeneratedId = 1L;
         private int flushCount;
 
         private EntityManagerStub() {
@@ -94,6 +97,11 @@ public final class ServiceTestSupport {
             return this;
         }
 
+        public EntityManagerStub failOnFlush(RuntimeException exception) {
+            flushException = Objects.requireNonNull(exception);
+            return this;
+        }
+
         private Object invokeEntityManager(Object proxy, Method method, Object[] arguments) {
             String methodName = method.getName();
             if (methodName.equals("find")) {
@@ -109,12 +117,46 @@ public final class ServiceTestSupport {
             }
             if (methodName.equals("flush")) {
                 flushCount++;
+                if (flushException != null) {
+                    throw flushException;
+                }
+                assignMissingGeneratedIds();
                 return null;
             }
             if (methodName.equals("createQuery") && arguments != null && arguments.length >= 1 && arguments[0] instanceof String queryText) {
                 return createTypedQuery(queryText);
             }
             return defaultValue(method.getReturnType(), "EntityManager", methodName);
+        }
+
+        private void assignMissingGeneratedIds() {
+            for (Object persistedObject : persistedObjects) {
+                Field idField = findField(persistedObject.getClass(), "id");
+                if (idField == null || !idField.getType().equals(Long.class)) {
+                    continue;
+                }
+
+                try {
+                    idField.setAccessible(true);
+                    if (idField.get(persistedObject) == null) {
+                        idField.set(persistedObject, nextGeneratedId++);
+                    }
+                } catch (IllegalAccessException exception) {
+                    throw new IllegalStateException("Could not assign generated id.", exception);
+                }
+            }
+        }
+
+        private Field findField(Class<?> type, String fieldName) {
+            Class<?> currentType = type;
+            while (currentType != null) {
+                try {
+                    return currentType.getDeclaredField(fieldName);
+                } catch (NoSuchFieldException exception) {
+                    currentType = currentType.getSuperclass();
+                }
+            }
+            return null;
         }
 
         private TypedQuery<?> createTypedQuery(String queryText) {

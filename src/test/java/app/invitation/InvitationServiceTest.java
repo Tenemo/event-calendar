@@ -10,10 +10,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import app.audit.AuditService;
 import app.calendar.Calendar;
+import app.calendar.CalendarService;
+import app.membership.CalendarAccessService;
 import app.membership.CalendarMember;
 import app.membership.CalendarMembershipService;
 import app.membership.CalendarRole;
 import app.membership.CalendarRolePolicy;
+import app.security.TokenService;
 import app.testsupport.ServiceTestSupport.EntityManagerStub;
 import app.user.AppUser;
 import app.util.ValidationException;
@@ -71,6 +74,36 @@ final class InvitationServiceTest {
         InvitationService invitationService = invitationService(openInvitation(activeCalendar(200L), CalendarRole.VIEWER), membershipService);
 
         assertThrows(ValidationException.class, () -> invitationService.acceptInvitation("invite-token", inactiveUser));
+    }
+
+    @Test
+    void invitationCreationRecordsAuditLogWithGeneratedInvitationId() {
+        AppUser actor = activeUser(100L);
+        Calendar calendar = activeCalendar(200L);
+        EntityManagerStub entityManagerStub = entityManagerStub()
+                .singleResult("where calendarInvitation.inviteToken", 0L);
+        RecordingAuditService auditService = new RecordingAuditService();
+        InvitationService invitationService = new InvitationService();
+        OffsetDateTime expiresAt = OffsetDateTime.parse("2026-07-15T12:00:00Z");
+
+        setField(invitationService, "entityManager", entityManagerStub.entityManager());
+        setField(invitationService, "calendarAccessService", new AllowingAccessService());
+        setField(invitationService, "calendarService", new FixedCalendarService(calendar));
+        setField(invitationService, "calendarRolePolicy", new CalendarRolePolicy());
+        setField(invitationService, "invitationPolicy", new InvitationPolicy());
+        setField(invitationService, "tokenService", new FixedTokenService());
+        setField(invitationService, "auditService", auditService);
+
+        CalendarInvitation invitation = invitationService.createInvitation(actor, calendar.getId(), CalendarRole.EDITOR, expiresAt);
+
+        assertAll(
+                () -> assertNotNull(invitation.getId()),
+                () -> assertEquals(1, entityManagerStub.flushCount()),
+                () -> assertEquals(invitation.getId(), auditService.entityId),
+                () -> assertEquals("calendar_invitation", auditService.entityType),
+                () -> assertEquals("created", auditService.action),
+                () -> assertEquals(CalendarRole.EDITOR, invitation.getRole()),
+                () -> assertEquals(expiresAt, invitation.getExpiresAt()));
     }
 
     private static InvitationService invitationService(
@@ -149,6 +182,45 @@ final class InvitationServiceTest {
     private static final class NoopAuditService extends AuditService {
         @Override
         public void record(AppUser actorUser, Calendar calendar, String entityType, Long entityId, String action, String details) {
+        }
+    }
+
+    private static final class RecordingAuditService extends AuditService {
+        private String entityType;
+        private Long entityId;
+        private String action;
+
+        @Override
+        public void record(AppUser actorUser, Calendar calendar, String entityType, Long entityId, String action, String details) {
+            this.entityType = entityType;
+            this.entityId = entityId;
+            this.action = action;
+        }
+    }
+
+    private static final class AllowingAccessService extends CalendarAccessService {
+        @Override
+        public void requireCanAdminister(AppUser user, Long calendarId) {
+        }
+    }
+
+    private static final class FixedCalendarService extends CalendarService {
+        private final Calendar calendar;
+
+        private FixedCalendarService(Calendar calendar) {
+            this.calendar = calendar;
+        }
+
+        @Override
+        public Calendar requireActiveCalendar(Long calendarId) {
+            return calendar;
+        }
+    }
+
+    private static final class FixedTokenService extends TokenService {
+        @Override
+        public String generateToken() {
+            return "fixed-invite-token";
         }
     }
 }

@@ -141,7 +141,7 @@ final class SharedCalendarEndToEndIT {
             page.locator("button:has-text('Create calendar')").click();
             assertBodyContains(page, secondCalendarName);
 
-            page.locator("a:has-text('Sign out')").click();
+            page.locator("input[value='Sign out']").click();
             assertTrue(
                     URI.create(page.url()).getPath().equals("/") || URI.create(page.url()).getPath().isBlank(),
                     () -> "Expected logout to redirect home, but browser URL was " + page.url() + ".");

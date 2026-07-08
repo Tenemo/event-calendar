@@ -1,6 +1,5 @@
 package app.security;
 
-import app.user.UserService;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
@@ -20,23 +19,12 @@ public class LoginView {
     @Inject
     private SecurityContext securityContext;
 
-    @Inject
-    private UserService userService;
-
-    @Inject
-    private PasswordService passwordService;
-
     private String username;
     private String password;
 
     public void login() throws IOException {
         if (isBlank(username) || isBlank(password)) {
             addFailureMessage("Username and password are required.");
-            return;
-        }
-
-        if (!validCredentials()) {
-            addFailureMessage("Sign-in failed. Check your username and password.");
             return;
         }
 
@@ -56,6 +44,7 @@ public class LoginView {
         } else if (status == AuthenticationStatus.SEND_CONTINUE) {
             facesContext.responseComplete();
         } else {
+            response.setStatus(HttpServletResponse.SC_OK);
             addFailureMessage("Sign-in failed. Check your username and password.");
         }
     }
@@ -87,12 +76,5 @@ public class LoginView {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
-    }
-
-    private boolean validCredentials() {
-        String normalizedUsername = userService.normalizeUsername(username);
-        return userService.findActiveByUsername(normalizedUsername)
-                .filter(user -> passwordService.verifyPassword(password, user.getPasswordHash()))
-                .isPresent();
     }
 }

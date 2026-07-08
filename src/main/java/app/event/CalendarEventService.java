@@ -66,7 +66,8 @@ public class CalendarEventService {
         event.setCreatedAt(now);
         event.setUpdatedAt(now);
         entityManager.persist(event);
-        auditService.record(actor, calendar, "calendar_event", null, "created", "Event created.");
+        entityManager.flush();
+        auditService.record(actor, calendar, "calendar_event", event.getId(), "created", "Event created.");
         return event;
     }
 

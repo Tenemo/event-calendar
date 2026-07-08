@@ -8,6 +8,8 @@ import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.NoResultException;
 import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.PersistenceException;
+import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.Locale;
 import java.util.Optional;
@@ -42,8 +44,15 @@ public class UserService {
         user.setActive(true);
         user.setCreatedAt(now);
         user.setUpdatedAt(now);
-        entityManager.persist(user);
-        entityManager.flush();
+        try {
+            entityManager.persist(user);
+            entityManager.flush();
+        } catch (PersistenceException exception) {
+            if (isUniqueConstraintViolation(exception)) {
+                throw new ValidationException("Username is already registered.");
+            }
+            throw exception;
+        }
         return user;
     }
 
@@ -88,5 +97,21 @@ public class UserService {
             return "";
         }
         return displayName.trim();
+    }
+
+    private boolean isUniqueConstraintViolation(Throwable exception) {
+        Throwable currentException = exception;
+        while (currentException != null) {
+            if (currentException instanceof SQLException sqlException
+                    && "23505".equals(sqlException.getSQLState())) {
+                return true;
+            }
+            Throwable nextException = currentException.getCause();
+            if (nextException == currentException) {
+                return false;
+            }
+            currentException = nextException;
+        }
+        return false;
     }
 }
