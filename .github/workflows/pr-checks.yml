@@ -45,6 +45,28 @@ jobs:
             exit 1
           fi
 
+  end-to-end:
+    name: playwright e2e
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Make Maven wrapper executable
+        run: chmod +x mvnw
+
+      - name: Build WAR for Liberty
+        run: ./mvnw -B -ntp package
+
       - name: Start PostgreSQL
         run: java scripts/calendar-tool.java db
 
