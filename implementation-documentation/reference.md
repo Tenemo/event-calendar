@@ -79,7 +79,7 @@ Each milestone must leave the repository runnable and verified.
 | Milestone                         | Outcome                                                                                                                | Includes                                                                                                                                                             |
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | M0: project foundation            | A reproducible Jakarta EE web app that builds and starts locally                                                       | Repository skeleton, Maven wrapper, `mise`, Docker Compose PostgreSQL, Open Liberty config, health endpoint, placeholder JSF/PrimeFaces pages, flat responsive shell |
-| M1: persistence and security core | Database-backed registration, login, calendars, memberships, public tokens, invitations, and audit foundation          | Flyway migrations, JPA entities, password hashing, registration, calendar-level authorization, focused tests                                                         |
+| M1: persistence and security core | Database-backed registration, login, calendars, memberships, public tokens, invitations, and audit foundation          | Flyway migrations, JPA entities, Jakarta Security password hashing, registration, calendar-level authorization, focused tests                                          |
 | M2: calendar and member workflows | Public calendar view, authenticated calendar workspace, event CRUD, calendar creation, invite links, member management | PrimeFaces calendar UI, role-aware event actions, settings, invite acceptance, audit logging, manual role checks                                                     |
 | M3: production readiness          | The app is packaged, deployable, and recoverable                                                                       | Docker production image, local Docker runtime test, Railway deployment, custom domain, Dockerized backup/restore, README runbook                                     |
 
@@ -91,7 +91,7 @@ The first deployed version must include:
 
 1. Public self-registration with username/password.
 2. Login and logout.
-3. Password hashes stored in PostgreSQL.
+3. Jakarta Security password hashes stored in PostgreSQL.
 4. Registered users can create calendars.
 5. Calendar creators become calendar admins.
 6. Calendar-level roles: `VIEWER`, `EDITOR`, and `ADMIN`.
@@ -272,7 +272,7 @@ Optional v1.1 hardening:
 6. XHTML should not contain business logic beyond simple rendering checks.
 7. Use templates to avoid duplicated page chrome.
 8. Keep role names centralized.
-9. Keep password hashing parameters centralized.
+9. Keep password policy and Jakarta Security password-hash parameters centralized.
 10. Keep public token and invite token generation centralized.
 11. Use small verified checkpoints inside each milestone.
 12. Prefer boring code over clever abstractions.

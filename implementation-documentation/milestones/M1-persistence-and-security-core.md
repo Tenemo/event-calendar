@@ -235,7 +235,7 @@ Registration responsibilities:
 
 1. Accept username, display name, password, and initial calendar name.
 2. Validate username and display name are not blank.
-3. Validate password policy before hashing.
+3. Validate password policy before generating a Jakarta Security password hash.
 4. Create the user.
 5. Create the first calendar unless the user explicitly chooses to do that later.
 6. Generate the calendar public token.
@@ -252,6 +252,8 @@ not equal to username
 ```
 
 Do not implement complex composition rules.
+
+Hash new passwords with Jakarta Security's built-in `Pbkdf2PasswordHash` using PBKDF2-HMAC-SHA256, 600,000 iterations, a 32-byte salt, and a 32-byte derived key. Do not use app-owned hash formatting for new passwords. Legacy `pbkdf2_sha256$...` rows may be verified only for sign-in compatibility.
 
 ## Domain model
 

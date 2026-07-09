@@ -13,7 +13,8 @@ import java.util.Set;
 @ApplicationScoped
 public class DatabaseIdentityStore implements IdentityStore {
     private static final String DUMMY_PASSWORD_HASH =
-            "pbkdf2_sha256$600000$AAECAwQFBgcICQoLDA0ODw$3PaMNY6bFmarXUwH3fGwq2whZDjl6DwkMcg1QGeTv5s";
+            "PBKDF2WithHmacSHA256:600000:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=:"
+                    + "1CWgpzdZaXuiv+M7nJjALTxRC5d19dsMY6jY4Nm9n0E=";
 
     @Inject
     private UserService userService;

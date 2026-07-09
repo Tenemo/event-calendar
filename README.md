@@ -71,9 +71,9 @@ docker compose exec postgres psql -U calendar -d calendar -c 'select installed_r
 
 ## Authentication and calendars
 
-Users can register with a username, display name, password, and first calendar name. Registration creates the user, hashes the password with PBKDF2, creates the first calendar, enables its public-link flag, generates a random bearer token for that public link, and grants the creator calendar-scoped `ADMIN` membership.
+Users can register with a username, display name, password, and first calendar name. Registration creates the user, hashes the password through Jakarta Security's built-in `Pbkdf2PasswordHash`, creates the first calendar, enables its public-link flag, generates a random bearer token for that public link, and grants the creator calendar-scoped `ADMIN` membership.
 
-Passwords must be at least 14 characters, nonblank, and different from the username. Plaintext passwords are never stored.
+Passwords must be at least 14 characters, nonblank, and different from the username. New password hashes use PBKDF2-HMAC-SHA256 with 600,000 iterations, a 32-byte salt, and a 32-byte derived key. Legacy `pbkdf2_sha256$...` hashes from earlier builds are accepted for sign-in only so existing users are not locked out. Plaintext passwords are never stored.
 
 The application uses a single authenticated web role named `USER` for protected pages. Calendar permissions are loaded from `calendar_member` and enforced in services with calendar-scoped `VIEWER`, `EDITOR`, and `ADMIN` roles.
 

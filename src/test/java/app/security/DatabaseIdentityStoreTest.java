@@ -24,7 +24,7 @@ final class DatabaseIdentityStoreTest {
                 () -> assertEquals(CredentialValidationResult.Status.INVALID, result.getStatus()),
                 () -> assertEquals(1, passwordService.verificationCount),
                 () -> assertEquals("wrong-password", passwordService.lastPassword),
-                () -> assertTrue(passwordService.lastStoredHash.startsWith("pbkdf2_sha256$600000$")));
+                () -> assertTrue(passwordService.lastStoredHash.startsWith("PBKDF2WithHmacSHA256:600000:")));
     }
 
     @Test

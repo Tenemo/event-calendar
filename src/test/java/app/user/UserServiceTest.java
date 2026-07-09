@@ -3,6 +3,7 @@ package app.user;
 import static app.testsupport.ServiceTestSupport.entityManagerStub;
 import static app.testsupport.ServiceTestSupport.setField;
 import static app.testsupport.ServiceTestSupport.setEntityId;
+import static app.testsupport.TestPasswordServices.passwordService;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -53,7 +54,7 @@ final class UserServiceTest {
 
         UserService userService = new UserService();
         setField(userService, "entityManager", entityManagerStub.entityManager());
-        setField(userService, "passwordService", new PasswordService());
+        setField(userService, "passwordService", passwordService());
 
         assertThrows(
                 ValidationException.class,
@@ -64,7 +65,7 @@ final class UserServiceTest {
     void normalizesAndPersistsNewUsersWithAHashedPassword() {
         EntityManagerStub entityManagerStub = entityManagerStub()
                 .singleResultNotFound("from AppUser appUser");
-        PasswordService passwordService = new PasswordService();
+        PasswordService passwordService = passwordService();
 
         UserService userService = new UserService();
         setField(userService, "entityManager", entityManagerStub.entityManager());
@@ -90,7 +91,7 @@ final class UserServiceTest {
 
         UserService userService = new UserService();
         setField(userService, "entityManager", entityManagerStub.entityManager());
-        setField(userService, "passwordService", new PasswordService());
+        setField(userService, "passwordService", passwordService());
 
         ValidationException exception = assertThrows(
                 ValidationException.class,

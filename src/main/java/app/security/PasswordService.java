@@ -1,28 +1,47 @@
 package app.security;
 
 import app.util.ValidationException;
+import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Named;
-import java.security.GeneralSecurityException;
-import java.security.SecureRandom;
-import java.util.Base64;
-import javax.crypto.SecretKeyFactory;
-import javax.crypto.spec.PBEKeySpec;
+import jakarta.inject.Inject;
+import jakarta.security.enterprise.identitystore.Pbkdf2PasswordHash;
+import java.util.Arrays;
+import java.util.Map;
 
 @ApplicationScoped
 @Named
 public class PasswordService {
-    private static final String HASH_PREFIX = "pbkdf2_sha256";
-    private static final String KEY_DERIVATION_ALGORITHM = "PBKDF2WithHmacSHA256";
+    static final String PASSWORD_HASH_ALGORITHM = "PBKDF2WithHmacSHA256";
+    static final int PASSWORD_HASH_ITERATIONS = 600_000;
+    private static final int PASSWORD_HASH_SALT_BYTES = 32;
+    private static final int PASSWORD_HASH_KEY_BYTES = 32;
     public static final int MINIMUM_PASSWORD_LENGTH = 14;
     public static final int MAXIMUM_PASSWORD_LENGTH = 512;
-    private static final int SALT_BYTES = 16;
-    private static final int HASH_BYTES = 32;
-    private static final int ITERATIONS = 600_000;
-    private static final int MINIMUM_STORED_HASH_ITERATIONS = 100_000;
-    private static final int MAXIMUM_STORED_HASH_ITERATIONS = ITERATIONS;
 
-    private final SecureRandom secureRandom = new SecureRandom();
+    private final LegacyPasswordHashVerifier legacyPasswordHashVerifier = new LegacyPasswordHashVerifier(PASSWORD_HASH_ITERATIONS);
+
+    @Inject
+    private Pbkdf2PasswordHash passwordHash;
+
+    private boolean passwordHashInitialized;
+
+    @PostConstruct
+    synchronized void initializePasswordHash() {
+        if (passwordHashInitialized) {
+            return;
+        }
+        if (passwordHash == null) {
+            throw new IllegalStateException("Jakarta Security password hash is unavailable.");
+        }
+
+        passwordHash.initialize(Map.of(
+                "Pbkdf2PasswordHash.Algorithm", PASSWORD_HASH_ALGORITHM,
+                "Pbkdf2PasswordHash.Iterations", Integer.toString(PASSWORD_HASH_ITERATIONS),
+                "Pbkdf2PasswordHash.SaltSizeBytes", Integer.toString(PASSWORD_HASH_SALT_BYTES),
+                "Pbkdf2PasswordHash.KeySizeBytes", Integer.toString(PASSWORD_HASH_KEY_BYTES)));
+        passwordHashInitialized = true;
+    }
 
     public int getMaximumPasswordLength() {
         return MAXIMUM_PASSWORD_LENGTH;
@@ -45,13 +64,12 @@ public class PasswordService {
 
     public String hashPassword(String username, String password) {
         validatePasswordPolicy(username, password);
-
-        byte[] salt = new byte[SALT_BYTES];
-        secureRandom.nextBytes(salt);
-        byte[] hash = deriveKey(password, salt, ITERATIONS);
-
-        Base64.Encoder encoder = Base64.getUrlEncoder().withoutPadding();
-        return HASH_PREFIX + "$" + ITERATIONS + "$" + encoder.encodeToString(salt) + "$" + encoder.encodeToString(hash);
+        char[] passwordCharacters = password.toCharArray();
+        try {
+            return configuredPasswordHash().generate(passwordCharacters);
+        } finally {
+            Arrays.fill(passwordCharacters, '\0');
+        }
     }
 
     public boolean verifyPassword(String password, String storedHash) {
@@ -62,49 +80,33 @@ public class PasswordService {
             return false;
         }
 
-        String[] parts = storedHash.split("\\$");
-        if (parts.length != 4 || !HASH_PREFIX.equals(parts[0])) {
-            return false;
-        }
-
+        char[] passwordCharacters = password.toCharArray();
         try {
-            int iterations = Integer.parseInt(parts[1]);
-            if (!isSupportedStoredHashIterationCount(iterations)) {
-                return false;
+            if (isJakartaSecurityPasswordHash(storedHash)) {
+                return verifyJakartaSecurityPasswordHash(passwordCharacters, storedHash);
             }
-            Base64.Decoder decoder = Base64.getUrlDecoder();
-            byte[] salt = decoder.decode(parts[2]);
-            byte[] expectedHash = decoder.decode(parts[3]);
-            byte[] actualHash = deriveKey(password, salt, iterations);
-            return constantTimeEquals(expectedHash, actualHash);
+            return legacyPasswordHashVerifier.verifyPassword(passwordCharacters, storedHash);
+        } finally {
+            Arrays.fill(passwordCharacters, '\0');
+        }
+    }
+
+    private boolean verifyJakartaSecurityPasswordHash(char[] passwordCharacters, String storedHash) {
+        try {
+            return configuredPasswordHash().verify(passwordCharacters, storedHash);
         } catch (IllegalArgumentException exception) {
             return false;
         }
     }
 
-    private boolean isSupportedStoredHashIterationCount(int iterations) {
-        return iterations >= MINIMUM_STORED_HASH_ITERATIONS && iterations <= MAXIMUM_STORED_HASH_ITERATIONS;
+    private boolean isJakartaSecurityPasswordHash(String storedHash) {
+        return storedHash.split(":", -1).length == 4;
     }
 
-    private byte[] deriveKey(String password, byte[] salt, int iterations) {
-        try {
-            PBEKeySpec keySpec = new PBEKeySpec(password.toCharArray(), salt, iterations, HASH_BYTES * 8);
-            SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance(KEY_DERIVATION_ALGORITHM);
-            return secretKeyFactory.generateSecret(keySpec).getEncoded();
-        } catch (GeneralSecurityException exception) {
-            throw new IllegalStateException("Password hashing is unavailable.", exception);
+    private Pbkdf2PasswordHash configuredPasswordHash() {
+        if (!passwordHashInitialized) {
+            initializePasswordHash();
         }
-    }
-
-    private boolean constantTimeEquals(byte[] expected, byte[] actual) {
-        if (expected.length != actual.length) {
-            return false;
-        }
-
-        int difference = 0;
-        for (int index = 0; index < expected.length; index++) {
-            difference |= expected[index] ^ actual[index];
-        }
-        return difference == 0;
+        return passwordHash;
     }
 }
