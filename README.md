@@ -8,9 +8,11 @@ The app is intended for shared event calendars: kayaking plans, birthdays, trips
 
 - Registered users can create their own calendars.
 - Calendar creators become admins of the calendars they create.
-- Calendar admins can invite editors and viewers.
+- Signed-in users can invite new users to the app.
+- Calendar editors and admins can invite new users as editors for calendars they can edit.
+- Account registration is invitation-only through app invitation links.
 - Calendars are public by default through long, unguessable links.
-- Public calendar links are read-only and should not be crawlable.
+- Public calendar links are read-only, require no sign-in, and should not be crawlable.
 - No mobile app, recurrence, ICS import/export, reminders, or notifications are planned for v1.
 
 ## Stack
@@ -36,7 +38,7 @@ mise run dev
 
 The app listens on `http://localhost:9080` by default. The liveness check is available at `http://localhost:9080/health`.
 
-Jakarta Faces extensionless routing is enabled, so browser-facing pages use clean paths such as `/login`, `/register`, `/public-calendar`, `/app/calendars`, `/app/calendar`, and `/app/calendar-members`. The underlying Facelets files remain `.xhtml` files.
+Jakarta Faces extensionless routing is enabled, so browser-facing pages use clean paths such as `/login`, `/register`, `/public-calendar`, `/app/calendars`, `/app/calendar-members`, and `/app/invitations`. The underlying Facelets files remain `.xhtml` files.
 
 ## Environment variables
 
@@ -54,8 +56,10 @@ PGUSER=calendar
 PGPASSWORD=calendar
 APP_TIMEZONE=Europe/Warsaw
 APP_BASE_URL=http://localhost:9080
-APP_REGISTRATION_ENABLED=true
+APP_BOOTSTRAP_INVITE_TOKEN=
 ```
+
+`APP_BOOTSTRAP_INVITE_TOKEN` is optional and should be blank during normal use. On a brand-new empty database, set it to a long random secret, open `/register?token=that-secret`, create the first account, then remove the value and restart the app. After that first account exists, app invitation links are generated from `/app/invitations`.
 
 ## Database
 
@@ -71,11 +75,13 @@ docker compose exec postgres psql -U calendar -d calendar -c 'select installed_r
 
 ## Authentication and calendars
 
-Users can register with a username, display name, password, and first calendar name. Registration creates the user, hashes the password through Jakarta Security's built-in `Pbkdf2PasswordHash`, creates the first calendar, enables its public-link flag, generates a random bearer token for that public link, and grants the creator calendar-scoped `ADMIN` membership.
+Users can register only through a valid single-use app invitation link. Registration creates the user, hashes the password through Jakarta Security's built-in `Pbkdf2PasswordHash`, creates the first calendar, enables its public-link flag, generates a random bearer token for that public link, and grants the creator calendar-scoped `ADMIN` membership. If the invitation is scoped to a calendar, registration also grants `EDITOR` membership on that calendar.
 
 Passwords must be at least 14 characters, nonblank, and different from the username. New password hashes use PBKDF2-HMAC-SHA256 with 600,000 iterations, a 32-byte salt, and a 32-byte derived key. Legacy `pbkdf2_sha256$...` hashes from earlier builds are accepted for sign-in only so existing users are not locked out. Plaintext passwords are never stored.
 
-The application uses a single authenticated web role named `USER` for protected pages. Calendar permissions are loaded from `calendar_member` and enforced in services with calendar-scoped `VIEWER`, `EDITOR`, and `ADMIN` roles.
+The application uses `USER` for signed-in pages. There is no global administrator role. Calendar permissions are loaded from `calendar_member` and enforced in services with calendar-scoped `VIEWER`, `EDITOR`, and `ADMIN` roles.
+
+Signed-in users can create single-use app-only registration links at `/app/invitations`. Calendar editors and admins can also create app invitation links that grant `EDITOR` membership on one of their editable calendars. Invitation tokens are bearer secrets and should be shared only with the intended person.
 
 ## Running tests
 
@@ -102,7 +108,7 @@ mise run e2e
 
 The browser tests use Chromium by default. Set `BROWSER` to `firefox` or `webkit` to use another Playwright browser, and set `APP_BASE_URL` to target a non-default running app URL.
 
-The browser suite covers extensionless routes, noindex public calendar pages, registration, logout, failed login, successful login, and signed-in calendar creation.
+The browser suite covers extensionless routes, noindex public calendar pages, app-only invitation generation, editor invitation generation, invitation-only registration, logout, failed login, successful login, and signed-in calendar creation.
 
 ## Running with Liberty dev mode
 
@@ -126,6 +132,6 @@ mise run verify-running-app
 
 ## Known limitations
 
-The current UI intentionally exposes only the M1 account and calendar foundation: registration, login, logout, the signed-in calendar list, and basic calendar creation. The service layer and schema include invitations, memberships, public tokens, events, audit logs, and role checks, but full event management, member administration, copyable invite links, and token-based public calendar routing are still future UI work.
+The current UI intentionally exposes only the M1 account and calendar foundation: invitation-only registration, app invitation generation, login, logout, the signed-in calendar list, and basic calendar creation. The service layer and schema include memberships, public tokens, events, audit logs, and role checks, but full event management, member administration, and token-based public calendar routing are still future UI work.
 
 Production Docker packaging, Railway deployment, backup/restore workflows, and operational hardening are not complete yet.

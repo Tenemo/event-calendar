@@ -6,7 +6,7 @@ M0 must not implement persistence, registration, login, invitations, calendar me
 
 ## Milestone checklist
 
-Outcome: a CLI-first Jakarta EE web app that builds, starts locally, proves JSF/PrimeFaces rendering, and shows placeholders for public calendars, self-registration, owned calendars, invite-based membership, and event pages.
+Outcome: a CLI-first Jakarta EE web app that builds, starts locally, proves JSF/PrimeFaces rendering, and shows placeholders for public calendars, invitation-only registration, owned calendars, invite-based membership, and event pages.
 
 Tasks:
 
@@ -17,7 +17,7 @@ Tasks:
 5. Create placeholder XHTML pages, a shared template, app CSS, and a `HealthServlet`.
 6. Add minimal PrimeFaces components to prove the Jakarta classifier and assets are loading.
 7. Make the shell visually aligned with a modern, flat, sleek calendar app.
-8. Show placeholder navigation for public calendar links, registration, signed-in calendar list, calendar detail, and calendar member management.
+8. Show placeholder navigation for public calendar links, invitation-only registration, signed-in calendar list, calendar detail, and calendar member management.
 9. Add the initial GitHub Actions PR check for the Maven wrapper build.
 
 Verification:
@@ -186,7 +186,7 @@ PGUSER=calendar
 PGPASSWORD=calendar
 APP_TIMEZONE=Europe/Warsaw
 APP_BASE_URL=http://localhost:9080
-APP_REGISTRATION_ENABLED=true
+APP_BOOTSTRAP_INVITE_TOKEN=
 ```
 
 ## Open Liberty configuration
@@ -208,9 +208,9 @@ The PostgreSQL JDBC driver must be visible to Liberty as a server resource, not 
 
 M0 pages should communicate product direction without pretending later workflows already work.
 
-1. `index.xhtml`: app-first overview with a public calendar preview and links to registration and the calendar workspace.
+1. `index.xhtml`: app-first overview with a public calendar preview and links to sign in and the calendar workspace.
 2. `public-calendar.xhtml`: read-only public calendar placeholder showing the long-link model.
-3. `register.xhtml`: disabled registration form placeholder that explains registration is added in M1.
+3. `register.xhtml`: disabled invitation-only registration form placeholder that explains registration is added in M1.
 4. `login.xhtml`: disabled sign-in form placeholder that explains sign-in is added in M1.
 5. `app/calendars.xhtml`: signed-in calendar list placeholder.
 6. `app/calendar.xhtml`: calendar detail/event placeholder.

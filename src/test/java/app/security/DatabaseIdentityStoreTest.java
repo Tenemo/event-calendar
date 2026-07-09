@@ -10,6 +10,7 @@ import app.user.UserService;
 import jakarta.security.enterprise.credential.UsernamePasswordCredential;
 import jakarta.security.enterprise.identitystore.CredentialValidationResult;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 final class DatabaseIdentityStoreTest {
@@ -41,9 +42,27 @@ final class DatabaseIdentityStoreTest {
         assertAll(
                 () -> assertEquals(CredentialValidationResult.Status.VALID, result.getStatus()),
                 () -> assertEquals("piotr", result.getCallerPrincipal().getName()),
+                () -> assertTrue(result.getCallerGroups().contains("USER")),
+                () -> assertEquals(Set.of("USER"), result.getCallerGroups()),
                 () -> assertEquals(1, passwordService.verificationCount),
                 () -> assertEquals("correct-password", passwordService.lastPassword),
                 () -> assertEquals("stored-user-hash", passwordService.lastStoredHash));
+    }
+
+    @Test
+    void callerGroupsAreReloadedForActiveUsers() {
+        AppUser user = new AppUser();
+        user.setUsername("piotr");
+        user.setPasswordHash("stored-user-hash");
+        user.setActive(true);
+        RecordingPasswordService passwordService = new RecordingPasswordService(true);
+        DatabaseIdentityStore identityStore = identityStore(new FixedUserService(Optional.of(user)), passwordService);
+
+        CredentialValidationResult result = identityStore.validate(new UsernamePasswordCredential("Piotr", "correct-password"));
+
+        assertAll(
+                () -> assertTrue(result.getCallerGroups().contains("USER")),
+                () -> assertEquals(Set.of("USER"), identityStore.getCallerGroups(result)));
     }
 
     private static DatabaseIdentityStore identityStore(UserService userService, PasswordService passwordService) {

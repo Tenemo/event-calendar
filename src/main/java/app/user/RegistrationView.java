@@ -27,10 +27,11 @@ public class RegistrationView {
     private String displayName;
     private String calendarName;
     private String password;
+    private String inviteToken;
 
     public void register() throws IOException {
         try {
-            registrationService.register(username, displayName, password, calendarName);
+            registrationService.register(inviteToken, username, displayName, password, calendarName);
             authenticateAndRedirect();
         } catch (ValidationException exception) {
             FacesContext.getCurrentInstance().addMessage(
@@ -69,6 +70,14 @@ public class RegistrationView {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public String getInviteToken() {
+        return inviteToken;
+    }
+
+    public void setInviteToken(String inviteToken) {
+        this.inviteToken = inviteToken;
     }
 
     private void authenticateAndRedirect() throws IOException {

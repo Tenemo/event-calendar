@@ -19,8 +19,8 @@
             <h:outputLink value="#{request.contextPath}/">Home</h:outputLink>
             <h:outputLink value="#{request.contextPath}/public-calendar">Public example</h:outputLink>
             <h:outputLink value="#{request.contextPath}/app/calendars" rendered="#{currentUser.signedIn}">My calendars</h:outputLink>
+            <h:outputLink value="#{request.contextPath}/app/invitations" rendered="#{currentUser.signedIn}">App invitations</h:outputLink>
             <h:outputLink value="#{request.contextPath}/login" rendered="#{not currentUser.signedIn}">Sign in</h:outputLink>
-            <h:outputLink value="#{request.contextPath}/register" styleClass="nav-action" rendered="#{not currentUser.signedIn}">Register</h:outputLink>
             <h:form styleClass="nav-form" rendered="#{currentUser.signedIn}">
                 <h:commandButton value="Sign out" action="#{logoutView.logout}" styleClass="nav-action link-button"/>
             </h:form>

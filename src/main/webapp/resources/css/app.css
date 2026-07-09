@@ -350,10 +350,27 @@ a:focus-visible,
     max-width: 100%;
 }
 
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+    gap: 1rem;
+}
+
 .stacked-form {
     display: grid;
     gap: 0.75rem;
     margin-top: 1rem;
+}
+
+.generated-invite {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.generated-invite .ui-inputfield,
+.table-copy-field.ui-inputfield {
+    width: 100%;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
 }
 
 .form-footer {

@@ -1,14 +1,14 @@
 # M2: calendar and member workflows
 
-Use this milestone to build the real user-facing workflows on top of the M1 services: public calendar viewing, registration and login screens, signed-in calendar list, calendar creation, event CRUD, invite links, invite acceptance, calendar settings, and member management.
+Use this milestone to build the real user-facing workflows on top of the M1 services: public calendar viewing, invitation-only registration and login screens, signed-in calendar list, calendar creation, event CRUD, invite links, invite acceptance, calendar settings, and member management.
 
 ## Milestone checklist
 
-Outcome: public visitors, registered users, viewers, editors, and calendar admins can use the calendar workflows end to end, with server-side validation and audit logging.
+Outcome: public visitors, registered users, editors, and calendar admins can use the calendar workflows end to end, with server-side validation and audit logging.
 
 Tasks:
 
-1. Implement registration and login pages against the M1 services.
+1. Implement invitation-only registration and login pages against the M1 services.
 2. Implement `CalendarListView` for signed-in users.
 3. Implement calendar creation flow.
 4. Implement public calendar view by public token.
@@ -17,7 +17,7 @@ Tasks:
 7. Add create, edit, and delete event flows with confirmation where needed.
 8. Add server-side validation and user-readable optimistic-locking conflict messages.
 9. Add audit logging for event create, update, and delete.
-10. Implement calendar member page with member table, invite-link creation, role changes, access removal, and last-admin protection.
+10. Implement calendar member page with member table, role changes, access removal, and last-admin protection.
 11. Implement invite acceptance for signed-in users and newly registered users.
 12. Implement calendar settings page with name, description, timezone, public-link enable/disable, and public-link rotation.
 13. Style the UI as a modern flat app, not a marketing page.
@@ -39,11 +39,11 @@ Manual role checks:
 3. Invalid public token shows a generic not-found page.
 4. Registered user can create a calendar.
 5. Calendar creator becomes calendar admin.
-6. `VIEWER` member can see the calendar.
-7. `VIEWER` member cannot create, edit, or delete events.
+6. Public visitors can see public calendars without sign-in.
+7. Public visitors cannot create, edit, delete, or manage members.
 8. `EDITOR` member can create, edit, and delete events.
-9. `EDITOR` member cannot manage invites or members.
-10. `ADMIN` member can create invite links.
+9. `EDITOR` member can create editor invitation links for calendars they can edit.
+10. `EDITOR` member cannot manage members.
 11. `ADMIN` member can change member roles.
 12. Last calendar admin cannot be disabled or demoted.
 13. Service methods reject unauthorized mutations even if UI controls are manually triggered.
@@ -57,7 +57,7 @@ Acceptance criteria:
 5. Invalid end-before-start is rejected.
 6. Blank title is rejected.
 7. Optimistic locking conflict shows a user-readable message.
-8. Invite-link actions persist and are audited.
+8. App invitation actions persist and are audited.
 9. Member-management actions persist and are audited.
 10. Last-admin protection is enforced in the service layer.
 11. The UI is responsive and uses the flat design system from M0.
@@ -135,9 +135,9 @@ Create `app/calendar.xhtml` and `calendar/CalendarView.java`.
 Responsibilities:
 
 1. Show month/week/day calendar or a clear event list if PrimeFaces schedule integration needs incremental delivery.
-2. Let public and member viewers read event details.
+2. Let public visitors read event details through public links.
 3. Let editors/admins create/edit/delete events.
-4. Hide edit controls for viewers.
+4. Hide edit controls for public visitors.
 5. Still rely on service-layer security for enforcement.
 
 The exact PrimeFaces schedule model API can change across versions. Check the PrimeFaces 15 showcase/API and adapt the Java code accordingly.
@@ -149,11 +149,9 @@ Create `app/calendar-members.xhtml` and `membership/CalendarMembersView.java`.
 Calendar admins can:
 
 1. List members.
-2. Generate viewer/editor invite links.
-3. Revoke invite links.
-4. Change member roles.
-5. Disable member access.
-6. See active/inactive state.
+2. Change member roles.
+3. Disable member access.
+4. See active/inactive state.
 
 Use PrimeFaces components:
 
@@ -168,6 +166,18 @@ p:messages
 ```
 
 Do not build email delivery. Invite links are copied manually.
+
+### App invitations page
+
+Create `app/invitations.xhtml` and `invitation/AppInvitationView.java`.
+
+Signed-in users can:
+
+1. Generate app-only invitation links.
+2. Generate editor invitation links for calendars where they have `EDITOR` or `ADMIN`.
+3. Revoke their own unused invitation links.
+
+Do not build email delivery. Invitation links are copied manually.
 
 ### Calendar settings page
 

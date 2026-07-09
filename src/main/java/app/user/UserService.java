@@ -83,6 +83,13 @@ public class UserService {
         return findByUsername(username).filter(AppUser::isActive);
     }
 
+    public boolean hasActiveUsers() {
+        Long activeUserCount = entityManager
+                .createQuery("select count(appUser) from AppUser appUser where appUser.active = true", Long.class)
+                .getSingleResult();
+        return activeUserCount > 0;
+    }
+
     public AppUser requireActiveUser(Long userId) {
         AppUser user = entityManager.find(AppUser.class, userId);
         if (user == null || !user.isActive()) {

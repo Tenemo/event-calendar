@@ -20,8 +20,8 @@ Use these decisions unless the repository owner explicitly changes them later.
 | Persistence                  | Jakarta Persistence / JPA, provider-neutral code, Liberty default EclipseLink provider                       |
 | Database                     | Dockerized PostgreSQL for local development, Railway PostgreSQL for production                               |
 | Migrations                   | Flyway                                                                                                       |
-| Auth                         | Username/password with self-registration, no OAuth/SSO                                                       |
-| Calendar access              | Public read-only token links plus authenticated member roles                                                 |
+| Auth                         | Username/password with invitation-only registration, no OAuth/SSO                                            |
+| Calendar access              | Public read-only token links plus authenticated editor/admin roles                                           |
 | Calendar roles               | `VIEWER`, `EDITOR`, `ADMIN`, scoped to one calendar                                                          |
 | Deployment                   | Dockerfile to Railway first                                                                                  |
 | Frontend hosting             | None; do not use Netlify for the app UI                                                                      |
@@ -89,7 +89,7 @@ Each milestone must leave the repository runnable and verified.
 
 The first deployed version must include:
 
-1. Public self-registration with username/password.
+1. Invitation-only registration with username/password.
 2. Login and logout.
 3. Jakarta Security password hashes stored in PostgreSQL.
 4. Registered users can create calendars.
@@ -97,20 +97,21 @@ The first deployed version must include:
 6. Calendar-level roles: `VIEWER`, `EDITOR`, and `ADMIN`.
 7. Public read-only calendar links backed by long random tokens.
 8. Public calendar pages marked `noindex` and not included in navigation indexes or generated sitemaps.
-9. Calendar admins can create invite links for editor and viewer access.
-10. Invite links can be accepted by existing users or newly registered users.
-11. Calendar list for signed-in users.
-12. Calendar page using PrimeFaces.
-13. View events on public links and authenticated calendar pages.
-14. Create, edit, and delete events as calendar editor/admin.
-15. Calendar settings and member management for calendar admins.
-16. Audit log for calendar, invite, member, and event changes.
-17. Flyway-managed schema.
-18. Health endpoint.
-19. Dockerized production build.
-20. Railway deployment with custom domain and HTTPS.
-21. Basic backup/restore procedure documented.
-22. Modern, flat, sleek UI suitable for a practical event calendar.
+9. Signed-in users can create app-only invitation links.
+10. Calendar editors and admins can create app invitation links that grant editor access to a calendar.
+11. App invitation links can be accepted by existing users or newly registered users.
+12. Calendar list for signed-in users.
+13. Calendar page using PrimeFaces.
+14. View events on public links and authenticated calendar pages.
+15. Create, edit, and delete events as calendar editor/admin.
+16. Calendar settings and member management for calendar admins.
+17. Audit log for calendar, invite, member, and event changes.
+18. Flyway-managed schema.
+19. Health endpoint.
+20. Dockerized production build.
+21. Railway deployment with custom domain and HTTPS.
+22. Basic backup/restore procedure documented.
+23. Modern, flat, sleek UI suitable for a practical event calendar.
 
 ### 2.2 Explicitly out of scope for v1
 
@@ -181,12 +182,12 @@ src/main/webapp
   login-error.xhtml
   register.xhtml
   public-calendar.xhtml
-  invite.xhtml
   app
     calendars.xhtml
     calendar.xhtml
     calendar-members.xhtml
     calendar-settings.xhtml
+    invitations.xhtml
   WEB-INF
     web.xml
     templates
@@ -198,7 +199,7 @@ src/main/webapp
 
 Public calendar routes must be reachable without authentication. Authenticated app routes under `/app/*` require login. Calendar mutation and member management are enforced in services with calendar-specific authorization.
 
-Jakarta Faces extensionless routing is enabled. User-facing links should prefer clean paths such as `/login`, `/register`, `/public-calendar`, `/app/calendars`, `/app/calendar`, and `/app/calendar-members`; `.xhtml` remains an implementation file suffix, not the canonical browser route.
+Jakarta Faces extensionless routing is enabled. User-facing links should prefer clean paths such as `/login`, `/register`, `/public-calendar`, `/app/calendars`, `/app/calendar`, `/app/calendar-members`, and `/app/invitations`; `.xhtml` remains an implementation file suffix, not the canonical browser route.
 
 ### 3.3 URL model
 
@@ -223,19 +224,21 @@ Application authentication answers "who is signed in." Calendar authorization an
 1. Public visitors with a valid public token may view events only.
 2. Signed-in users may create calendars.
 3. Calendar creators receive `ADMIN` membership on the new calendar.
-4. `VIEWER` members can view a calendar through the authenticated workspace.
+4. `VIEWER` remains a calendar-scoped role, but public calendar viewing must not require authentication.
 5. `EDITOR` members can create, edit, and delete events.
-6. `ADMIN` members can do everything editors can do, plus manage calendar settings, invite links, and members.
+6. `ADMIN` members can do everything editors can do, plus manage calendar settings and members.
 7. At least one active `ADMIN` membership must remain on every active calendar.
-8. UI controls may hide unavailable actions, but services must enforce membership and role checks.
-9. Public tokens and invite tokens are bearer secrets; store only random, unguessable values and allow rotation/revocation.
+8. Signed-in users can create app-only invitations.
+9. Calendar editors and admins can create app invitations that grant editor access to that calendar.
+10. UI controls may hide unavailable actions, but services must enforce membership and role checks.
+11. Public tokens and invite tokens are bearer secrets; store only random, unguessable values and allow rotation/revocation.
 
 ## 5. Security checklist
 
 Before first real use:
 
 1. Confirm password hashes are not plaintext.
-2. Confirm registration never logs plaintext passwords.
+2. Confirm registration requires a valid app invitation.
 3. Confirm public calendar pages are read-only.
 4. Confirm public calendar pages include `noindex`.
 5. Confirm public links use random UUID or stronger tokens, not database ids.
@@ -250,7 +253,8 @@ Before first real use:
 14. Confirm production cookies are Secure.
 15. Confirm URL rewriting is disabled.
 16. Do not log passwords, public tokens, invite tokens, or full database URLs with credentials.
-17. Keep one app instance unless session handling is reviewed.
+17. Do not log app invitation tokens.
+18. Keep one app instance unless session handling is reviewed.
 
 Optional v1.1 hardening:
 
@@ -273,7 +277,7 @@ Optional v1.1 hardening:
 7. Use templates to avoid duplicated page chrome.
 8. Keep role names centralized.
 9. Keep password policy and Jakarta Security password-hash parameters centralized.
-10. Keep public token and invite token generation centralized.
+10. Keep public token and app invitation token generation centralized.
 11. Use small verified checkpoints inside each milestone.
 12. Prefer boring code over clever abstractions.
 13. Do not introduce Spring Boot into this repo.
@@ -297,7 +301,7 @@ The app should feel modern, flat, sleek, and practical:
 Minimum automated tests:
 
 1. Password policy validation.
-2. Registration validation.
+2. Invitation-only registration validation.
 3. Calendar creation grants the creator `ADMIN`.
 4. Public token generation is non-blank, unique at service level, and not derived from sequential ids.
 5. Invite token acceptance assigns the intended calendar role.
@@ -314,12 +318,12 @@ Manual acceptance checks before deployment and after deployment:
 | Public visitor opens valid calendar link   | Calendar visible read-only                                |
 | Public visitor opens invalid calendar link | Generic not-found page                                    |
 | Public visitor tries mutation URL/action   | Rejected                                                  |
-| New user registers                         | Account is created                                        |
+| Signed-in user creates app invitation      | Single-use account link is generated                      |
+| New user registers with app invitation     | Account is created                                        |
 | Registered user creates calendar           | User becomes calendar admin                               |
-| Calendar admin creates editor invite       | Invite link is generated                                  |
-| Invitee accepts editor invite              | Invitee can edit that calendar                            |
-| Viewer opens authenticated calendar        | Calendar visible, edit controls hidden                    |
-| Viewer attempts direct edit action         | Server rejects                                            |
+| Calendar editor creates editor invitation  | Invite link is generated                                  |
+| Invitee accepts editor invitation          | Invitee can edit that calendar                            |
+| Public visitor opens public calendar       | Calendar visible without sign-in                          |
 | Editor creates event                       | Event appears and persists                                |
 | Editor edits event                         | Changes persist                                           |
 | Editor deletes event                       | Event removed                                             |

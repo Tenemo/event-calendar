@@ -1,5 +1,6 @@
 package app.invitation;
 
+import app.calendar.Calendar;
 import app.membership.CalendarRole;
 import app.util.ValidationException;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -7,10 +8,14 @@ import java.time.OffsetDateTime;
 
 @ApplicationScoped
 public class InvitationPolicy {
-    public void requireInvitableRole(CalendarRole role) {
-        if (role != CalendarRole.VIEWER && role != CalendarRole.EDITOR) {
-            throw new ValidationException("Invitations can only grant viewer or editor access.");
+    public void requireValidScope(Calendar calendar, CalendarRole role) {
+        if (calendar == null && role == null) {
+            return;
         }
+        if (calendar != null && role == CalendarRole.EDITOR) {
+            return;
+        }
+        throw new ValidationException("Invitations must be app-only or grant editor access to a calendar.");
     }
 
     public void requireOpen(OffsetDateTime revokedAt, OffsetDateTime acceptedAt, OffsetDateTime expiresAt, OffsetDateTime now) {

@@ -53,11 +53,18 @@ public class DatabaseIdentityStore implements IdentityStore {
 
     @Override
     public Set<String> getCallerGroups(CredentialValidationResult validationResult) {
-        return Set.of("USER");
+        if (validationResult == null || validationResult.getCallerPrincipal() == null) {
+            return Set.of();
+        }
+        if (userService.findActiveByUsername(validationResult.getCallerPrincipal().getName()).isPresent()) {
+            return Set.of("USER");
+        }
+        return Set.of();
     }
 
     @Override
     public Set<ValidationType> validationTypes() {
         return Set.of(ValidationType.VALIDATE, ValidationType.PROVIDE_GROUPS);
     }
+
 }

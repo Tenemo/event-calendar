@@ -6,7 +6,7 @@
 
 **Audience:** A local coding agent or developer working in this repository.
 
-**Target outcome:** A live calendar app at a custom domain where people can register, create their own calendars, share public read-only calendar links, and invite editors or viewers.
+**Target outcome:** A live calendar app at a custom domain where invited people can register, create their own calendars, share public read-only calendar links, and invite more people to the app or to edit calendars.
 
 ---
 
@@ -29,13 +29,15 @@ Do not move to the next milestone until the current milestone verification comma
 
 The app is multi-calendar from v1.
 
-1. Anyone who registers can create calendars.
-2. The creator of a calendar receives the calendar-level `ADMIN` role.
-3. Calendar admins can invite editors and viewers by generating invite links.
-4. Calendar roles are `VIEWER`, `EDITOR`, and `ADMIN`; they are scoped to one calendar, not global application roles.
-5. Calendars are public by default through long, random, unguessable links.
-6. Public links provide read-only access and must not expose private app routes, member management, invite management, or editing controls.
-7. Events are simple dated items. Recurrence, notifications, email delivery, and mobile apps are out of scope for v1.
+1. Only people with an app invitation can create accounts.
+2. Signed-in users can generate app-only invitation links.
+3. Anyone with an account can create calendars.
+4. The creator of a calendar receives the calendar-level `ADMIN` role.
+5. Calendar editors and admins can generate app invitation links that also grant `EDITOR` access to that calendar.
+6. Calendar roles are `VIEWER`, `EDITOR`, and `ADMIN`; they are scoped to one calendar, not global application roles.
+7. Calendars are public by default through long, random, unguessable links.
+8. Public links provide read-only access without authentication and must not expose private app routes, member management, invite management, or editing controls.
+9. Events are simple dated items. Recurrence, notifications, email delivery, and mobile apps are out of scope for v1.
 
 ## Local database decision
 

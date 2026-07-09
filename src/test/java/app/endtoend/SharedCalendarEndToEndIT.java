@@ -18,6 +18,10 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,8 +38,16 @@ final class SharedCalendarEndToEndIT {
     private static final String APPLICATION_BASE_URL_PROPERTY = "app.baseUrl";
     private static final String APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE = "APP_BASE_URL";
     private static final String BROWSER_ENVIRONMENT_VARIABLE = "BROWSER";
+    private static final String POSTGRESQL_HOST_ENVIRONMENT_VARIABLE = "PGHOST";
+    private static final String POSTGRESQL_PORT_ENVIRONMENT_VARIABLE = "PGPORT";
+    private static final String POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE = "PGDATABASE";
+    private static final String POSTGRESQL_USER_ENVIRONMENT_VARIABLE = "PGUSER";
+    private static final String POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE = "PGPASSWORD";
     private static final String PLAYWRIGHT_HEADED_ENVIRONMENT_VARIABLE = "PLAYWRIGHT_HEADED";
     private static final String PLAYWRIGHT_HEADLESS_ENVIRONMENT_VARIABLE = "PLAYWRIGHT_HEADLESS";
+    private static final String LEGACY_PASSWORD_HASH_FOR_TEST_PASSWORD =
+            "pbkdf2_sha256$310000$Dw4NDAsKCQgHBgUEAwIBAA$WoLnVJrYQNsIvn9kjgoVwTKIGzSCUXgJfY7_Ypn6Fp0";
+    private static final String TEST_PASSWORD = "correct horse battery staple";
     private static final Duration APPLICATION_READY_TIMEOUT = Duration.ofSeconds(15);
     private static final Duration APPLICATION_READY_POLL_INTERVAL = Duration.ofMillis(500);
 
@@ -75,7 +87,7 @@ final class SharedCalendarEndToEndIT {
 
             assertEquals("Shared calendar", page.title());
             assertEquals("Shared event calendars for real plans", page.locator("h1").textContent().trim());
-            assertBodyContains(page, "Create a calendar");
+            assertBodyContains(page, "Sign in");
             assertBodyContains(page, "View public example");
             assertBodyContains(page, "Events are not available yet.");
             assertFalse(hasHorizontalOverflow(page), "The home page should not horizontally overflow at desktop width.");
@@ -113,33 +125,93 @@ final class SharedCalendarEndToEndIT {
     }
 
     @Test
-    void registrationLogoutAndLoginUseRealCalendarData() {
+    void signedInUserCanGenerateAppAndEditorInvitationsForNewUsers() throws SQLException {
         List<String> browserMessages = new ArrayList<>();
 
         try (BrowserContext browserContext = browser.newContext()) {
             Page page = newPage(browserContext, browserMessages);
             String uniqueSuffix = UUID.randomUUID().toString().substring(0, 8);
-            String username = "e2e-" + uniqueSuffix;
+            String ownerUsername = "owner-e2e-" + uniqueSuffix;
+            String appOnlyUsername = "app-e2e-" + uniqueSuffix;
+            String editorUsername = "editor-e2e-" + uniqueSuffix;
             String password = "long-enough-password-" + uniqueSuffix;
-            String initialCalendarName = "Kayaking " + uniqueSuffix;
-            String secondCalendarName = "Birthday " + uniqueSuffix;
+            String ownerCalendarName = "Kayaking " + uniqueSuffix;
+            String appOnlyCalendarName = "Birthday " + uniqueSuffix;
+            String editorOwnCalendarName = "Trip " + uniqueSuffix;
+            String editorSecondCalendarName = "Dinner " + uniqueSuffix;
+            seedUser(ownerUsername);
+
+            page.navigate(route("/login"));
+            page.locator("input[id$='username']").fill(ownerUsername);
+            page.locator("input[id$='password']").fill(TEST_PASSWORD);
+            page.locator("button:has-text('Sign in')").click();
+            page.waitForURL("**/app/calendars");
+            assertBodyContains(page, "App invitations");
+
+            page.locator("input[id$='calendarName']").fill(ownerCalendarName);
+            page.locator("button:has-text('Create calendar')").click();
+            assertBodyContains(page, ownerCalendarName);
+
+            page.navigate(route("/app/invitations"));
+            assertEquals("App invitations - Shared calendar", page.title());
+            page.locator("button:has-text('Generate app link')").click();
+            Locator generatedInviteLink = page.locator("input[id$='generatedInviteLink']");
+            assertThat(generatedInviteLink).isVisible();
+            String appOnlyInviteLink = generatedInviteLink.inputValue();
+            assertTrue(appOnlyInviteLink.contains("/register?token="), "Generated app invite link should target registration.");
+
+            String ownerCalendarOptionValue = page.locator("select[id$='calendar'] option", new Page.LocatorOptions().setHasText(ownerCalendarName))
+                    .getAttribute("value");
+            page.locator("select[id$='calendar']").selectOption(ownerCalendarOptionValue);
+            page.locator("button:has-text('Generate editor link')").click();
+            String editorInviteLink = generatedInviteLink.inputValue();
+            assertTrue(editorInviteLink.contains("/register?token="), "Generated editor invite link should target registration.");
+            assertFalse(editorInviteLink.equals(appOnlyInviteLink), "Separate invitations should have separate bearer tokens.");
+
+            page.locator("input[value='Sign out']").click();
 
             page.navigate(route("/register"));
-            page.locator("input[id$='username']").fill(username);
-            page.locator("input[id$='displayName']").fill("End-to-end user " + uniqueSuffix);
-            page.locator("input[id$='calendarName']").fill(initialCalendarName);
+            page.locator("input[id$='username']").fill("blocked-" + uniqueSuffix);
+            page.locator("input[id$='displayName']").fill("Blocked user " + uniqueSuffix);
+            page.locator("input[id$='calendarName']").fill("Blocked calendar " + uniqueSuffix);
+            page.locator("input[id$='password']").fill(password);
+            page.locator("button:has-text('Register')").click();
+            assertBodyContains(page, "Invitation is invalid or no longer available.");
+
+            page.navigate(appOnlyInviteLink);
+            page.locator("input[id$='username']").fill(appOnlyUsername);
+            page.locator("input[id$='displayName']").fill("App-only user " + uniqueSuffix);
+            page.locator("input[id$='calendarName']").fill(appOnlyCalendarName);
             page.locator("input[id$='password']").fill(password);
             page.locator("button:has-text('Register')").click();
 
             page.waitForURL("**/app/calendars");
             assertEquals("My calendars - Shared calendar", page.title());
             assertEquals("My calendars", page.locator("h1").textContent().trim());
-            assertBodyContains(page, initialCalendarName);
+            assertBodyContains(page, appOnlyCalendarName);
+            assertBodyContains(page, "ADMIN");
+            assertFalse(
+                    page.locator("body").innerText().contains(ownerCalendarName),
+                    "An app-only invitation must not grant access to the inviter's calendar.");
+
+            page.locator("input[value='Sign out']").click();
+
+            page.navigate(editorInviteLink);
+            page.locator("input[id$='username']").fill(editorUsername);
+            page.locator("input[id$='displayName']").fill("Editor user " + uniqueSuffix);
+            page.locator("input[id$='calendarName']").fill(editorOwnCalendarName);
+            page.locator("input[id$='password']").fill(password);
+            page.locator("button:has-text('Register')").click();
+
+            page.waitForURL("**/app/calendars");
+            assertBodyContains(page, editorOwnCalendarName);
+            assertBodyContains(page, ownerCalendarName);
+            assertBodyContains(page, "EDITOR");
             assertBodyContains(page, "ADMIN");
 
-            page.locator("input[id$='calendarName']").fill(secondCalendarName);
+            page.locator("input[id$='calendarName']").fill(editorSecondCalendarName);
             page.locator("button:has-text('Create calendar')").click();
-            assertBodyContains(page, secondCalendarName);
+            assertBodyContains(page, editorSecondCalendarName);
 
             page.locator("input[value='Sign out']").click();
             assertTrue(
@@ -148,18 +220,19 @@ final class SharedCalendarEndToEndIT {
             assertBodyContains(page, "Sign in");
 
             page.navigate(route("/login"));
-            page.locator("input[id$='username']").fill(username);
+            page.locator("input[id$='username']").fill(editorUsername);
             page.locator("input[id$='password']").fill(password + "-wrong");
             page.locator("button:has-text('Sign in')").click();
             assertBodyContains(page, "Sign-in failed.");
 
             page.navigate(route("/login"));
-            page.locator("input[id$='username']").fill(username);
+            page.locator("input[id$='username']").fill(editorUsername);
             page.locator("input[id$='password']").fill(password);
             page.locator("button:has-text('Sign in')").click();
             page.waitForURL("**/app/calendars");
-            assertBodyContains(page, initialCalendarName);
-            assertBodyContains(page, secondCalendarName);
+            assertBodyContains(page, editorOwnCalendarName);
+            assertBodyContains(page, editorSecondCalendarName);
+            assertBodyContains(page, ownerCalendarName);
             assertNoBrowserMessages(browserMessages);
         }
     }
@@ -174,7 +247,7 @@ final class SharedCalendarEndToEndIT {
             page.navigate(route("/"));
 
             assertEquals("Shared event calendars for real plans", page.locator("h1").textContent().trim());
-            assertBodyContains(page, "Register");
+            assertBodyContains(page, "Sign in");
             assertBodyContains(page, "Kayaking weekend");
             assertFalse(hasHorizontalOverflow(page), "The home page should not horizontally overflow at mobile width.");
             assertNoBrowserMessages(browserMessages);
@@ -232,6 +305,29 @@ final class SharedCalendarEndToEndIT {
                 System.getProperty(APPLICATION_BASE_URL_PROPERTY),
                 System.getenv(APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE),
                 DEFAULT_APPLICATION_BASE_URL)));
+    }
+
+    private void seedUser(String username) throws SQLException {
+        String jdbcUrl = "jdbc:postgresql://"
+                + firstNonBlank(System.getenv(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE), "localhost")
+                + ":"
+                + firstNonBlank(System.getenv(POSTGRESQL_PORT_ENVIRONMENT_VARIABLE), "5432")
+                + "/"
+                + firstNonBlank(System.getenv(POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE), "calendar");
+
+        try (Connection connection = DriverManager.getConnection(
+                jdbcUrl,
+                firstNonBlank(System.getenv(POSTGRESQL_USER_ENVIRONMENT_VARIABLE), "calendar"),
+                firstNonBlank(System.getenv(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE), "calendar"));
+                PreparedStatement statement = connection.prepareStatement(
+                        "insert into app_user "
+                                + "(username, display_name, password_hash, active, created_at, updated_at) "
+                                + "values (?, ?, ?, true, now(), now())")) {
+            statement.setString(1, username);
+            statement.setString(2, "End-to-end user");
+            statement.setString(3, LEGACY_PASSWORD_HASH_FOR_TEST_PASSWORD);
+            statement.executeUpdate();
+        }
     }
 
     private BrowserType selectedBrowser(Playwright playwright) {

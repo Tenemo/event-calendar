@@ -16,7 +16,7 @@ Tasks:
 6. Create the Railway project, PostgreSQL service, and web service.
 7. Configure Railway variables and deploy.
 8. Confirm generated Railway domain, then custom domain and HTTPS.
-9. Register a real account, create a calendar, create a public link, create an invite link, accept the invite with a second account, and verify events persist across redeploy.
+9. Create an app invitation link, register a real account with that link, create a calendar, create an editor invitation link for that calendar, accept the invite with a second account, and verify events persist across redeploy.
 10. Update README with local setup, deployment, environment variables, roles, registration, public links, invitations, backup/restore, troubleshooting, and known limitations.
 11. Extend GitHub PR checks with Docker build coverage and available security checks.
 
@@ -41,7 +41,7 @@ Acceptance criteria:
 5. Dockerized backup and restore work without host PostgreSQL client utilities.
 6. `https://<railway-domain>/health` returns `ok`.
 7. Custom domain works over HTTPS.
-8. Registration works in production.
+8. Invitation-only registration works in production.
 9. Login works after redeploy.
 10. Calendar public links work after redeploy.
 11. Invite links work after redeploy.
@@ -112,7 +112,7 @@ docker run --rm \
   -e PGPASSWORD=calendar \
   -e APP_TIMEZONE=Europe/Warsaw \
   -e APP_BASE_URL=http://localhost:9080 \
-  -e APP_REGISTRATION_ENABLED=true \
+  -e APP_BOOTSTRAP_INVITE_TOKEN= \
   shared-calendar:local
 ```
 
@@ -164,7 +164,7 @@ PGPASSWORD=${{Postgres.PGPASSWORD}}
 
 APP_TIMEZONE=Europe/Warsaw
 APP_BASE_URL=https://calendar.example.com
-APP_REGISTRATION_ENABLED=true
+APP_BOOTSTRAP_INVITE_TOKEN=
 ```
 
 Adjust the `${{Postgres.*}}` namespace to match the actual Railway PostgreSQL service name.

@@ -179,6 +179,9 @@ public final class ServiceTestSupport {
                     }
                     return proxy;
                 }
+                if (methodName.equals("setMaxResults")) {
+                    return proxy;
+                }
                 if (methodName.equals("getSingleResult")) {
                     return matchingBehavior(queryText).singleResult();
                 }

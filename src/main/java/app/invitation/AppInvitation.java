@@ -17,21 +17,21 @@ import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
 
 @Entity
-@Table(name = "calendar_invitation")
-public class CalendarInvitation {
+@Table(name = "app_invitation")
+public class AppInvitation {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "calendar_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "calendar_id")
     private Calendar calendar;
 
     @Column(name = "invite_token", nullable = false, unique = true, length = 80)
     private String inviteToken;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "role_name", nullable = false, length = 20)
+    @Column(name = "role_name", length = 20)
     private CalendarRole role;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
