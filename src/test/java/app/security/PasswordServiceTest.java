@@ -40,6 +40,26 @@ final class PasswordServiceTest {
     }
 
     @Test
+    void rejectsStoredHashesWithUnsupportedIterationCountsBeforeHashing() {
+        assertAll(
+                () -> assertFalse(passwordService.verifyPassword(
+                        "correct horse battery staple",
+                        storedHashWithIterationCount(0))),
+                () -> assertFalse(passwordService.verifyPassword(
+                        "correct horse battery staple",
+                        storedHashWithIterationCount(-1))),
+                () -> assertFalse(passwordService.verifyPassword(
+                        "correct horse battery staple",
+                        storedHashWithIterationCount(99_999))),
+                () -> assertFalse(passwordService.verifyPassword(
+                        "correct horse battery staple",
+                        storedHashWithIterationCount(600_001))),
+                () -> assertFalse(passwordService.verifyPassword(
+                        "correct horse battery staple",
+                        storedHashWithIterationCount(Integer.MAX_VALUE))));
+    }
+
+    @Test
     void rejectsWeakOrSelfReferentialPasswordsBeforeHashing() {
         assertAll(
                 () -> assertThrows(ValidationException.class, () -> passwordService.hashPassword("piotr", "")),
@@ -55,5 +75,11 @@ final class PasswordServiceTest {
         String hash = passwordService.hashPassword("piotr", "correct horse battery staple");
 
         assertFalse(passwordService.verifyPassword("p".repeat(PasswordService.MAXIMUM_PASSWORD_LENGTH + 1), hash));
+    }
+
+    private String storedHashWithIterationCount(int iterationCount) {
+        return "pbkdf2_sha256$"
+                + iterationCount
+                + "$Dw4NDAsKCQgHBgUEAwIBAA$WoLnVJrYQNsIvn9kjgoVwTKIGzSCUXgJfY7_Ypn6Fp0";
     }
 }

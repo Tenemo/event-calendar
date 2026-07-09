@@ -19,12 +19,15 @@ public class CurrentUser {
     @Inject
     private UserService userService;
 
+    private Optional<AppUser> currentUser = Optional.empty();
+    private boolean currentUserLoaded;
+
     public Optional<AppUser> find() {
-        Principal callerPrincipal = securityContext.getCallerPrincipal();
-        if (callerPrincipal == null) {
-            return Optional.empty();
+        if (!currentUserLoaded) {
+            currentUser = loadCurrentUser();
+            currentUserLoaded = true;
         }
-        return userService.findActiveByUsername(callerPrincipal.getName());
+        return currentUser;
     }
 
     public AppUser require() {
@@ -32,6 +35,14 @@ public class CurrentUser {
     }
 
     public boolean isSignedIn() {
-        return securityContext.getCallerPrincipal() != null;
+        return find().isPresent();
+    }
+
+    private Optional<AppUser> loadCurrentUser() {
+        Principal callerPrincipal = securityContext.getCallerPrincipal();
+        if (callerPrincipal == null) {
+            return Optional.empty();
+        }
+        return userService.findActiveByUsername(callerPrincipal.getName());
     }
 }

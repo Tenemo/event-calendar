@@ -19,6 +19,8 @@ public class PasswordService {
     private static final int SALT_BYTES = 16;
     private static final int HASH_BYTES = 32;
     private static final int ITERATIONS = 600_000;
+    private static final int MINIMUM_STORED_HASH_ITERATIONS = 100_000;
+    private static final int MAXIMUM_STORED_HASH_ITERATIONS = ITERATIONS;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -67,6 +69,9 @@ public class PasswordService {
 
         try {
             int iterations = Integer.parseInt(parts[1]);
+            if (!isSupportedStoredHashIterationCount(iterations)) {
+                return false;
+            }
             Base64.Decoder decoder = Base64.getUrlDecoder();
             byte[] salt = decoder.decode(parts[2]);
             byte[] expectedHash = decoder.decode(parts[3]);
@@ -75,6 +80,10 @@ public class PasswordService {
         } catch (IllegalArgumentException exception) {
             return false;
         }
+    }
+
+    private boolean isSupportedStoredHashIterationCount(int iterations) {
+        return iterations >= MINIMUM_STORED_HASH_ITERATIONS && iterations <= MAXIMUM_STORED_HASH_ITERATIONS;
     }
 
     private byte[] deriveKey(String password, byte[] salt, int iterations) {
