@@ -1,17 +1,20 @@
 package app.calendar;
 
 import app.audit.AuditService;
+import app.config.CalendarConfiguration;
 import app.membership.CalendarAccessService;
 import app.membership.CalendarMember;
 import app.membership.CalendarRole;
 import app.security.TokenService;
 import app.user.AppUser;
+import app.util.ConflictException;
 import app.util.NotFoundException;
 import app.util.ValidationException;
 import jakarta.ejb.Stateless;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.NoResultException;
+import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PersistenceContext;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -35,6 +38,12 @@ public class CalendarService {
 
     @Inject
     private CalendarAccessService calendarAccessService;
+
+    @Inject
+    private CalendarTimeService calendarTimeService;
+
+    @Inject
+    private CalendarConfiguration calendarConfiguration;
 
     public Calendar createCalendar(AppUser creator, String name) {
         return createCalendar(creator, name, null);
@@ -60,7 +69,7 @@ public class CalendarService {
         calendar.setName(normalizedName);
         calendar.setDescription(normalizeOptionalText(description));
         calendar.setPublicToken(generateUniquePublicToken());
-        calendar.setTimezone("Europe/Warsaw");
+        calendar.setTimezone(calendarConfiguration.getDefaultTimeZone());
         calendar.setPublicAccessEnabled(true);
         calendar.setActive(true);
         calendar.setCreatedByUser(managedCreator);
@@ -111,6 +120,11 @@ public class CalendarService {
         return calendar;
     }
 
+    public Calendar requireAdminCalendar(AppUser actor, Long calendarId) {
+        calendarAccessService.requireCanAdminister(actor, calendarId);
+        return requireActiveCalendar(calendarId);
+    }
+
     public List<CalendarMembershipSummary> findCalendarsForUser(AppUser user) {
         if (user == null || user.getId() == null) {
             return List.of();
@@ -131,13 +145,19 @@ public class CalendarService {
                 .getResultList();
     }
 
-    public String rotatePublicToken(AppUser actor, Long calendarId) {
+    public Calendar rotatePublicToken(AppUser actor, Long calendarId) {
+        return rotatePublicToken(actor, calendarId, null);
+    }
+
+    public Calendar rotatePublicToken(AppUser actor, Long calendarId, Integer expectedVersion) {
         calendarAccessService.requireCanAdminister(actor, calendarId);
         Calendar calendar = requireActiveCalendar(calendarId);
+        requireExpectedVersion(calendar, expectedVersion);
         calendar.setPublicToken(generateUniquePublicToken());
         calendar.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
         auditService.record(actor, calendar, "calendar", calendar.getId(), "public_token_rotated", "Public token rotated.");
-        return calendar.getPublicToken();
+        flushWithConflictMessage();
+        return calendar;
     }
 
     public Calendar updateCalendarSettings(
@@ -147,23 +167,55 @@ public class CalendarService {
             String description,
             String timezone,
             boolean publicAccessEnabled) {
+        return updateCalendarSettings(actor, calendarId, name, description, timezone, publicAccessEnabled, null);
+    }
+
+    public Calendar updateCalendarSettings(
+            AppUser actor,
+            Long calendarId,
+            String name,
+            String description,
+            String timezone,
+            boolean publicAccessEnabled,
+            Integer expectedVersion) {
         calendarAccessService.requireCanAdminister(actor, calendarId);
         Calendar calendar = requireActiveCalendar(calendarId);
+        requireExpectedVersion(calendar, expectedVersion);
         calendar.setName(normalizeRequiredText(
                 name,
                 "Calendar name is required.",
                 MAXIMUM_CALENDAR_NAME_LENGTH,
                 "Calendar name must be 160 characters or fewer."));
         calendar.setDescription(normalizeOptionalText(description));
-        calendar.setTimezone(normalizeRequiredText(
+        String normalizedTimeZone = normalizeRequiredText(
                 timezone,
                 "Timezone is required.",
                 MAXIMUM_TIMEZONE_LENGTH,
-                "Timezone must be 80 characters or fewer."));
+                "Timezone must be 80 characters or fewer.");
+        calendar.setTimezone(calendarTimeService.normalizeTimeZone(normalizedTimeZone));
         calendar.setPublicAccessEnabled(publicAccessEnabled);
         calendar.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
         auditService.record(actor, calendar, "calendar", calendar.getId(), "settings_updated", "Calendar settings updated.");
+        flushWithConflictMessage();
         return calendar;
+    }
+
+    private void requireExpectedVersion(Calendar calendar, Integer expectedVersion) {
+        if (expectedVersion != null && calendar.getVersion() != expectedVersion) {
+            throw calendarConflictException();
+        }
+    }
+
+    private void flushWithConflictMessage() {
+        try {
+            entityManager.flush();
+        } catch (OptimisticLockException exception) {
+            throw calendarConflictException();
+        }
+    }
+
+    private ConflictException calendarConflictException() {
+        return new ConflictException("This calendar changed after you opened it. Reload the page and try again.");
     }
 
     private String generateUniquePublicToken() {

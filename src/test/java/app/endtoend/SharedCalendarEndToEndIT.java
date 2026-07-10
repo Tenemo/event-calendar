@@ -89,39 +89,27 @@ final class SharedCalendarEndToEndIT {
             assertEquals("Shared calendar", page.title());
             assertEquals("Shared event calendars for real plans", page.locator("h1").textContent().trim());
             assertBodyContains(page, "Sign in");
-            assertBodyContains(page, "View public example");
-            assertBodyContains(page, "Events are not available yet.");
+            assertBodyContains(page, "Create an account to start planning.");
             assertFalse(hasHorizontalOverflow(page), "The home page should not horizontally overflow at desktop width.");
             assertNoBrowserMessages(browserMessages);
         }
     }
 
     @Test
-    void publicCalendarLinkOpensNoindexReadOnlyPage() {
+    void invalidPublicCalendarLinkReturnsGenericNoindexNotFoundPage() {
         List<String> browserMessages = new ArrayList<>();
 
         try (BrowserContext browserContext = browser.newContext()) {
             Page page = newPage(browserContext, browserMessages);
-            Locator publicExampleLink = page.locator("main a:has-text(\"View public example\")");
+            com.microsoft.playwright.Response response = page.navigate(route("/calendar/not-a-valid-calendar-token"));
 
-            page.navigate(route("/"));
-            assertEquals(1, publicExampleLink.count(), "The home page should expose one public example link.");
-            assertTrue(
-                    publicExampleLink.getAttribute("href").endsWith("/public-calendar"),
-                    "The public example link should use the extensionless route.");
-
-            publicExampleLink.click();
-
-            assertTrue(
-                    URI.create(page.url()).getPath().endsWith("/public-calendar"),
-                    () -> "Expected the public calendar page, but browser URL was " + page.url() + ".");
-            assertEquals("Public calendar - Shared calendar", page.title());
-            assertEquals("Kayaking weekend", page.locator("h1").textContent().trim());
+            assertEquals(404, response.status());
+            assertEquals("Calendar not found - Shared calendar", page.title());
+            assertEquals("Calendar not found", page.locator("h1").textContent().trim());
             assertEquals("noindex, nofollow", page.locator("meta[name='robots']").getAttribute("content"));
-            assertBodyContains(page, "Public visitors can view events only.");
-            assertBodyContains(page, "Public links are long random addresses.");
+            assertBodyContains(page, "invalid or no longer available");
             assertFalse(hasHorizontalOverflow(page), "The public calendar page should not horizontally overflow.");
-            assertNoBrowserMessages(browserMessages);
+            assertOnlyExpectedNotFoundNavigationMessage(browserMessages);
         }
     }
 
@@ -169,6 +157,11 @@ final class SharedCalendarEndToEndIT {
             assertTrue(editorInviteLink.contains("/register?token="), "Generated editor invite link should target registration.");
             assertFalse(editorInviteLink.equals(appOnlyInviteLink), "Separate invitations should have separate bearer tokens.");
 
+            page.locator("select[id$='calendar']").selectOption(ownerCalendarOptionValue);
+            page.locator("button:has-text('Generate editor link')").click();
+            String existingUserInviteLink = generatedInviteLink.inputValue();
+            assertFalse(existingUserInviteLink.equals(editorInviteLink), "Each editor invitation should have a separate bearer token.");
+
             page.locator("input[value='Sign out']").click();
 
             page.navigate(route("/register"));
@@ -194,6 +187,12 @@ final class SharedCalendarEndToEndIT {
             assertFalse(
                     page.locator("body").innerText().contains(ownerCalendarName),
                     "An app-only invitation must not grant access to the inviter's calendar.");
+
+            page.navigate(existingUserInviteLink);
+            assertBodyContains(page, "already signed in");
+            page.locator("button:has-text('Accept invitation')").click();
+            page.waitForURL("**/app/calendar?id=*");
+            assertBodyContains(page, ownerCalendarName);
 
             page.locator("input[value='Sign out']").click();
 
@@ -234,6 +233,215 @@ final class SharedCalendarEndToEndIT {
             assertBodyContains(page, editorOwnCalendarName);
             assertBodyContains(page, editorSecondCalendarName);
             assertBodyContains(page, ownerCalendarName);
+
+            page.locator("input[value='Sign out']").click();
+            page.navigate(route("/login"));
+            page.locator("input[id$='username']").fill(ownerUsername);
+            page.locator("input[id$='password']").fill(TEST_PASSWORD);
+            page.locator("button:has-text('Sign in')").click();
+            page.waitForURL("**/app/calendars");
+            page.locator("a:has-text('" + ownerCalendarName + "')").first().click();
+            page.waitForURL("**/app/calendar?id=*");
+            assertBodyContains(page, "Create event");
+            String ownerCalendarId = requiredQueryParameter(page.url(), "id");
+            assertRouteWithId(page, "/app/calendar", ownerCalendarId);
+
+            page.locator("input[id$='eventTitle']").fill("");
+            page.locator("button:has-text('Create event')").click();
+            assertBodyContains(page, "Event title is required.");
+            assertRouteWithId(page, "/app/calendar", ownerCalendarId);
+
+            String invalidEventTitle = "Invalid event " + uniqueSuffix;
+            page.locator("input[id$='eventTitle']").fill(invalidEventTitle);
+            page.locator("input[id$='eventStart_input']").fill("2026-07-20 12:00");
+            page.locator("input[id$='eventEnd_input']").fill("2026-07-20 10:00");
+            page.locator("button:has-text('Create event')").click();
+            assertBodyContains(page, "Event end time must be after the start time.");
+            assertEquals(
+                    0,
+                    page.locator("article", new Page.LocatorOptions().setHasText(invalidEventTitle)).count());
+            assertRouteWithId(page, "/app/calendar", ownerCalendarId);
+
+            String eventTitle = "River launch " + uniqueSuffix;
+            page.locator("input[id$='eventTitle']").fill(eventTitle);
+            page.locator("input[id$='eventLocation']").fill("North landing");
+            page.locator("input[id$='eventStart_input']").fill("2026-07-20 10:00");
+            page.locator("input[id$='eventEnd_input']").fill("2026-07-20 12:00");
+            page.locator("button:has-text('Create event')").click();
+            assertBodyContains(page, eventTitle);
+            assertBodyContains(page, "North landing");
+            assertRouteWithId(page, "/app/calendar", ownerCalendarId);
+
+            Locator eventRow = page.locator("article", new Page.LocatorOptions().setHasText(eventTitle));
+            eventRow.locator("button:has-text('Edit')").click();
+            assertBodyContains(page, "Save changes");
+            assertRouteWithId(page, "/app/calendar", ownerCalendarId);
+            page.locator("input[id$='eventTitle']").fill(eventTitle + " updated");
+            assertEquals(eventTitle + " updated", page.locator("input[id$='eventTitle']").inputValue());
+            page.locator("button:has-text('Save changes')").click();
+            assertBodyContains(page, eventTitle + " updated");
+            assertRouteWithId(page, "/app/calendar", ownerCalendarId);
+
+            String allDayEventTitle = "River weekend " + uniqueSuffix;
+            page.locator("input[id$='eventTitle']").fill(allDayEventTitle);
+            page.locator("input[id$='eventStart_input']").fill("2026-07-22 00:00");
+            page.locator("input[id$='eventEnd_input']").fill("2026-07-24 00:00");
+            page.getByLabel("All-day event").check(new Locator.CheckOptions().setForce(true));
+            assertTrue(page.getByLabel("All-day event").isChecked());
+            page.locator("button:has-text('Create event')").click();
+            Locator allDayEventRow = page.locator("article", new Page.LocatorOptions().setHasText(allDayEventTitle));
+            assertThat(allDayEventRow)
+                    .containsText("All day from Wed, Jul 22, 2026 to Fri, Jul 24, 2026");
+            assertRouteWithId(page, "/app/calendar", ownerCalendarId);
+
+            String deletedEventTitle = "Temporary event " + uniqueSuffix;
+            page.locator("input[id$='eventTitle']").fill(deletedEventTitle);
+            page.locator("input[id$='eventStart_input']").fill("2026-07-21 14:00");
+            page.locator("input[id$='eventEnd_input']").fill("2026-07-21 15:00");
+            page.locator("button:has-text('Create event')").click();
+            Locator deletedEventRow = page.locator("article", new Page.LocatorOptions().setHasText(deletedEventTitle));
+            deletedEventRow.locator("button:has-text('Delete')").click();
+            page.locator("button:has-text('Yes')").click();
+            assertBodyContains(page, "Event deleted.");
+            assertEquals(0, page.locator("article", new Page.LocatorOptions().setHasText(deletedEventTitle)).count());
+            assertRouteWithId(page, "/app/calendar", ownerCalendarId);
+            page.reload();
+            assertRouteWithId(page, "/app/calendar", ownerCalendarId);
+            assertBodyContains(page, eventTitle + " updated");
+            assertBodyContains(page, allDayEventTitle);
+
+            page.locator("a:has-text('Settings')").click();
+            page.waitForURL("**/app/calendar-settings?id=*");
+            assertRouteWithId(page, "/app/calendar-settings", ownerCalendarId);
+            page.locator("input[id$='timeZone']").fill("Mars/Olympus");
+            page.locator("button:has-text('Save settings')").click();
+            assertBodyContains(page, "Timezone must be a valid region such as Europe/Warsaw.");
+            assertRouteWithId(page, "/app/calendar-settings", ownerCalendarId);
+
+            String calendarDescription = "Summer river plans " + uniqueSuffix;
+            page.locator("input[id$='timeZone']").fill("Europe/Warsaw");
+            page.locator("textarea[id$='calendarDescription']").fill(calendarDescription);
+            page.locator("button:has-text('Save settings')").click();
+            assertBodyContains(page, "Calendar settings saved.");
+            assertRouteWithId(page, "/app/calendar-settings", ownerCalendarId);
+            page.reload();
+            assertRouteWithId(page, "/app/calendar-settings", ownerCalendarId);
+            assertBodyContains(page, calendarDescription);
+            Locator publicLinkInput = page.getByLabel("Public calendar link");
+            assertThat(publicLinkInput).isVisible();
+            String publicCalendarLink = publicLinkInput.inputValue();
+            assertTrue(
+                    URI.create(publicCalendarLink).getPath().startsWith("/calendar/"),
+                    "Public calendar links should use the clean token route.");
+
+            try (BrowserContext publicBrowserContext = browser.newContext()) {
+                List<String> publicBrowserMessages = new ArrayList<>();
+                Page publicPage = newPage(publicBrowserContext, publicBrowserMessages);
+                com.microsoft.playwright.Response publicResponse = publicPage.navigate(publicCalendarLink);
+                assertEquals(200, publicResponse.status());
+                assertEquals("noindex, nofollow", publicPage.locator("meta[name='robots']").getAttribute("content"));
+                assertBodyContains(publicPage, eventTitle + " updated");
+                assertBodyContains(publicPage, "All day from Wed, Jul 22, 2026 to Fri, Jul 24, 2026");
+                assertBodyContains(publicPage, calendarDescription);
+                assertEquals(0, publicPage.locator("button:has-text('Edit')").count());
+                assertEquals(0, publicPage.locator("button:has-text('Delete')").count());
+                assertNoBrowserMessages(publicBrowserMessages);
+            }
+
+            page.locator("button:has-text('Rotate public link')").click();
+            page.locator("button:has-text('Yes')").click();
+            assertBodyContains(page, "Public link rotated.");
+            assertRouteWithId(page, "/app/calendar-settings", ownerCalendarId);
+            String rotatedPublicCalendarLink = publicLinkInput.inputValue();
+            assertFalse(
+                    rotatedPublicCalendarLink.equals(publicCalendarLink),
+                    "Rotating a public link should generate a different bearer token.");
+            try (BrowserContext rotatedLinkBrowserContext = browser.newContext()) {
+                List<String> rotatedLinkBrowserMessages = new ArrayList<>();
+                Page rotatedLinkPage = newPage(rotatedLinkBrowserContext, rotatedLinkBrowserMessages);
+                com.microsoft.playwright.Response oldLinkResponse = rotatedLinkPage.navigate(publicCalendarLink);
+                assertEquals(404, oldLinkResponse.status());
+                assertBodyContains(rotatedLinkPage, "Calendar not found");
+                assertOnlyExpectedNotFoundNavigationMessage(rotatedLinkBrowserMessages);
+
+                List<String> newLinkBrowserMessages = new ArrayList<>();
+                Page newLinkPage = newPage(rotatedLinkBrowserContext, newLinkBrowserMessages);
+                com.microsoft.playwright.Response newLinkResponse = newLinkPage.navigate(rotatedPublicCalendarLink);
+                assertEquals(200, newLinkResponse.status());
+                assertBodyContains(newLinkPage, eventTitle + " updated");
+                assertNoBrowserMessages(newLinkBrowserMessages);
+            }
+
+            page.locator("a:has-text('Back to calendar')").click();
+            page.waitForURL("**/app/calendar?id=*");
+            assertRouteWithId(page, "/app/calendar", ownerCalendarId);
+            page.locator("a:has-text('Members')").click();
+            page.waitForURL("**/app/calendar-members?id=*");
+            assertRouteWithId(page, "/app/calendar-members", ownerCalendarId);
+            Locator editorMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(editorUsername));
+            assertEquals(1, editorMemberRow.count());
+            editorMemberRow.locator("select").selectOption("ADMIN");
+            editorMemberRow.locator("button:has-text('Save role')").click();
+            assertBodyContains(page, "Member role saved.");
+            assertRouteWithId(page, "/app/calendar-members", ownerCalendarId);
+            assertEquals("ADMIN", editorMemberRow.locator("select").inputValue());
+
+            Locator ownerMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(ownerUsername));
+            assertFalse(ownerMemberRow.locator("select").isEnabled(), "An admin's own role control must be disabled.");
+            assertFalse(
+                    ownerMemberRow.locator("button:has-text('Save role')").isEnabled(),
+                    "An admin's own role save action must be disabled.");
+            assertFalse(
+                    ownerMemberRow.locator("button:has-text('Remove access')").isEnabled(),
+                    "An admin's own remove action must be disabled.");
+            assertThat(ownerMemberRow).containsText("Your admin role cannot be changed here.");
+
+            editorMemberRow.locator("select").selectOption("VIEWER");
+            editorMemberRow.locator("button:has-text('Save role')").click();
+            assertBodyContains(page, "Member role saved.");
+            assertRouteWithId(page, "/app/calendar-members", ownerCalendarId);
+            assertEquals("VIEWER", editorMemberRow.locator("select").inputValue());
+
+            Locator appOnlyMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(appOnlyUsername));
+            appOnlyMemberRow.locator("button:has-text('Remove access')").click();
+            page.locator("button:has-text('Yes')").click();
+            assertBodyContains(page, "Member access removed.");
+            assertRouteWithId(page, "/app/calendar-members", ownerCalendarId);
+            assertThat(appOnlyMemberRow).containsText("Inactive");
+            appOnlyMemberRow.locator("select").selectOption("EDITOR");
+            appOnlyMemberRow.locator("button:has-text('Save role')").click();
+            assertBodyContains(page, "Member role saved.");
+            assertRouteWithId(page, "/app/calendar-members", ownerCalendarId);
+            assertThat(appOnlyMemberRow).containsText("Active");
+
+            page.reload();
+            assertRouteWithId(page, "/app/calendar-members", ownerCalendarId);
+            assertEquals("VIEWER", editorMemberRow.locator("select").inputValue());
+
+            List<String> missingIdentifierBrowserMessages = new ArrayList<>();
+            Page missingIdentifierPage = newPage(browserContext, missingIdentifierBrowserMessages);
+            com.microsoft.playwright.Response missingIdentifierResponse =
+                    missingIdentifierPage.navigate(route("/app/calendar-members"));
+            assertEquals(404, missingIdentifierResponse.status());
+            assertBodyContains(missingIdentifierPage, "Calendar not found");
+            assertFalse(
+                    missingIdentifierPage.locator("body").innerText().contains("Exception thrown"),
+                    "A missing calendar identifier must not expose an exception page.");
+            assertOnlyExpectedNotFoundNavigationMessage(missingIdentifierBrowserMessages);
+            missingIdentifierPage.close();
+
+            page.locator("input[value='Sign out']").click();
+            page.navigate(route("/login"));
+            page.locator("input[id$='username']").fill(editorUsername);
+            page.locator("input[id$='password']").fill(password);
+            page.locator("button:has-text('Sign in')").click();
+            page.waitForURL("**/app/calendars");
+            page.locator("a:has-text('" + ownerCalendarName + "')").first().click();
+            assertBodyContains(page, eventTitle + " updated");
+            assertEquals(0, page.locator("button:has-text('Create event')").count());
+            assertEquals(0, page.locator("button:has-text('Edit')").count());
+            assertEquals(0, page.locator("button:has-text('Delete')").count());
+            assertEquals(0, page.locator("a:has-text('Settings')").count());
             assertNoBrowserMessages(browserMessages);
         }
     }
@@ -355,6 +563,33 @@ final class SharedCalendarEndToEndIT {
         return removeTrailingSlashes(applicationBaseUri.toString()) + path;
     }
 
+    private void assertRouteWithId(Page page, String expectedPath, String expectedId) {
+        URI currentUri = URI.create(page.url());
+        assertEquals(
+                expectedPath,
+                currentUri.getPath(),
+                () -> "Unexpected path in browser URL " + page.url() + ".");
+        assertEquals(
+                expectedId,
+                requiredQueryParameter(page.url(), "id"),
+                () -> "Unexpected calendar identifier in browser URL " + page.url() + ".");
+    }
+
+    private String requiredQueryParameter(String url, String parameterName) {
+        String rawQuery = URI.create(url).getRawQuery();
+        if (rawQuery != null) {
+            for (String parameter : rawQuery.split("&")) {
+                String[] nameAndValue = parameter.split("=", 2);
+                if (nameAndValue[0].equals(parameterName) && nameAndValue.length == 2) {
+                    return nameAndValue[1];
+                }
+            }
+        }
+
+        fail("Expected URL " + url + " to contain query parameter '" + parameterName + "'.");
+        return "";
+    }
+
     private void assertBodyContains(Page page, String expectedText) {
         try {
             assertThat(page.locator("body"))
@@ -372,6 +607,14 @@ final class SharedCalendarEndToEndIT {
         assertTrue(
                 browserMessages.isEmpty(),
                 () -> "Expected no browser console errors or warnings, but saw: " + browserMessages);
+    }
+
+    private void assertOnlyExpectedNotFoundNavigationMessage(List<String> browserMessages) {
+        assertTrue(
+                browserMessages.size() <= 1
+                        && browserMessages.stream().allMatch(message -> message.contains("status of 404")),
+                () -> "Expected only the browser's failed-navigation message for the intentional 404, but saw: "
+                        + browserMessages);
     }
 
     private boolean hasHorizontalOverflow(Page page) {

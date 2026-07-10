@@ -1,14 +1,19 @@
 <ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:f="jakarta.faces.core"
                 xmlns:h="jakarta.faces.html"
                 xmlns:ui="jakarta.faces.facelets"
                 xmlns:p="primefaces"
                 template="/WEB-INF/templates/main.xhtml">
+    <f:metadata>
+        <f:viewParam name="invite" value="#{loginView.inviteToken}"/>
+    </f:metadata>
     <ui:define name="title">Sign in - Shared calendar</ui:define>
 
     <ui:define name="content">
         <section class="narrow-section">
             <p:panel header="Sign in" styleClass="surface-panel form-panel">
                 <h:form styleClass="stacked-form">
+                    <h:inputHidden value="#{loginView.inviteToken}"/>
                     <p:outputLabel for="username" value="Username"/>
                     <p:inputText id="username"
                                  value="#{loginView.username}"

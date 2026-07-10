@@ -12,7 +12,21 @@
 
     <ui:define name="content">
         <section class="narrow-section">
-            <p:panel header="Create your calendar" styleClass="surface-panel form-panel">
+            <p:panel header="Accept invitation"
+                     styleClass="surface-panel form-panel"
+                     rendered="#{registrationView.signedIn}">
+                <h:form styleClass="stacked-form">
+                    <h:inputHidden value="#{registrationView.inviteToken}"/>
+                    <p>You are already signed in. Accept this invitation with your current account.</p>
+                    <p:commandButton value="Accept invitation"
+                                     action="#{registrationView.acceptInvitation}"
+                                     ajax="false"/>
+                </h:form>
+            </p:panel>
+
+            <p:panel header="Create your calendar"
+                     styleClass="surface-panel form-panel"
+                     rendered="#{not registrationView.signedIn}">
                 <h:form styleClass="stacked-form">
                     <h:inputHidden id="inviteToken" value="#{registrationView.inviteToken}"/>
 
@@ -52,7 +66,10 @@
                 </h:form>
                 <p class="form-footer">
                     Already registered?
-                    <h:outputLink value="#{request.contextPath}/login">Sign in</h:outputLink>
+                    <h:outputLink value="#{request.contextPath}/login">
+                        Sign in to accept
+                        <f:param name="invite" value="#{registrationView.inviteToken}"/>
+                    </h:outputLink>
                 </p>
             </p:panel>
         </section>

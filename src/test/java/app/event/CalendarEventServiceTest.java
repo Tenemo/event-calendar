@@ -16,6 +16,8 @@ import app.membership.CalendarAccessService;
 import app.testsupport.ServiceTestSupport.EntityManagerStub;
 import app.user.AppUser;
 import app.util.ValidationException;
+import app.util.ConflictException;
+import jakarta.persistence.OptimisticLockException;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
@@ -100,6 +102,60 @@ final class CalendarEventServiceTest {
                 () -> assertEquals(ZoneOffset.UTC, event.getUpdatedAt().getOffset()));
     }
 
+    @Test
+    void rejectsStaleEventVersionsAndTranslatesProviderOptimisticLockFailures() {
+        Calendar calendar = activeCalendar(200L);
+        CalendarEvent event = new CalendarEvent();
+        setEntityId(event, 300L);
+        event.setCalendar(calendar);
+        event.setTitle("Kayaking");
+        event.setStartAt(OffsetDateTime.parse("2026-07-08T12:00:00Z"));
+        event.setEndAt(OffsetDateTime.parse("2026-07-08T14:00:00Z"));
+
+        EntityManagerStub staleVersionEntityManager = entityManagerStub()
+                .find(CalendarEvent.class, event.getId(), event);
+        CalendarEventService staleVersionService = configuredUpdateService(staleVersionEntityManager);
+
+        assertThrows(
+                ConflictException.class,
+                () -> staleVersionService.updateEvent(
+                        activeUser(100L),
+                        event.getId(),
+                        99,
+                        "Updated",
+                        null,
+                        null,
+                        event.getStartAt(),
+                        event.getEndAt(),
+                        false));
+
+        EntityManagerStub providerConflictEntityManager = entityManagerStub()
+                .find(CalendarEvent.class, event.getId(), event)
+                .failOnFlush(new OptimisticLockException("stale row"));
+        CalendarEventService providerConflictService = configuredUpdateService(providerConflictEntityManager);
+
+        assertThrows(
+                ConflictException.class,
+                () -> providerConflictService.updateEvent(
+                        activeUser(100L),
+                        event.getId(),
+                        event.getVersion(),
+                        "Updated",
+                        null,
+                        null,
+                        event.getStartAt(),
+                        event.getEndAt(),
+                        false));
+    }
+
+    private static CalendarEventService configuredUpdateService(EntityManagerStub entityManagerStub) {
+        CalendarEventService eventService = new CalendarEventService();
+        setField(eventService, "entityManager", entityManagerStub.entityManager());
+        setField(eventService, "calendarAccessService", new AllowingAccessService());
+        setField(eventService, "auditService", new NoopAuditService());
+        return eventService;
+    }
+
     private static Calendar activeCalendar(Long id) {
         Calendar calendar = new Calendar();
         setEntityId(calendar, id);
@@ -148,6 +204,12 @@ final class CalendarEventServiceTest {
             this.entityType = entityType;
             this.entityId = entityId;
             this.action = action;
+        }
+    }
+
+    private static final class NoopAuditService extends AuditService {
+        @Override
+        public void record(AppUser actorUser, Calendar calendar, String entityType, Long entityId, String action, String details) {
         }
     }
 }

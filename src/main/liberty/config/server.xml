@@ -5,6 +5,7 @@
     </featureManager>
 
     <variable name="PORT" defaultValue="9080"/>
+    <variable name="HTTPS_PORT" defaultValue="9443"/>
     <variable name="COOKIE_SECURE" defaultValue="false"/>
 
     <variable name="PGHOST" defaultValue="localhost"/>
@@ -15,7 +16,8 @@
 
     <httpEndpoint id="defaultHttpEndpoint"
                   host="*"
-                  httpPort="${PORT}"/>
+                  httpPort="${PORT}"
+                  httpsPort="${HTTPS_PORT}"/>
 
     <httpSession cookieHttpOnly="true"
                  cookieSecure="${COOKIE_SECURE}"

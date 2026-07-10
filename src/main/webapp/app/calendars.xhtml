@@ -1,4 +1,5 @@
 <ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:f="jakarta.faces.core"
                 xmlns:h="jakarta.faces.html"
                 xmlns:ui="jakarta.faces.facelets"
                 xmlns:p="primefaces"
@@ -31,13 +32,28 @@
                          emptyMessage="No calendars yet."
                          styleClass="surface-table">
                 <p:column headerText="Calendar">
-                    <h:outputText value="#{calendar.calendarName}"/>
+                    <h:outputLink value="#{request.contextPath}/app/calendar">
+                        #{calendar.calendarName}
+                        <f:param name="id" value="#{calendar.calendarId}"/>
+                    </h:outputLink>
                 </p:column>
                 <p:column headerText="Role">
                     <h:outputText value="#{calendar.role}"/>
                 </p:column>
                 <p:column headerText="Public link">
                     <h:outputText value="#{calendar.publicAccessEnabled ? 'Enabled' : 'Disabled'}"/>
+                </p:column>
+                <p:column headerText="Action">
+                    <h:outputLink value="#{request.contextPath}/app/calendar" styleClass="button-link secondary-link">
+                        Open
+                        <f:param name="id" value="#{calendar.calendarId}"/>
+                    </h:outputLink>
+                    <h:outputLink value="#{request.contextPath}/app/calendar-settings"
+                                  styleClass="button-link secondary-link"
+                                  rendered="#{calendar.admin}">
+                        Sharing
+                        <f:param name="id" value="#{calendar.calendarId}"/>
+                    </h:outputLink>
                 </p:column>
             </p:dataTable>
         </section>

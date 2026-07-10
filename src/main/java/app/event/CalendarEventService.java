@@ -5,11 +5,13 @@ import app.calendar.Calendar;
 import app.calendar.CalendarService;
 import app.membership.CalendarAccessService;
 import app.user.AppUser;
+import app.util.ConflictException;
 import app.util.NotFoundException;
 import app.util.ValidationException;
 import jakarta.ejb.Stateless;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
 import java.time.OffsetDateTime;
@@ -93,8 +95,22 @@ public class CalendarEventService {
             OffsetDateTime startAt,
             OffsetDateTime endAt,
             boolean allDay) {
+        return updateEvent(actor, eventId, null, title, description, location, startAt, endAt, allDay);
+    }
+
+    public CalendarEvent updateEvent(
+            AppUser actor,
+            Long eventId,
+            Integer expectedVersion,
+            String title,
+            String description,
+            String location,
+            OffsetDateTime startAt,
+            OffsetDateTime endAt,
+            boolean allDay) {
         CalendarEvent event = requireEvent(eventId);
         calendarAccessService.requireCanEdit(actor, event.getCalendar().getId());
+        requireExpectedVersion(event, expectedVersion);
         String normalizedTitle = normalizeRequiredText(
                 title,
                 "Event title is required.",
@@ -115,14 +131,21 @@ public class CalendarEventService {
         event.setUpdatedByUser(actor);
         event.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
         auditService.record(actor, event.getCalendar(), "calendar_event", event.getId(), "updated", "Event updated.");
+        flushWithConflictMessage();
         return event;
     }
 
     public void deleteEvent(AppUser actor, Long eventId) {
+        deleteEvent(actor, eventId, null);
+    }
+
+    public void deleteEvent(AppUser actor, Long eventId, Integer expectedVersion) {
         CalendarEvent event = requireEvent(eventId);
         calendarAccessService.requireCanEdit(actor, event.getCalendar().getId());
+        requireExpectedVersion(event, expectedVersion);
         auditService.record(actor, event.getCalendar(), "calendar_event", event.getId(), "deleted", "Event deleted.");
         entityManager.remove(event);
+        flushWithConflictMessage();
     }
 
     public void validateEvent(String title, OffsetDateTime startAt, OffsetDateTime endAt) {
@@ -186,6 +209,24 @@ public class CalendarEventService {
             throw new NotFoundException("Event was not found.");
         }
         return event;
+    }
+
+    private void requireExpectedVersion(CalendarEvent event, Integer expectedVersion) {
+        if (expectedVersion != null && event.getVersion() != expectedVersion) {
+            throw eventConflictException();
+        }
+    }
+
+    private void flushWithConflictMessage() {
+        try {
+            entityManager.flush();
+        } catch (OptimisticLockException exception) {
+            throw eventConflictException();
+        }
+    }
+
+    private ConflictException eventConflictException() {
+        return new ConflictException("This event changed after you opened it. Reload the page and try again.");
     }
 
     private String normalizeOptionalText(String value) {

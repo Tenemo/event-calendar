@@ -126,7 +126,7 @@ Required PR checks should include:
 
 1. Maven wrapper build: `./mvnw -B -ntp clean test package`.
 2. PostgreSQL-backed migration and service tests.
-3. App smoke against a running Liberty app when M2 route checks are deterministic.
+3. App smoke against a running Liberty app using the deterministic M2 route and browser checks.
 4. Docker image build: `docker build -t shared-calendar:ci .`.
 
 Add a container smoke check after the Docker image can reliably connect to the CI PostgreSQL service. The smoke should confirm `/health` and one or two stable application routes, not perform deployment.

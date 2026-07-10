@@ -30,4 +30,8 @@ public class CalendarMembershipSummary {
     public boolean isPublicAccessEnabled() {
         return publicAccessEnabled;
     }
+
+    public boolean isAdmin() {
+        return role == CalendarRole.ADMIN;
+    }
 }

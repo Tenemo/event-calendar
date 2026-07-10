@@ -18,9 +18,9 @@ Read the project reference for product, architecture, security, testing, and ope
 
 Implement in this order:
 
-1. M0: project foundation
-2. M1: persistence and security core
-3. M2: calendar and member workflows
+1. M0: project foundation (implemented)
+2. M1: persistence and security core (implemented)
+3. M2: calendar and member workflows (implemented)
 4. M3: production readiness
 
 Do not move to the next milestone until the current milestone verification commands pass and its acceptance criteria are satisfied.

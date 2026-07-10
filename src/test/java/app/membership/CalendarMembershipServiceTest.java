@@ -92,6 +92,37 @@ final class CalendarMembershipServiceTest {
     }
 
     @Test
+    void adminCannotDemoteOrRemoveThemselvesEvenWhenAnotherAdminExists() {
+        Calendar calendar = activeCalendar(200L);
+        AppUser actor = activeUser(100L);
+        CalendarMember actorMembership = membership(calendar, actor, CalendarRole.ADMIN, true);
+        CalendarMember otherAdminMembership = membership(calendar, activeUser(101L), CalendarRole.ADMIN, true);
+        OffsetDateTime originalUpdatedAt = actorMembership.getUpdatedAt();
+        EntityManagerStub entityManagerStub = entityManagerStub()
+                .resultList("from CalendarMember calendarMember", List.of(actorMembership, otherAdminMembership));
+        CalendarMembershipService membershipService = membershipService(entityManagerStub);
+        setField(membershipService, "calendarAccessService", new AllowingAccessService());
+
+        ValidationException roleChangeException = assertThrows(
+                ValidationException.class,
+                () -> membershipService.changeMemberRole(actor, calendar.getId(), actor.getId(), CalendarRole.EDITOR));
+        ValidationException removalException = assertThrows(
+                ValidationException.class,
+                () -> membershipService.disableMember(actor, calendar.getId(), actor.getId()));
+        ValidationException roleGrantException = assertThrows(
+                ValidationException.class,
+                () -> membershipService.addMemberByRole(actor, calendar.getId(), actor.getId(), CalendarRole.VIEWER));
+
+        assertAll(
+                () -> assertEquals("You cannot change your own admin role.", roleChangeException.getMessage()),
+                () -> assertEquals("You cannot remove your own admin access.", removalException.getMessage()),
+                () -> assertEquals("You cannot change your own admin role.", roleGrantException.getMessage()),
+                () -> assertEquals(CalendarRole.ADMIN, actorMembership.getRole()),
+                () -> assertTrue(actorMembership.isActive()),
+                () -> assertEquals(originalUpdatedAt, actorMembership.getUpdatedAt()));
+    }
+
+    @Test
     void memberGrantRequiresAdminAccessBeforeChangingMemberships() {
         CalendarMembershipService membershipService = new CalendarMembershipService();
         setField(membershipService, "calendarAccessService", new RejectingAccessService());

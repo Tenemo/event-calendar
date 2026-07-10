@@ -149,7 +149,15 @@ a:focus-visible,
     gap: 1rem;
 }
 
-.section-header h1,
+.section-header h1 {
+    margin: 0;
+    max-width: 760px;
+    font-size: 2.5rem;
+    font-weight: 800;
+    letter-spacing: 0;
+    line-height: 1.05;
+}
+
 .intro-panel h1 {
     margin: 0;
     max-width: 760px;
@@ -211,6 +219,27 @@ a:focus-visible,
 
 .compact-actions {
     margin-top: 0;
+}
+
+.compact-heading {
+    align-items: center;
+}
+
+.heading-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+    color: var(--muted-text);
+    font-size: 0.88rem;
+}
+
+.eyebrow {
+    margin: 0 0 0.5rem;
+    color: var(--muted-text);
+    font-size: 0.82rem;
+    font-weight: 750;
+    text-transform: uppercase;
 }
 
 .button-link {
@@ -307,6 +336,179 @@ a:focus-visible,
 .invite-grid {
     display: grid;
     gap: 0.75rem;
+}
+
+.calendar-workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
+    gap: 1.25rem;
+    align-items: start;
+}
+
+.event-list-section {
+    min-width: 0;
+}
+
+.subsection-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.subsection-header h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    letter-spacing: 0;
+}
+
+.subsection-header p,
+.empty-state,
+.secondary-line,
+.event-description,
+.status-line,
+.settings-grid .ui-panel-content p {
+    color: var(--muted-text);
+}
+
+.subsection-header p,
+.empty-state,
+.status-line {
+    margin: 0.35rem 0 0;
+}
+
+.event-row {
+    align-items: flex-start;
+}
+
+.event-copy {
+    min-width: 0;
+    flex: 1;
+}
+
+.event-copy h3 {
+    margin: 0;
+    font-size: 1rem;
+    letter-spacing: 0;
+}
+
+.event-copy p {
+    margin: 0.35rem 0 0;
+}
+
+.row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.row-actions form {
+    margin: 0;
+}
+
+.event-editor {
+    position: sticky;
+    top: 6.5rem;
+}
+
+.two-column-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.field-stack {
+    display: grid;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.field-stack .ui-datepicker,
+.field-stack .ui-inputfield {
+    width: 100%;
+}
+
+.checkbox-field {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.settings-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(18rem, 0.8fr);
+    gap: 1.25rem;
+    align-items: start;
+}
+
+.status-line {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 700;
+}
+
+.status-dot {
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    background: #9ca3af;
+}
+
+.status-dot.enabled {
+    background: var(--green);
+}
+
+.status-dot.disabled {
+    background: #dc2626;
+}
+
+.secondary-line {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.86rem;
+}
+
+.inline-role-form {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+}
+
+.status-label {
+    display: inline-flex;
+    border-radius: 999px;
+    padding: 0.4rem 0.65rem;
+    font-size: 0.82rem;
+    font-weight: 750;
+}
+
+.status-label.active {
+    background: var(--green-soft);
+    color: var(--green-strong);
+}
+
+.status-label.inactive {
+    background: #f3f4f6;
+    color: #6b7280;
+}
+
+.not-found-state {
+    padding-top: 4rem;
+    text-align: center;
+}
+
+.not-found-state h1 {
+    margin: 0;
+    font-size: 2rem;
+    letter-spacing: 0;
+}
+
+.public-calendar-page {
+    max-width: 54rem;
+    margin: 0 auto;
 }
 
 .event-item,
@@ -408,7 +610,6 @@ a:focus-visible,
 }
 
 @media (max-width: 1100px) {
-    .section-header h1,
     .intro-panel h1 {
         font-size: 3.3rem;
     }
@@ -423,7 +624,9 @@ a:focus-visible,
     }
 
     .home-layout,
-    .public-layout {
+    .public-layout,
+    .calendar-workspace,
+    .settings-grid {
         grid-template-columns: 1fr;
     }
 
@@ -435,10 +638,33 @@ a:focus-visible,
         min-height: auto;
     }
 
-    .section-header h1,
+    .section-header h1 {
+        font-size: 2rem;
+    }
+
     .intro-panel h1 {
         font-size: 2.4rem;
         line-height: 1.05;
+    }
+
+    .event-editor {
+        position: static;
+    }
+
+    .event-row,
+    .subsection-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .row-actions,
+    .row-actions form,
+    .row-actions .ui-button {
+        width: 100%;
+    }
+
+    .two-column-fields {
+        grid-template-columns: 1fr;
     }
 
     .month-grid b {

@@ -2,6 +2,7 @@ package app.invitation;
 
 import app.calendar.CalendarMembershipSummary;
 import app.calendar.CalendarService;
+import app.config.ApplicationUrlService;
 import app.membership.CalendarRole;
 import app.security.CurrentUser;
 import app.user.AppUser;
@@ -27,6 +28,9 @@ public class AppInvitationView {
 
     @Inject
     private AppInvitationService appInvitationService;
+
+    @Inject
+    private ApplicationUrlService applicationUrlService;
 
     private Long selectedCalendarId;
     private List<EditableCalendarOption> editableCalendars = List.of();
@@ -147,23 +151,7 @@ public class AppInvitationView {
     }
 
     private String invitationLink(String inviteToken) {
-        FacesContext facesContext = FacesContext.getCurrentInstance();
-        String requestBaseUrl = facesContext.getExternalContext().getRequestScheme()
-                + "://"
-                + facesContext.getExternalContext().getRequestServerName()
-                + requestPort(facesContext)
-                + facesContext.getExternalContext().getRequestContextPath();
-        return requestBaseUrl + "/register?token=" + inviteToken;
-    }
-
-    private String requestPort(FacesContext facesContext) {
-        int requestPort = facesContext.getExternalContext().getRequestServerPort();
-        String requestScheme = facesContext.getExternalContext().getRequestScheme();
-        if ((requestScheme.equals("http") && requestPort == 80)
-                || (requestScheme.equals("https") && requestPort == 443)) {
-            return "";
-        }
-        return ":" + requestPort;
+        return applicationUrlService.linkTo("/register?token=" + inviteToken);
     }
 
     private void addMessage(FacesMessage.Severity severity, String summary, String detail) {
