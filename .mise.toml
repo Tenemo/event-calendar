@@ -48,3 +48,23 @@ run = "java scripts/calendar-tool.java verify-local"
 [tasks.verify-running-app]
 description = "Verify the running app and local database"
 run = "java scripts/calendar-tool.java verify-running-app"
+
+[tasks.docker-build]
+description = "Build the production application image"
+run = "java scripts/calendar-tool.java docker-build"
+
+[tasks.docker-up]
+description = "Build and start the production image with local PostgreSQL"
+run = "java scripts/calendar-tool.java docker-up"
+
+[tasks.backup-postgres]
+description = "Create a PostgreSQL custom-format backup"
+run = "java scripts/calendar-tool.java backup-postgres"
+
+[tasks.restore-postgres]
+description = "Restore a PostgreSQL backup after explicit database confirmation"
+run = "java scripts/calendar-tool.java restore-postgres"
+
+[tasks.verify-backup-restore]
+description = "Verify backup and restore against a fresh temporary PostgreSQL database"
+run = "java scripts/calendar-tool.java verify-backup-restore"

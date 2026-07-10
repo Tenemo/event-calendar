@@ -21,7 +21,7 @@ Implement in this order:
 1. M0: project foundation (implemented)
 2. M1: persistence and security core (implemented)
 3. M2: calendar and member workflows (implemented)
-4. M3: production readiness
+4. M3: production readiness (repository implementation complete; Railway deployment deferred)
 
 Do not move to the next milestone until the current milestone verification commands pass and its acceptance criteria are satisfied.
 
@@ -50,7 +50,7 @@ GitHub PR checks should grow with the milestones:
 1. M0: required Maven wrapper build plus a PrimeFaces `jakarta` classifier check.
 2. M1: PostgreSQL-backed migration, persistence, and service tests once those tests exist.
 3. M2: deterministic app smoke checks for health and stable HTTP routes once the real workflows exist.
-4. M3: Docker image build, optional container smoke, Dependency Review, CodeQL, and Dependabot where repository features allow them.
+4. M3: Docker image build, optional container smoke, Dependency Review, and CodeQL where repository features allow them.
 
 Do not deploy to Railway from pull requests, and do not require secrets for PR checks.
 
