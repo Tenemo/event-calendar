@@ -1,21 +1,21 @@
 # M1: persistence and security core
 
-Use this milestone to implement schema migrations, JPA persistence, self-registration, login, password handling, calendar creation, calendar membership authorization, public calendar tokens, invite tokens, audit foundation, and focused tests.
+Use this milestone to implement schema migrations, JPA persistence, invitation-only registration, login, password handling, calendar creation, calendar membership authorization, public calendar tokens, invite tokens, audit foundation, and focused tests.
 
 Do not build the full PrimeFaces calendar workflow in M1. M1 should establish the data model and service rules that M2 can safely expose.
 
 ## Milestone checklist
 
-Outcome: users can register, log in, create calendars, receive calendar `ADMIN` membership, and rely on tested service-layer authorization for public viewing, member roles, invite acceptance, and event validation.
+Outcome: invited users can register, log in, create calendars, receive calendar `ADMIN` membership, and rely on tested service-layer authorization for public viewing, member roles, invite acceptance, and event validation.
 
 Tasks:
 
 1. Add Flyway migrations and a startup migration bean.
 2. Add `persistence.xml` and provider-neutral JPA entities.
-3. Add user, password, registration, calendar, membership, invitation, event, and audit services.
+3. Add user, password, app invitation, registration, calendar, membership, event, and audit services.
 4. Add Jakarta Security configuration, web security constraints, login view logic, registration view logic, current-user helper, and logout support.
 5. Generate public calendar tokens and invite tokens with UUID v4 or stronger random values.
-6. Add focused tests for password policy, registration validation, calendar creation, role checks, invite acceptance, last-admin protection, event validation, token generation, and time handling.
+6. Add focused tests for password policy, invitation-only registration validation, calendar creation, role checks, invite acceptance, last-admin protection, event validation, token generation, and time handling.
 7. Extend CI with a PostgreSQL-backed job once migrations and database-backed tests exist.
 
 Verification:
@@ -32,8 +32,8 @@ curl -i http://localhost:9080/health
 Manual checks:
 
 1. App starts with an empty database.
-2. A new user can register.
-3. Login works after registration.
+2. A new user can register with a valid app invitation.
+3. Login works after invitation-only registration.
 4. A registered user can create a calendar.
 5. The calendar creator receives `ADMIN` membership.
 6. A public token is generated for the calendar.
@@ -49,7 +49,7 @@ Acceptance criteria:
 5. `@Version` is used for event optimistic locking.
 6. No plaintext passwords are stored or logged.
 7. No public calendar tokens or invite tokens are logged.
-8. Registration validates username and password policy.
+8. Registration requires a valid app invitation and validates username and password policy.
 9. Calendar creation grants exactly one initial `ADMIN` membership to the creator.
 10. Roles load from `calendar_member`.
 11. Service methods enforce calendar membership and role checks, not only UI controls.
@@ -60,10 +60,10 @@ Acceptance criteria:
 Create `src/main/resources/META-INF/persistence.xml`:
 
 ```xml
-<persistence version="3.1"
+<persistence version="3.0"
              xmlns="https://jakarta.ee/xml/ns/persistence"
              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-             xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence https://jakarta.ee/xml/ns/persistence/persistence_3_1.xsd">
+             xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence https://jakarta.ee/xml/ns/persistence/persistence_3_0.xsd">
 
     <persistence-unit name="calendarPU" transaction-type="JTA">
         <jta-data-source>jdbc/CalendarDS</jta-data-source>
@@ -82,6 +82,8 @@ Rules:
 1. Flyway owns schema changes.
 2. JPA must not auto-create, update, or drop schema in production.
 3. Keep entity code provider-neutral.
+4. Use the valid Jakarta Persistence 3.0 XML schema for `persistence.xml`; the runtime feature still provides Jakarta Persistence 3.1.
+5. Include `flyway.location` marker files under Flyway classpath locations so Open Liberty can discover migrations reliably.
 
 ## Database schema
 
@@ -138,23 +140,32 @@ create index idx_calendar_member_user_id
 create index idx_calendar_member_role_name
     on calendar_member(role_name);
 
-create table calendar_invitation (
+create table app_invitation (
     id bigserial primary key,
-    calendar_id bigint not null references calendar(id) on delete cascade,
+    calendar_id bigint references calendar(id) on delete cascade,
     invite_token varchar(80) not null unique,
-    role_name varchar(20) not null,
+    role_name varchar(20),
     created_by_user_id bigint not null references app_user(id),
     accepted_by_user_id bigint references app_user(id),
     revoked_at timestamptz,
     accepted_at timestamptz,
     expires_at timestamptz,
     created_at timestamptz not null default now(),
-    check (role_name in ('VIEWER', 'EDITOR')),
+    check (
+        (calendar_id is null and role_name is null)
+        or (calendar_id is not null and role_name = 'EDITOR')
+    ),
     check (length(trim(invite_token)) >= 36)
 );
 
-create index idx_calendar_invitation_calendar_id
-    on calendar_invitation(calendar_id);
+create index idx_app_invitation_calendar_id
+    on app_invitation(calendar_id);
+
+create index idx_app_invitation_created_by_user_id
+    on app_invitation(created_by_user_id);
+
+create index idx_app_invitation_accepted_by_user_id
+    on app_invitation(accepted_by_user_id);
 
 create table calendar_event (
     id bigserial primary key,
@@ -219,27 +230,30 @@ startup/DatabaseMigration.java
 
 Use `javax.sql.DataSource` for the injected data source because it is part of Java SE, not old Java EE.
 
-Do not create a first-user application administrator in this product model. Registered users create their own calendars and become calendar admins for those calendars.
+Do not create open registration. The first user may register only through the one-time bootstrap invite token, and normal registered users create their own calendars and become calendar admins for those calendars.
 
 ## Authentication and registration
 
 Use custom JSF login backed by Jakarta Security. Do not post to `j_security_check`.
 
-Security configuration should declare an authenticated application role such as `USER`, while calendar roles are enforced by application services from `calendar_member`.
+Security configuration should declare the authenticated application role `USER`, while calendar roles are enforced by application services from `calendar_member`.
 
 The database identity store can return a constant `USER` group for active registered users. Calendar `VIEWER`, `EDITOR`, and `ADMIN` roles must not be treated as global app roles.
 
 Registration responsibilities:
 
-1. Accept username, display name, password, and initial calendar name.
+1. Accept an app invitation token, username, display name, password, and initial calendar name.
 2. Validate username and display name are not blank.
-3. Validate password policy before hashing.
-4. Create the user.
-5. Create the first calendar unless the user explicitly chooses to do that later.
-6. Generate the calendar public token.
-7. Grant the creator calendar `ADMIN`.
-8. Log account and calendar creation without logging password or tokens.
-9. Sign the user in or redirect to login after success.
+3. Require a valid unused app invitation, unless a configured bootstrap token is creating the first user.
+4. Validate password policy before generating a Jakarta Security password hash.
+5. Create the user.
+6. Create the first calendar unless the user explicitly chooses to do that later.
+7. Generate the calendar public token.
+8. Grant the creator calendar `ADMIN`.
+9. If the app invitation is scoped to a calendar, grant `EDITOR` membership on that calendar.
+10. Mark the app invitation accepted without logging its token.
+11. Log account and calendar creation without logging password or tokens.
+12. Sign the user in or redirect to login after success.
 
 Minimum password policy:
 
@@ -251,6 +265,10 @@ not equal to username
 
 Do not implement complex composition rules.
 
+Hash passwords with Jakarta Security's built-in `Pbkdf2PasswordHash` using PBKDF2-HMAC-SHA256, 600,000 iterations, a 32-byte salt, and a 32-byte derived key. Do not use app-owned hash formatting.
+
+On an empty database, use a long random `APP_BOOTSTRAP_INVITE_TOKEN` once to create the first user, then remove it and restart the app. Normal account registration links must be generated from the app invitation UI.
+
 ## Domain model
 
 Create these JPA entities:
@@ -259,7 +277,7 @@ Create these JPA entities:
 audit/AuditLog.java
 calendar/Calendar.java
 event/CalendarEvent.java
-invitation/CalendarInvitation.java
+invitation/AppInvitation.java
 membership/CalendarMember.java
 user/AppUser.java
 ```
@@ -285,7 +303,7 @@ Create:
 audit/AuditService.java
 calendar/CalendarService.java
 event/CalendarEventService.java
-invitation/InvitationService.java
+invitation/AppInvitationService.java
 membership/CalendarAccessService.java
 membership/CalendarMembershipService.java
 security/PasswordService.java
@@ -322,16 +340,17 @@ Responsibilities:
 3. Reject mutations for public visitors and viewers.
 4. Enforce last-admin protection.
 
-### InvitationService
+### AppInvitationService
 
 Responsibilities:
 
-1. Create viewer/editor invite links for calendar admins.
-2. Revoke invite links for calendar admins.
-3. Accept invite links for signed-in users.
-4. Accept invite links after registration.
-5. Reject expired, revoked, already accepted, or invalid invites.
-6. Write audit logs.
+1. Create app-only invite links for signed-in users.
+2. Create calendar editor invite links for calendar editors and admins.
+3. Revoke invite links for their creators.
+4. Accept invite links for signed-in users.
+5. Accept invite links after registration.
+6. Reject expired, revoked, already accepted, or invalid invites.
+7. Write audit logs.
 
 Do not send email in v1. The UI should show copyable invite links.
 
@@ -369,17 +388,19 @@ Responsibilities:
 Add JUnit 5 tests for:
 
 1. Password policy edge cases.
-2. Registration rejects duplicate and blank usernames.
-3. Calendar creation grants creator `ADMIN`.
-4. Token generation returns unique non-sequential values.
-5. Public read access cannot mutate.
-6. Viewer cannot mutate.
-7. Editor can mutate events but cannot manage members.
-8. Admin can manage members.
-9. Last-admin protection rejects demotion and removal.
-10. Invite acceptance assigns the intended role.
-11. Revoked, expired, and reused invites are rejected.
-12. Event blank title and end-before-start are rejected.
+2. Registration rejects missing, invalid, used, revoked, and expired app invitations.
+3. Registration rejects duplicate and blank usernames.
+4. App-only invitation creation requires a signed-in user.
+5. Calendar creation grants creator `ADMIN`.
+6. Token generation returns unique non-sequential values.
+7. Public read access cannot mutate.
+8. Viewer cannot mutate.
+9. Editor can mutate events but cannot manage members.
+10. Admin can manage members.
+11. Last-admin protection rejects demotion and removal.
+12. Editor invitation acceptance assigns the intended calendar role.
+13. Revoked, expired, and reused app invitations are rejected.
+14. Event blank title and end-before-start are rejected.
 
 ## GitHub PR checks after M1
 

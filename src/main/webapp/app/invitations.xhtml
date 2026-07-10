@@ -1,0 +1,88 @@
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:f="jakarta.faces.core"
+                xmlns:h="jakarta.faces.html"
+                xmlns:ui="jakarta.faces.facelets"
+                xmlns:p="primefaces"
+                template="/WEB-INF/templates/main.xhtml">
+    <ui:define name="title">App invitations - Shared calendar</ui:define>
+
+    <ui:define name="content">
+        <section class="page-section">
+            <div class="section-header">
+                <div>
+                    <h1>App invitations</h1>
+                    <p class="lead-text">Create single-use links for new accounts.</p>
+                </div>
+            </div>
+
+            <div class="form-grid">
+                <p:panel header="App invitation" styleClass="surface-panel form-panel">
+                    <h:form styleClass="stacked-form">
+                        <p:commandButton value="Generate app link"
+                                         action="#{appInvitationView.createAppInvitation}"
+                                         ajax="false"/>
+                    </h:form>
+                </p:panel>
+
+                <p:panel header="Editor invitation" styleClass="surface-panel form-panel">
+                    <h:form styleClass="stacked-form" rendered="#{appInvitationView.hasEditableCalendars}">
+                        <p:outputLabel for="calendar" value="Calendar"/>
+                        <h:selectOneMenu id="calendar"
+                                         value="#{appInvitationView.selectedCalendarId}"
+                                         required="true"
+                                         requiredMessage="Calendar is required."
+                                         styleClass="ui-inputfield ui-widget ui-state-default ui-corner-all">
+                            <f:selectItem itemLabel="Select calendar" noSelectionOption="true"/>
+                            <f:selectItems value="#{appInvitationView.editableCalendars}"
+                                           var="calendar"
+                                           itemValue="#{calendar.id}"
+                                           itemLabel="#{calendar.name}"/>
+                        </h:selectOneMenu>
+
+                        <p:commandButton value="Generate editor link"
+                                         action="#{appInvitationView.createEditorInvitation}"
+                                         ajax="false"/>
+                    </h:form>
+                    <h:panelGroup layout="block" rendered="#{not appInvitationView.hasEditableCalendars}">
+                        <p>No editable calendars are available.</p>
+                    </h:panelGroup>
+                </p:panel>
+            </div>
+
+            <h:panelGroup layout="block"
+                          styleClass="generated-invite"
+                          rendered="#{appInvitationView.hasGeneratedInviteLink}">
+                <p:outputLabel for="generatedInviteLink" value="Generated link"/>
+                <p:inputText id="generatedInviteLink"
+                             value="#{appInvitationView.generatedInviteLink}"
+                             readonly="true"/>
+            </h:panelGroup>
+
+            <p:dataTable value="#{appInvitationView.invitations}"
+                         var="invitation"
+                         emptyMessage="No app invitations yet."
+                         styleClass="surface-table">
+                <p:column headerText="Invite link">
+                    <p:inputText value="#{invitation.inviteLink}" readonly="true" styleClass="table-copy-field"/>
+                </p:column>
+                <p:column headerText="Scope">
+                    <h:outputText value="#{invitation.scope}"/>
+                </p:column>
+                <p:column headerText="Status">
+                    <h:outputText value="#{invitation.status}"/>
+                </p:column>
+                <p:column headerText="Created">
+                    <h:outputText value="#{invitation.createdAt}"/>
+                </p:column>
+                <p:column headerText="Action">
+                    <h:form rendered="#{invitation.revocable}">
+                        <p:commandButton value="Revoke"
+                                         action="#{appInvitationView.revokeInvitation(invitation.id)}"
+                                         ajax="false"/>
+                    </h:form>
+                    <h:outputText value="-" rendered="#{not invitation.revocable}"/>
+                </p:column>
+            </p:dataTable>
+        </section>
+    </ui:define>
+</ui:composition>

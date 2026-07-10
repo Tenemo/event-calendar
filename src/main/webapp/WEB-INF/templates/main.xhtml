@@ -12,15 +12,18 @@
 <h:body>
     <header class="app-header">
         <div>
-            <h:link outcome="/index" value="Shared calendar" styleClass="app-brand"/>
+            <h:outputLink value="#{request.contextPath}/" styleClass="app-brand">Shared calendar</h:outputLink>
             <p class="app-subtitle">Events for friends, clubs, and recurring plans.</p>
         </div>
         <nav class="app-nav" aria-label="Main navigation">
-            <h:link outcome="/index" value="Home"/>
-            <h:link outcome="/public-calendar" value="Public example"/>
-            <h:link outcome="/app/calendars" value="My calendars"/>
-            <h:link outcome="/login" value="Sign in"/>
-            <h:link outcome="/register" value="Register" styleClass="nav-action"/>
+            <h:outputLink value="#{request.contextPath}/">Home</h:outputLink>
+            <h:outputLink value="#{request.contextPath}/public-calendar">Public example</h:outputLink>
+            <h:outputLink value="#{request.contextPath}/app/calendars" rendered="#{currentUser.signedIn}">My calendars</h:outputLink>
+            <h:outputLink value="#{request.contextPath}/app/invitations" rendered="#{currentUser.signedIn}">App invitations</h:outputLink>
+            <h:outputLink value="#{request.contextPath}/login" rendered="#{not currentUser.signedIn}">Sign in</h:outputLink>
+            <h:form styleClass="nav-form" rendered="#{currentUser.signedIn}">
+                <h:commandButton value="Sign out" action="#{logoutView.logout}" styleClass="nav-action link-button"/>
+            </h:form>
         </nav>
     </header>
 

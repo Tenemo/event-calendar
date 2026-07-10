@@ -18,8 +18,8 @@
                 </div>
 
                 <div class="action-row">
-                    <h:link outcome="/register" value="Create a calendar" styleClass="button-link primary-link"/>
-                    <h:link outcome="/public-calendar" value="View public example" styleClass="button-link secondary-link"/>
+                    <h:outputLink value="#{request.contextPath}/login" styleClass="button-link primary-link">Sign in</h:outputLink>
+                    <h:outputLink value="#{request.contextPath}/public-calendar" styleClass="button-link secondary-link">View public example</h:outputLink>
                 </div>
             </div>
 

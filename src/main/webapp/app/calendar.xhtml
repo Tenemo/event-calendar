@@ -13,8 +13,8 @@
                     <p class="lead-text">Signed-in calendar workspace preview</p>
                 </div>
                 <div class="action-row compact-actions">
-                    <h:link outcome="/app/calendar-members" value="Members" styleClass="button-link secondary-link"/>
-                    <h:link outcome="/public-calendar" value="Public link" styleClass="button-link secondary-link"/>
+                    <h:outputLink value="#{request.contextPath}/app/calendar-members" styleClass="button-link secondary-link">Members</h:outputLink>
+                    <h:outputLink value="#{request.contextPath}/public-calendar" styleClass="button-link secondary-link">Public link</h:outputLink>
                 </div>
             </div>
 

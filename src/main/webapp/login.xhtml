@@ -8,21 +8,28 @@
     <ui:define name="content">
         <section class="narrow-section">
             <p:panel header="Sign in" styleClass="surface-panel form-panel">
-                <p:staticMessage severity="info"
-                                 summary="Sign-in is unavailable."
-                                 detail="Account sign-in is not available yet."/>
                 <h:form styleClass="stacked-form">
                     <p:outputLabel for="username" value="Username"/>
-                    <p:inputText id="username" disabled="true"/>
+                    <p:inputText id="username"
+                                 value="#{loginView.username}"
+                                 autocomplete="username"
+                                 maxlength="80"
+                                 required="true"
+                                 requiredMessage="Username is required."/>
 
                     <p:outputLabel for="password" value="Password"/>
-                    <p:password id="password" disabled="true" feedback="false"/>
+                    <p:password id="password"
+                                value="#{loginView.password}"
+                                autocomplete="current-password"
+                                feedback="false"
+                                maxlength="#{passwordService.maximumPasswordLength}"
+                                required="true"
+                                requiredMessage="Password is required."/>
 
-                    <p:commandButton value="Sign in" disabled="true"/>
+                    <p:commandButton value="Sign in" action="#{loginView.login}" ajax="false"/>
                 </h:form>
                 <p class="form-footer">
-                    Need a calendar?
-                    <h:link outcome="/register" value="Register"/>
+                    Registration requires an invitation link.
                 </p>
             </p:panel>
         </section>

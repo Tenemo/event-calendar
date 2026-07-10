@@ -10,27 +10,36 @@
             <div class="section-header">
                 <div>
                     <h1>My calendars</h1>
-                    <p class="lead-text">Signed-in calendar workspace preview</p>
+                    <p class="lead-text">Create and manage event calendars for friend groups and plans.</p>
                 </div>
-                <h:link outcome="/register" value="Create calendar" styleClass="button-link primary-link"/>
             </div>
 
-            <p:dataTable value="#{[]}" var="calendar" emptyMessage="Calendars are not available yet." styleClass="surface-table">
-                <p:column headerText="Calendar"/>
-                <p:column headerText="Role"/>
-                <p:column headerText="Public link"/>
+            <p:panel header="Create calendar" styleClass="surface-panel form-panel">
+                <h:form styleClass="stacked-form">
+                    <p:outputLabel for="calendarName" value="Calendar name"/>
+                    <p:inputText id="calendarName"
+                                 value="#{calendarListView.calendarName}"
+                                 maxlength="160"
+                                 required="true"
+                                 requiredMessage="Calendar name is required."/>
+                    <p:commandButton value="Create calendar" action="#{calendarListView.createCalendar}" ajax="false"/>
+                </h:form>
+            </p:panel>
+
+            <p:dataTable value="#{calendarListView.calendarMemberships}"
+                         var="calendar"
+                         emptyMessage="No calendars yet."
+                         styleClass="surface-table">
+                <p:column headerText="Calendar">
+                    <h:outputText value="#{calendar.calendarName}"/>
+                </p:column>
+                <p:column headerText="Role">
+                    <h:outputText value="#{calendar.role}"/>
+                </p:column>
+                <p:column headerText="Public link">
+                    <h:outputText value="#{calendar.publicAccessEnabled ? 'Enabled' : 'Disabled'}"/>
+                </p:column>
             </p:dataTable>
-
-            <div class="calendar-list">
-                <h:link outcome="/app/calendar" styleClass="calendar-row">
-                    <span>Kayaking weekend</span>
-                    <strong>Admin</strong>
-                </h:link>
-                <h:link outcome="/app/calendar" styleClass="calendar-row">
-                    <span>Birthday plans</span>
-                    <strong>Editor</strong>
-                </h:link>
-            </div>
         </section>
     </ui:define>
 </ui:composition>
