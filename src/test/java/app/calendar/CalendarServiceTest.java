@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.audit.AuditService;
+import app.config.CalendarConfiguration;
 import app.membership.CalendarAccessService;
 import app.membership.CalendarMember;
 import app.membership.CalendarRole;
@@ -35,6 +36,7 @@ final class CalendarServiceTest {
         setField(calendarService, "tokenService", new FixedTokenService("public-token-123456789012345678901234567890"));
         setField(calendarService, "auditService", new NoopAuditService());
         setField(calendarService, "calendarTimeService", new CalendarTimeService());
+        setField(calendarService, "calendarConfiguration", calendarConfiguration("Europe/Warsaw"));
 
         Calendar calendar = calendarService.createCalendar(creator, " Kayaking ", " River weekend ");
 
@@ -93,14 +95,15 @@ final class CalendarServiceTest {
                 "Europe/London",
                 false,
                 calendar.getVersion());
-        String rotatedToken = calendarService.rotatePublicToken(actor, calendar.getId(), calendar.getVersion());
+        Calendar rotatedCalendar = calendarService.rotatePublicToken(actor, calendar.getId(), calendar.getVersion());
 
         assertAll(
                 () -> assertEquals("River days", calendar.getName()),
                 () -> assertEquals("Summer plans", calendar.getDescription()),
                 () -> assertEquals("Europe/London", calendar.getTimezone()),
                 () -> assertFalse(calendar.isPublicAccessEnabled()),
-                () -> assertEquals("rotated-token-123456789012345678901234567890", rotatedToken),
+                () -> assertEquals(calendar, rotatedCalendar),
+                () -> assertEquals("rotated-token-123456789012345678901234567890", rotatedCalendar.getPublicToken()),
                 () -> assertEquals(List.of("settings_updated", "public_token_rotated"), auditService.actions),
                 () -> assertEquals(2, entityManagerStub.flushCount()));
     }
@@ -136,6 +139,12 @@ final class CalendarServiceTest {
         calendar.setActive(true);
         calendar.setCreatedByUser(creator);
         return calendar;
+    }
+
+    private static CalendarConfiguration calendarConfiguration(String defaultTimeZone) {
+        CalendarConfiguration calendarConfiguration = new CalendarConfiguration();
+        setField(calendarConfiguration, "defaultTimeZone", defaultTimeZone);
+        return calendarConfiguration;
     }
 
     private static AppUser activeUser(Long id) {

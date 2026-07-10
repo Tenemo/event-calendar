@@ -12,7 +12,7 @@
     <ui:define name="title">#{calendarView.available ? calendarView.calendarName : 'Calendar not found'} - Shared calendar</ui:define>
 
     <ui:define name="content">
-        <h:panelGroup layout="block" styleClass="page-section" rendered="#{calendarView.available}">
+        <h:panelGroup id="calendarContent" layout="block" styleClass="page-section" rendered="#{calendarView.available}">
             <div class="section-header compact-heading">
                 <div>
                     <div class="heading-meta">
@@ -50,7 +50,9 @@
                         <h:form rendered="#{calendarView.editable}">
                             <p:commandButton value="New event"
                                              action="#{calendarView.resetEventForm}"
-                                             ajax="false"
+                                             ajax="true"
+                                             process="@this"
+                                             update=":messages :calendarContent"
                                              styleClass="ui-button-outlined"/>
                         </h:form>
                     </div>
@@ -70,13 +72,17 @@
                                     <h:form>
                                         <p:commandButton value="Edit"
                                                          action="#{calendarView.selectEvent(event.id)}"
-                                                         ajax="false"
+                                                         ajax="true"
+                                                         process="@this"
+                                                         update=":messages :calendarContent"
                                                          styleClass="ui-button-outlined"/>
                                     </h:form>
                                     <h:form>
                                         <p:commandButton value="Delete"
                                                          action="#{calendarView.deleteEvent(event.id, event.version)}"
-                                                         ajax="false"
+                                                         ajax="true"
+                                                         process="@this"
+                                                         update=":messages :calendarContent"
                                                          styleClass="ui-button-danger ui-button-outlined">
                                             <p:confirm header="Delete event" message="Delete this event permanently?"/>
                                         </p:commandButton>
@@ -139,15 +145,21 @@
                         <div class="action-row compact-actions">
                             <p:commandButton value="Save changes"
                                              action="#{calendarView.updateEvent}"
-                                             ajax="false"
+                                             ajax="true"
+                                             process="@form"
+                                             update=":messages :calendarContent"
                                              rendered="#{calendarView.editingEvent}"/>
                             <p:commandButton value="Create event"
                                              action="#{calendarView.createEvent}"
-                                             ajax="false"
+                                             ajax="true"
+                                             process="@form"
+                                             update=":messages :calendarContent"
                                              rendered="#{not calendarView.editingEvent}"/>
                             <p:commandButton value="Cancel edit"
                                              action="#{calendarView.resetEventForm}"
-                                             ajax="false"
+                                             ajax="true"
+                                             process="@this"
+                                             update=":messages :calendarContent"
                                              styleClass="ui-button-secondary ui-button-outlined"
                                              rendered="#{calendarView.editingEvent}"/>
                         </div>

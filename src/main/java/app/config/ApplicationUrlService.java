@@ -29,17 +29,46 @@ public class ApplicationUrlService {
         }
 
         FacesContext facesContext = FacesContext.getCurrentInstance();
-        String requestBaseUrl = facesContext.getExternalContext().getRequestScheme()
+        return requestDerivedBaseUrl(
+                facesContext.getExternalContext().getRequestScheme(),
+                facesContext.getExternalContext().getRequestServerName(),
+                facesContext.getExternalContext().getRequestServerPort(),
+                facesContext.getExternalContext().getRequestContextPath());
+    }
+
+    static String requestDerivedBaseUrl(
+            String requestScheme, String requestServerName, int requestPort, String requestContextPath) {
+        if (!isLoopbackHost(requestServerName)) {
+            throw new IllegalStateException("APP_BASE_URL is required when the application is accessed from a non-local host.");
+        }
+        String requestBaseUrl = requestScheme
                 + "://"
-                + facesContext.getExternalContext().getRequestServerName()
-                + requestPort(facesContext)
-                + facesContext.getExternalContext().getRequestContextPath();
+                + hostForUrl(requestServerName)
+                + requestPort(requestScheme, requestPort)
+                + requestContextPath;
         return removeTrailingSlashes(requestBaseUrl);
     }
 
-    private String requestPort(FacesContext facesContext) {
-        int requestPort = facesContext.getExternalContext().getRequestServerPort();
-        String requestScheme = facesContext.getExternalContext().getRequestScheme();
+    static boolean isLoopbackHost(String serverName) {
+        if (serverName == null) {
+            return false;
+        }
+        return serverName.equalsIgnoreCase("localhost")
+                || serverName.equalsIgnoreCase("localhost.")
+                || serverName.equals("127.0.0.1")
+                || serverName.equals("::1")
+                || serverName.equals("[::1]")
+                || serverName.equals("0:0:0:0:0:0:0:1");
+    }
+
+    static String hostForUrl(String serverName) {
+        if (serverName.contains(":") && !serverName.startsWith("[")) {
+            return "[" + serverName + "]";
+        }
+        return serverName;
+    }
+
+    private static String requestPort(String requestScheme, int requestPort) {
         if ((requestScheme.equals("http") && requestPort == 80)
                 || (requestScheme.equals("https") && requestPort == 443)) {
             return "";
@@ -54,7 +83,7 @@ public class ApplicationUrlService {
         return path.startsWith("/") ? path : "/" + path;
     }
 
-    private String removeTrailingSlashes(String value) {
+    private static String removeTrailingSlashes(String value) {
         String normalizedValue = value;
         while (normalizedValue.endsWith("/")) {
             normalizedValue = normalizedValue.substring(0, normalizedValue.length() - 1);

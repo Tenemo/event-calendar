@@ -62,7 +62,9 @@ APP_BOOTSTRAP_INVITE_TOKEN=
 
 `APP_BOOTSTRAP_INVITE_TOKEN` is optional and should be blank during normal use. On a brand-new empty database, set it to a long random secret, open `/register?token=that-secret`, create the first account, then remove the value and restart the app. After that first account exists, app invitation links are generated from `/app/invitations`.
 
-`APP_BASE_URL` is the canonical externally reachable application URL used when generating invitation and public-calendar links. Set it to the HTTPS custom domain in production, without a query string or fragment. `HTTPS_PORT` configures Liberty's local HTTPS listener and can be changed when running an additional local verification server.
+`APP_TIMEZONE` is the default IANA timezone assigned to new calendars. An invalid value prevents the application from starting so a deployment error cannot surface as an end-user calendar-creation failure.
+
+`APP_BASE_URL` is the canonical externally reachable application URL used when generating invitation and public-calendar links. Set it to the HTTPS custom domain in production, without a query string or fragment. When it is unset, request-derived links are allowed only for loopback development hosts such as `localhost`; non-local requests require an explicit canonical URL. `HTTPS_PORT` configures Liberty's local HTTPS listener and can be changed when running an additional local verification server.
 
 ## Database
 
@@ -94,7 +96,7 @@ The signed-in calendar workspace shows all events in the calendar's configured I
 
 Calendar admins can change the name, description, timezone, and public-access state from the settings page. They can copy or rotate the public link; rotation immediately invalidates the old bearer URL. Public pages are read-only, contain `noindex, nofollow`, and return a generic 404 for invalid, disabled, or rotated tokens.
 
-Calendar admins can list active and inactive members, change calendar-scoped roles, reactivate access by saving a role, and remove access. The service layer prevents the last active admin from being demoted or removed. Editors and admins can create editor invitation links, while only admins can manage member roles and calendar settings.
+Calendar admins can list active and inactive members, change calendar-scoped roles, reactivate access by saving a role, and remove access. Admins cannot demote themselves or remove their own admin access; another admin must make those changes. The service layer also prevents the last active admin from being demoted or removed. Editors and admins can create editor invitation links, while only admins can manage member roles and calendar settings.
 
 ## Running tests
 
@@ -121,7 +123,7 @@ mise run e2e
 
 The browser tests use Chromium by default. Set `BROWSER` to `firefox` or `webkit` to use another Playwright browser, and set `APP_BASE_URL` to target a non-default running app URL.
 
-The browser suite covers extensionless routes, real 404 responses for invalid public links, `noindex` public pages, app-only and editor invitation generation, invitation acceptance by new and existing users, registration, login and logout, calendar creation, event create/edit/delete, settings persistence, public-link viewing, member role changes, last-admin protection, and viewer read-only behavior.
+The browser suite covers extensionless routes, real 404 responses for invalid and rotated public links, `noindex` public pages, app-only and editor invitation generation, invitation acceptance by new and existing users, registration, login and logout, calendar creation, event create/edit/delete and validation, multi-day all-day event display, calendar identifier persistence across mutations and reloads, settings validation and persistence, accessible public-link viewing, member promotion, demotion, removal and reactivation, protected self-admin controls, missing-identifier handling, and viewer read-only behavior. Focused service tests cover last-admin protection and reject admin self-demotion or self-removal even when another admin exists.
 
 ## Running with Liberty dev mode
 

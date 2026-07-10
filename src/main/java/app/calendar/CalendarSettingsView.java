@@ -66,8 +66,8 @@ public class CalendarSettingsView implements Serializable {
 
     public void rotatePublicLink() {
         try {
-            publicToken = calendarService.rotatePublicToken(currentUser.require(), calendarId, version);
-            Calendar calendar = calendarService.requireActiveCalendar(calendarId);
+            Calendar calendar = calendarService.rotatePublicToken(currentUser.require(), calendarId, version);
+            publicToken = calendar.getPublicToken();
             version = calendar.getVersion();
             addMessage(FacesMessage.SEVERITY_INFO, "Public link rotated.", "The previous public link no longer works.");
         } catch (AuthorizationException | ConflictException | NotFoundException exception) {

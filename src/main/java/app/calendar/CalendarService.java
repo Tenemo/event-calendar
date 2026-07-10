@@ -1,13 +1,14 @@
 package app.calendar;
 
 import app.audit.AuditService;
+import app.config.CalendarConfiguration;
 import app.membership.CalendarAccessService;
 import app.membership.CalendarMember;
 import app.membership.CalendarRole;
 import app.security.TokenService;
 import app.user.AppUser;
-import app.util.NotFoundException;
 import app.util.ConflictException;
+import app.util.NotFoundException;
 import app.util.ValidationException;
 import jakarta.ejb.Stateless;
 import jakarta.inject.Inject;
@@ -25,7 +26,6 @@ public class CalendarService {
     private static final int MAXIMUM_CALENDAR_NAME_LENGTH = 160;
     private static final int MAXIMUM_TIMEZONE_LENGTH = 80;
     private static final int MAXIMUM_TOKEN_GENERATION_ATTEMPTS = 10;
-    private static final String DEFAULT_TIMEZONE_ENVIRONMENT_VARIABLE = "APP_TIMEZONE";
 
     @PersistenceContext(unitName = "calendarPU")
     private EntityManager entityManager;
@@ -42,7 +42,8 @@ public class CalendarService {
     @Inject
     private CalendarTimeService calendarTimeService;
 
-    private String defaultTimeZone = System.getenv().getOrDefault(DEFAULT_TIMEZONE_ENVIRONMENT_VARIABLE, "Europe/Warsaw");
+    @Inject
+    private CalendarConfiguration calendarConfiguration;
 
     public Calendar createCalendar(AppUser creator, String name) {
         return createCalendar(creator, name, null);
@@ -68,7 +69,7 @@ public class CalendarService {
         calendar.setName(normalizedName);
         calendar.setDescription(normalizeOptionalText(description));
         calendar.setPublicToken(generateUniquePublicToken());
-        calendar.setTimezone(calendarTimeService.normalizeTimeZone(defaultTimeZone));
+        calendar.setTimezone(calendarConfiguration.getDefaultTimeZone());
         calendar.setPublicAccessEnabled(true);
         calendar.setActive(true);
         calendar.setCreatedByUser(managedCreator);
@@ -144,11 +145,11 @@ public class CalendarService {
                 .getResultList();
     }
 
-    public String rotatePublicToken(AppUser actor, Long calendarId) {
+    public Calendar rotatePublicToken(AppUser actor, Long calendarId) {
         return rotatePublicToken(actor, calendarId, null);
     }
 
-    public String rotatePublicToken(AppUser actor, Long calendarId, Integer expectedVersion) {
+    public Calendar rotatePublicToken(AppUser actor, Long calendarId, Integer expectedVersion) {
         calendarAccessService.requireCanAdminister(actor, calendarId);
         Calendar calendar = requireActiveCalendar(calendarId);
         requireExpectedVersion(calendar, expectedVersion);
@@ -156,7 +157,7 @@ public class CalendarService {
         calendar.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
         auditService.record(actor, calendar, "calendar", calendar.getId(), "public_token_rotated", "Public token rotated.");
         flushWithConflictMessage();
-        return calendar.getPublicToken();
+        return calendar;
     }
 
     public Calendar updateCalendarSettings(

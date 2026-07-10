@@ -13,7 +13,6 @@ import jakarta.faces.view.ViewScoped;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.servlet.http.HttpServletResponse;
-import java.io.IOException;
 import java.io.Serializable;
 import java.util.List;
 
@@ -39,7 +38,7 @@ public class CalendarMembersView implements Serializable {
         try {
             AppUser actor = currentUser.require();
             currentUserId = actor.getId();
-            Calendar calendar = calendarService.requireActiveCalendar(calendarId);
+            Calendar calendar = calendarService.requireAdminCalendar(actor, calendarId);
             calendarName = calendar.getName();
             reloadMembers(actor);
             available = true;
@@ -54,25 +53,24 @@ public class CalendarMembersView implements Serializable {
             calendarMembershipService.changeMemberRole(actor, calendarId, userId, role);
             reloadMembers(actor);
             addMessage(FacesMessage.SEVERITY_INFO, "Member role saved.", "The member's access has been updated.");
-        } catch (AuthorizationException | NotFoundException | ValidationException exception) {
+        } catch (ValidationException exception) {
+            reloadMembersAfterRejectedChange();
+            addMessage(FacesMessage.SEVERITY_ERROR, "Member role could not be saved.", exception.getMessage());
+        } catch (AuthorizationException | NotFoundException exception) {
             addMessage(FacesMessage.SEVERITY_ERROR, "Member role could not be saved.", exception.getMessage());
         }
     }
 
-    public void disableMember(Long userId) throws IOException {
+    public void disableMember(Long userId) {
         try {
             AppUser actor = currentUser.require();
             calendarMembershipService.disableMember(actor, calendarId, userId);
-            if (actor.getId().equals(userId)) {
-                FacesContext facesContext = FacesContext.getCurrentInstance();
-                facesContext.getExternalContext().redirect(
-                        facesContext.getExternalContext().getRequestContextPath() + "/app/calendars");
-                facesContext.responseComplete();
-                return;
-            }
             reloadMembers(actor);
             addMessage(FacesMessage.SEVERITY_INFO, "Member access removed.", "The member can no longer open this calendar.");
-        } catch (AuthorizationException | NotFoundException | ValidationException exception) {
+        } catch (ValidationException exception) {
+            reloadMembersAfterRejectedChange();
+            addMessage(FacesMessage.SEVERITY_ERROR, "Member access could not be removed.", exception.getMessage());
+        } catch (AuthorizationException | NotFoundException exception) {
             addMessage(FacesMessage.SEVERITY_ERROR, "Member access could not be removed.", exception.getMessage());
         }
     }
@@ -87,6 +85,14 @@ public class CalendarMembersView implements Serializable {
                         member.isActive(),
                         member.getUser().getId().equals(currentUserId)))
                 .toList();
+    }
+
+    private void reloadMembersAfterRejectedChange() {
+        try {
+            reloadMembers(currentUser.require());
+        } catch (AuthorizationException | NotFoundException exception) {
+            markNotFound();
+        }
     }
 
     private void markNotFound() {

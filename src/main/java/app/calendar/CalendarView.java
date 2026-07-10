@@ -19,6 +19,7 @@ import jakarta.inject.Named;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.Serializable;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
@@ -153,7 +154,7 @@ public class CalendarView implements Serializable {
         eventTitle = null;
         eventDescription = null;
         eventLocation = null;
-        LocalDateTime nextHour = LocalDateTime.now(java.time.ZoneId.of(timeZone == null ? "UTC" : timeZone))
+        LocalDateTime nextHour = LocalDateTime.now(ZoneId.of(timeZone == null ? "UTC" : timeZone))
                 .plusHours(1)
                 .truncatedTo(ChronoUnit.HOURS);
         eventStartAt = nextHour;

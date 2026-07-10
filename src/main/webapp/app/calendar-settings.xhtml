@@ -12,7 +12,7 @@
     <ui:define name="title">Calendar settings - Shared calendar</ui:define>
 
     <ui:define name="content">
-        <h:panelGroup layout="block" styleClass="page-section" rendered="#{calendarSettingsView.available}">
+        <h:panelGroup id="settingsContent" layout="block" styleClass="page-section" rendered="#{calendarSettingsView.available}">
             <div class="section-header compact-heading">
                 <div>
                     <p class="eyebrow">Calendar administration</p>
@@ -52,7 +52,11 @@
                             <p:outputLabel for="publicAccess" value="Enable public read-only access"/>
                         </div>
 
-                        <p:commandButton value="Save settings" action="#{calendarSettingsView.save}" ajax="false"/>
+                        <p:commandButton value="Save settings"
+                                         action="#{calendarSettingsView.save}"
+                                         ajax="true"
+                                         process="@form"
+                                         update=":messages :settingsContent"/>
                     </h:form>
                 </p:panel>
 
@@ -62,14 +66,18 @@
                             <span class="status-dot #{calendarSettingsView.publicAccessEnabled ? 'enabled' : 'disabled'}"></span>
                             #{calendarSettingsView.publicAccessEnabled ? 'Public access enabled' : 'Public access disabled'}
                         </p>
-                        <p:inputText value="#{calendarSettingsView.publicLink}"
+                        <p:outputLabel for="publicLink" value="Public calendar link"/>
+                        <p:inputText id="publicLink"
+                                     value="#{calendarSettingsView.publicLink}"
                                      readonly="true"
                                      styleClass="table-copy-field"/>
                         <p>Rotating the link immediately invalidates the previous address.</p>
                         <h:form>
                             <p:commandButton value="Rotate public link"
                                              action="#{calendarSettingsView.rotatePublicLink}"
-                                             ajax="false"
+                                             ajax="true"
+                                             process="@this"
+                                             update=":messages :settingsContent"
                                              styleClass="ui-button-danger ui-button-outlined">
                                 <p:confirm header="Rotate public link"
                                            message="Anyone using the current link will lose access. Continue?"/>

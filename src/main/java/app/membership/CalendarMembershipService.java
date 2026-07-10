@@ -99,6 +99,7 @@ public class CalendarMembershipService {
         List<CalendarMember> lockedMembers = lockMembershipsForCalendar(calendarId);
         calendarAccessService.requireCanAdminister(actor, calendarId);
         CalendarMember member = requireMembership(lockedMembers, targetUserId);
+        requireAdminNotChangingOwnRole(actor, member, newRole);
         if (member.getRole() == CalendarRole.ADMIN && newRole != CalendarRole.ADMIN) {
             calendarMembershipPolicy.requireSafeRoleChange(
                     member.getRole(), newRole, anotherActiveAdminExists(lockedMembers, targetUserId));
@@ -116,6 +117,7 @@ public class CalendarMembershipService {
         List<CalendarMember> lockedMembers = lockMembershipsForCalendar(calendarId);
         calendarAccessService.requireCanAdminister(actor, calendarId);
         CalendarMember member = requireMembership(lockedMembers, targetUserId);
+        requireAdminNotRemovingOwnAccess(actor, member);
         if (member.getRole() == CalendarRole.ADMIN) {
             calendarMembershipPolicy.requireSafeDisable(member.getRole(), anotherActiveAdminExists(lockedMembers, targetUserId));
         }
@@ -127,8 +129,14 @@ public class CalendarMembershipService {
 
     public CalendarMember addMemberByRole(AppUser actor, Long calendarId, Long userId, CalendarRole role) {
         calendarAccessService.requireCanAdminister(actor, calendarId);
-        lockMembershipsForCalendar(calendarId);
+        if (role == null) {
+            throw new ValidationException("Role is required.");
+        }
+        List<CalendarMember> lockedMembers = lockMembershipsForCalendar(calendarId);
         calendarAccessService.requireCanAdminister(actor, calendarId);
+        if (actor != null && actor.getId() != null && actor.getId().equals(userId)) {
+            requireAdminNotChangingOwnRole(actor, requireMembership(lockedMembers, userId), role);
+        }
         Calendar calendar = calendarService.requireActiveCalendar(calendarId);
         AppUser user = userService.requireActiveUser(userId);
         CalendarMember member = grantOrUpdateMembership(calendar, user, role);
@@ -178,6 +186,20 @@ public class CalendarMembershipService {
                         && member.getRole() == CalendarRole.ADMIN
                         && member.getUser() != null
                         && !targetUserId.equals(member.getUser().getId()));
+    }
+
+    private void requireAdminNotChangingOwnRole(AppUser actor, CalendarMember member, CalendarRole newRole) {
+        if (member.getRole() == CalendarRole.ADMIN
+                && newRole != CalendarRole.ADMIN
+                && actor.getId().equals(member.getUser().getId())) {
+            throw new ValidationException("You cannot change your own admin role.");
+        }
+    }
+
+    private void requireAdminNotRemovingOwnAccess(AppUser actor, CalendarMember member) {
+        if (member.getRole() == CalendarRole.ADMIN && actor.getId().equals(member.getUser().getId())) {
+            throw new ValidationException("You cannot remove your own admin access.");
+        }
     }
 
     private void requireValidInvitationMembership(Calendar calendar, AppUser user, CalendarRole role) {

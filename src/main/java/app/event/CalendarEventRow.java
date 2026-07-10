@@ -8,6 +8,7 @@ import java.util.Locale;
 
 public final class CalendarEventRow implements Serializable {
     private static final DateTimeFormatter DATE_LABEL_FORMAT = DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH);
+    private static final DateTimeFormatter ALL_DAY_DATE_FORMAT = DateTimeFormatter.ofPattern("EEE, MMM d, yyyy", Locale.ENGLISH);
     private static final DateTimeFormatter DATE_TIME_FORMAT = DateTimeFormatter.ofPattern("EEE, MMM d, yyyy 'at' HH:mm", Locale.ENGLISH);
 
     private final Long id;
@@ -91,6 +92,12 @@ public final class CalendarEventRow implements Serializable {
 
     public String getTimeLabel() {
         if (allDay) {
+            if (!startAt.toLocalDate().equals(endAt.toLocalDate())) {
+                return "All day from "
+                        + startAt.format(ALL_DAY_DATE_FORMAT)
+                        + " to "
+                        + endAt.format(ALL_DAY_DATE_FORMAT);
+            }
             return "All day";
         }
         return startAt.format(DATE_TIME_FORMAT) + " to " + endAt.format(DATE_TIME_FORMAT);
