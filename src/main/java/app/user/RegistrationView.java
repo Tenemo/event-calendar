@@ -1,5 +1,9 @@
 package app.user;
 
+import app.invitation.AppInvitation;
+import app.invitation.AppInvitationService;
+import app.security.CurrentUser;
+import app.util.AuthorizationException;
 import app.util.ValidationException;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.faces.application.FacesMessage;
@@ -23,6 +27,12 @@ public class RegistrationView {
     @Inject
     private SecurityContext securityContext;
 
+    @Inject
+    private CurrentUser currentUser;
+
+    @Inject
+    private AppInvitationService appInvitationService;
+
     private String username;
     private String displayName;
     private String calendarName;
@@ -38,6 +48,26 @@ public class RegistrationView {
                     null,
                     new FacesMessage(FacesMessage.SEVERITY_ERROR, "Registration failed.", exception.getMessage()));
         }
+    }
+
+    public void acceptInvitation() throws IOException {
+        try {
+            AppInvitation invitation = appInvitationService.acceptInvitation(inviteToken, currentUser.require());
+            String route = invitation.getCalendar() == null
+                    ? "/app/calendars"
+                    : "/app/calendar?id=" + invitation.getCalendar().getId();
+            FacesContext facesContext = FacesContext.getCurrentInstance();
+            facesContext.getExternalContext().redirect(facesContext.getExternalContext().getRequestContextPath() + route);
+            facesContext.responseComplete();
+        } catch (AuthorizationException | ValidationException exception) {
+            FacesContext.getCurrentInstance().addMessage(
+                    null,
+                    new FacesMessage(FacesMessage.SEVERITY_ERROR, "Invitation could not be accepted.", exception.getMessage()));
+        }
+    }
+
+    public boolean isSignedIn() {
+        return currentUser.isSignedIn();
     }
 
     public String getUsername() {

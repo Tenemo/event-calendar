@@ -218,7 +218,7 @@ M0 pages should communicate product direction without pretending later workflows
 
 Use PrimeFaces components on these pages so PrimeFaces CSS and JavaScript are loaded.
 
-Enable Jakarta Faces automatic extensionless mapping in `web.xml` and use extensionless links in rendered UI and browser tests. For example, users should see `/login`, `/register`, `/public-calendar`, `/app/calendars`, `/app/calendar`, and `/app/calendar-members` rather than `.xhtml` URLs.
+Enable Jakarta Faces automatic extensionless mapping in `web.xml` and use extensionless links in rendered UI and browser tests. For example, users should see `/login`, `/register`, `/app/calendars`, `/app/calendar`, and `/app/calendar-members` rather than `.xhtml` URLs. Public calendars use `/calendar/{publicToken}`.
 
 ## Health endpoint
 

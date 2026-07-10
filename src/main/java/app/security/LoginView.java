@@ -12,6 +12,8 @@ import jakarta.security.enterprise.credential.UsernamePasswordCredential;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 @Named
 @RequestScoped
@@ -21,6 +23,7 @@ public class LoginView {
 
     private String username;
     private String password;
+    private String inviteToken;
 
     public void login() throws IOException {
         if (isBlank(username) || isBlank(password)) {
@@ -40,7 +43,10 @@ public class LoginView {
                         .newAuthentication(true));
 
         if (status == AuthenticationStatus.SUCCESS) {
-            redirectToApplication(facesContext, "/app/calendars");
+            String route = isBlank(inviteToken)
+                    ? "/app/calendars"
+                    : "/register?token=" + URLEncoder.encode(inviteToken.trim(), StandardCharsets.UTF_8);
+            redirectToApplication(facesContext, route);
         } else if (status == AuthenticationStatus.SEND_CONTINUE) {
             facesContext.responseComplete();
         } else {
@@ -63,6 +69,14 @@ public class LoginView {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public String getInviteToken() {
+        return inviteToken;
+    }
+
+    public void setInviteToken(String inviteToken) {
+        this.inviteToken = inviteToken;
     }
 
     private void redirectToApplication(FacesContext facesContext, String route) throws IOException {

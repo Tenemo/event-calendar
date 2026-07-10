@@ -38,7 +38,7 @@ mise run dev
 
 The app listens on `http://localhost:9080` by default. The liveness check is available at `http://localhost:9080/health`.
 
-Jakarta Faces extensionless routing is enabled, so browser-facing pages use clean paths such as `/login`, `/register`, `/public-calendar`, `/app/calendars`, `/app/calendar-members`, and `/app/invitations`. The underlying Facelets files remain `.xhtml` files.
+Jakarta Faces extensionless routing is enabled, so browser-facing pages use clean paths such as `/login`, `/register`, `/app/calendars`, `/app/calendar`, `/app/calendar-members`, `/app/calendar-settings`, and `/app/invitations`. Public calendars use `/calendar/{publicToken}`. The underlying Facelets files remain `.xhtml` files.
 
 ## Environment variables
 
@@ -48,6 +48,7 @@ Current local variables:
 
 ```bash
 PORT=9080
+HTTPS_PORT=9443
 COOKIE_SECURE=false
 PGHOST=localhost
 PGPORT=5432
@@ -60,6 +61,8 @@ APP_BOOTSTRAP_INVITE_TOKEN=
 ```
 
 `APP_BOOTSTRAP_INVITE_TOKEN` is optional and should be blank during normal use. On a brand-new empty database, set it to a long random secret, open `/register?token=that-secret`, create the first account, then remove the value and restart the app. After that first account exists, app invitation links are generated from `/app/invitations`.
+
+`APP_BASE_URL` is the canonical externally reachable application URL used when generating invitation and public-calendar links. Set it to the HTTPS custom domain in production, without a query string or fragment. `HTTPS_PORT` configures Liberty's local HTTPS listener and can be changed when running an additional local verification server.
 
 ## Database
 
@@ -82,6 +85,16 @@ Passwords must be at least 14 characters, nonblank, and different from the usern
 The application uses `USER` for signed-in pages. There is no global administrator role. Calendar permissions are loaded from `calendar_member` and enforced in services with calendar-scoped `VIEWER`, `EDITOR`, and `ADMIN` roles.
 
 Signed-in users can create single-use app-only registration links at `/app/invitations`. Calendar editors and admins can also create app invitation links that grant `EDITOR` membership on one of their editable calendars. Invitation tokens are bearer secrets and should be shared only with the intended person.
+
+Invitation links work for both new and existing users. A new user registers through the link; an existing user signs in and explicitly accepts it. Each invitation is single-use and can be revoked by its creator while unused.
+
+## Calendar workflows
+
+The signed-in calendar workspace shows all events in the calendar's configured IANA timezone. `EDITOR` and `ADMIN` members can create, edit, and delete events. Event titles, locations, start and end times, daylight-saving transitions, and stale edits are validated on the server. `VIEWER` members receive the same event view without mutation controls.
+
+Calendar admins can change the name, description, timezone, and public-access state from the settings page. They can copy or rotate the public link; rotation immediately invalidates the old bearer URL. Public pages are read-only, contain `noindex, nofollow`, and return a generic 404 for invalid, disabled, or rotated tokens.
+
+Calendar admins can list active and inactive members, change calendar-scoped roles, reactivate access by saving a role, and remove access. The service layer prevents the last active admin from being demoted or removed. Editors and admins can create editor invitation links, while only admins can manage member roles and calendar settings.
 
 ## Running tests
 
@@ -108,7 +121,7 @@ mise run e2e
 
 The browser tests use Chromium by default. Set `BROWSER` to `firefox` or `webkit` to use another Playwright browser, and set `APP_BASE_URL` to target a non-default running app URL.
 
-The browser suite covers extensionless routes, noindex public calendar pages, app-only invitation generation, editor invitation generation, invitation-only registration, logout, failed login, successful login, and signed-in calendar creation.
+The browser suite covers extensionless routes, real 404 responses for invalid public links, `noindex` public pages, app-only and editor invitation generation, invitation acceptance by new and existing users, registration, login and logout, calendar creation, event create/edit/delete, settings persistence, public-link viewing, member role changes, last-admin protection, and viewer read-only behavior.
 
 ## Running with Liberty dev mode
 
@@ -132,6 +145,4 @@ mise run verify-running-app
 
 ## Known limitations
 
-The current UI intentionally exposes only the M1 account and calendar foundation: invitation-only registration, app invitation generation, login, logout, the signed-in calendar list, and basic calendar creation. The service layer and schema include memberships, public tokens, events, audit logs, and role checks, but full event management, member administration, and token-based public calendar routing are still future UI work.
-
-Production Docker packaging, Railway deployment, backup/restore workflows, and operational hardening are not complete yet.
+Production Docker packaging, Railway deployment, backup/restore workflows, and operational hardening are not complete yet. Recurring events, notifications, email delivery, ICS import/export, and native mobile apps remain intentionally out of scope for v1.

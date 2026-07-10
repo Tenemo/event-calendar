@@ -199,7 +199,7 @@ src/main/webapp
 
 Public calendar routes must be reachable without authentication. Authenticated app routes under `/app/*` require login. Calendar mutation and member management are enforced in services with calendar-specific authorization.
 
-Jakarta Faces extensionless routing is enabled. User-facing links should prefer clean paths such as `/login`, `/register`, `/public-calendar`, `/app/calendars`, `/app/calendar`, `/app/calendar-members`, and `/app/invitations`; `.xhtml` remains an implementation file suffix, not the canonical browser route.
+Jakarta Faces extensionless routing is enabled. User-facing links should prefer clean paths such as `/login`, `/register`, `/app/calendars`, `/app/calendar`, `/app/calendar-members`, `/app/calendar-settings`, and `/app/invitations`; `.xhtml` remains an implementation file suffix, not the canonical browser route.
 
 ### 3.3 URL model
 
@@ -207,12 +207,6 @@ Use a public calendar URL shape that is easy to share and hard to guess:
 
 ```text
 /calendar/{publicToken}
-```
-
-If JSF routing makes that shape awkward in the first implementation, use a temporary equivalent such as:
-
-```text
-/public-calendar?token={publicToken}
 ```
 
 Do not expose sequential calendar ids in public read URLs. Do not use calendar names or slugs as access secrets.

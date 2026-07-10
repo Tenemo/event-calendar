@@ -19,7 +19,6 @@
 
                 <div class="action-row">
                     <h:outputLink value="#{request.contextPath}/login" styleClass="button-link primary-link">Sign in</h:outputLink>
-                    <h:outputLink value="#{request.contextPath}/public-calendar" styleClass="button-link secondary-link">View public example</h:outputLink>
                 </div>
             </div>
 
@@ -27,7 +26,7 @@
                 <div class="preview-header">
                     <div>
                         <h2>Kayaking weekend</h2>
-                        <p>Public link preview</p>
+                        <p>Example event calendar</p>
                     </div>
                     <span class="role-chip">Read-only</span>
                 </div>
@@ -47,7 +46,7 @@
                     <b class="has-event">13</b>
                     <b>14</b>
                 </div>
-                <p:dataTable value="#{[]}" var="event" emptyMessage="Events are not available yet." styleClass="compact-table">
+                <p:dataTable value="#{[]}" var="event" emptyMessage="Create an account to start planning." styleClass="compact-table">
                     <p:column headerText="Event"/>
                     <p:column headerText="Time"/>
                     <p:column headerText="Place"/>

@@ -1,6 +1,19 @@
 # M2: calendar and member workflows
 
+Status: implemented and locally verified.
+
 Use this milestone to build the real user-facing workflows on top of the M1 services: public calendar viewing, invitation-only registration and login screens, signed-in calendar list, calendar creation, event CRUD, invite links, invite acceptance, calendar settings, and member management.
+
+## Delivered implementation
+
+1. Public calendars use `/calendar/{publicToken}`, return generic 404 pages for invalid or disabled tokens, and include `noindex, nofollow`.
+2. Authenticated calendar pages render persisted events in the calendar timezone and expose create, edit, and delete actions only to editors and admins.
+3. Calendar-local input is converted to offset-aware storage, with invalid and ambiguous daylight-saving times rejected.
+4. Event and calendar writes compare entity versions and translate optimistic-lock failures into user-readable reload messages.
+5. Calendar settings cover name, description, IANA timezone, public access, and audited public-token rotation.
+6. Member administration covers role changes, reactivation, access removal, audit logging, and service-level last-admin protection.
+7. App-only and calendar-editor invitations can be revoked while unused and accepted by either new or existing users.
+8. The Playwright suite exercises the stable routes and complete invitation, calendar, event, public-link, and role workflows against PostgreSQL and Liberty.
 
 ## Milestone checklist
 
@@ -106,7 +119,7 @@ Never reveal whether username or password was wrong.
 
 ### Public calendar page
 
-Create `public-calendar.xhtml` or a servlet-backed route for `/calendar/{publicToken}`.
+Use `public-calendar.xhtml` behind the servlet-backed `/calendar/{publicToken}` route.
 
 Responsibilities:
 
