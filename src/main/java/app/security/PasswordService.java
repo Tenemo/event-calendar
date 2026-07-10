@@ -19,8 +19,6 @@ public class PasswordService {
     public static final int MINIMUM_PASSWORD_LENGTH = 14;
     public static final int MAXIMUM_PASSWORD_LENGTH = 512;
 
-    private final LegacyPasswordHashVerifier legacyPasswordHashVerifier = new LegacyPasswordHashVerifier(PASSWORD_HASH_ITERATIONS);
-
     @Inject
     private Pbkdf2PasswordHash passwordHash;
 
@@ -85,7 +83,7 @@ public class PasswordService {
             if (isJakartaSecurityPasswordHash(storedHash)) {
                 return verifyJakartaSecurityPasswordHash(passwordCharacters, storedHash);
             }
-            return legacyPasswordHashVerifier.verifyPassword(passwordCharacters, storedHash);
+            return false;
         } finally {
             Arrays.fill(passwordCharacters, '\0');
         }

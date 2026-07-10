@@ -265,7 +265,7 @@ not equal to username
 
 Do not implement complex composition rules.
 
-Hash new passwords with Jakarta Security's built-in `Pbkdf2PasswordHash` using PBKDF2-HMAC-SHA256, 600,000 iterations, a 32-byte salt, and a 32-byte derived key. Do not use app-owned hash formatting for new passwords. Legacy `pbkdf2_sha256$...` rows may be verified only for sign-in compatibility.
+Hash passwords with Jakarta Security's built-in `Pbkdf2PasswordHash` using PBKDF2-HMAC-SHA256, 600,000 iterations, a 32-byte salt, and a 32-byte derived key. Do not use app-owned hash formatting.
 
 On an empty database, use a long random `APP_BOOTSTRAP_INVITE_TOKEN` once to create the first user, then remove it and restart the app. Normal account registration links must be generated from the app invitation UI.
 

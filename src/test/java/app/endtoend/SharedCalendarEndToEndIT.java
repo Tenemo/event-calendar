@@ -45,8 +45,9 @@ final class SharedCalendarEndToEndIT {
     private static final String POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE = "PGPASSWORD";
     private static final String PLAYWRIGHT_HEADED_ENVIRONMENT_VARIABLE = "PLAYWRIGHT_HEADED";
     private static final String PLAYWRIGHT_HEADLESS_ENVIRONMENT_VARIABLE = "PLAYWRIGHT_HEADLESS";
-    private static final String LEGACY_PASSWORD_HASH_FOR_TEST_PASSWORD =
-            "pbkdf2_sha256$310000$Dw4NDAsKCQgHBgUEAwIBAA$WoLnVJrYQNsIvn9kjgoVwTKIGzSCUXgJfY7_Ypn6Fp0";
+    private static final String SEEDED_PASSWORD_HASH_FOR_TEST_PASSWORD =
+            "PBKDF2WithHmacSHA256:600000:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=:"
+                    + "YTpMNBE5TiT//mxRmUMHckVy5XS82Y6oz0V8ZImb+/4=";
     private static final String TEST_PASSWORD = "correct horse battery staple";
     private static final Duration APPLICATION_READY_TIMEOUT = Duration.ofSeconds(15);
     private static final Duration APPLICATION_READY_POLL_INTERVAL = Duration.ofMillis(500);
@@ -325,7 +326,7 @@ final class SharedCalendarEndToEndIT {
                                 + "values (?, ?, ?, true, now(), now())")) {
             statement.setString(1, username);
             statement.setString(2, "End-to-end user");
-            statement.setString(3, LEGACY_PASSWORD_HASH_FOR_TEST_PASSWORD);
+            statement.setString(3, SEEDED_PASSWORD_HASH_FOR_TEST_PASSWORD);
             statement.executeUpdate();
         }
     }

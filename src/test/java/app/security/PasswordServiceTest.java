@@ -42,39 +42,21 @@ final class PasswordServiceTest {
     }
 
     @Test
-    void verifiesExistingHashesWithOlderIterationCounts() {
-        RecordingPasswordHash passwordHash = new RecordingPasswordHash();
-        PasswordService passwordService = passwordService(passwordHash);
-        String oldHash = "pbkdf2_sha256$310000$Dw4NDAsKCQgHBgUEAwIBAA$WoLnVJrYQNsIvn9kjgoVwTKIGzSCUXgJfY7_Ypn6Fp0";
-
-        assertAll(
-                () -> assertTrue(passwordService.verifyPassword("correct horse battery staple", oldHash)),
-                () -> assertFalse(passwordService.verifyPassword("correct horse battery staple!", oldHash)),
-                () -> assertEquals(0, passwordHash.verificationCount(), "Legacy hashes should not be sent to Jakarta Security."));
-    }
-
-    @Test
-    void rejectsStoredHashesWithUnsupportedIterationCountsBeforeHashing() {
+    void rejectsNonJakartaSecurityHashesWithoutVerification() {
         RecordingPasswordHash passwordHash = new RecordingPasswordHash();
         PasswordService passwordService = passwordService(passwordHash);
 
         assertAll(
                 () -> assertFalse(passwordService.verifyPassword(
                         "correct horse battery staple",
-                        storedHashWithIterationCount(0))),
+                        "PBKDF2WithHmacSHA256$600000$encoded-salt$encoded-hash")),
                 () -> assertFalse(passwordService.verifyPassword(
                         "correct horse battery staple",
-                        storedHashWithIterationCount(-1))),
+                        "PBKDF2WithHmacSHA256:600000:encoded-salt")),
                 () -> assertFalse(passwordService.verifyPassword(
                         "correct horse battery staple",
-                        storedHashWithIterationCount(99_999))),
-                () -> assertFalse(passwordService.verifyPassword(
-                        "correct horse battery staple",
-                        storedHashWithIterationCount(600_001))),
-                () -> assertFalse(passwordService.verifyPassword(
-                        "correct horse battery staple",
-                        storedHashWithIterationCount(Integer.MAX_VALUE))));
-        assertEquals(0, passwordHash.verificationCount());
+                        "not-a-supported-hash")),
+                () -> assertEquals(0, passwordHash.verificationCount()));
     }
 
     @Test
@@ -111,11 +93,5 @@ final class PasswordServiceTest {
                 () -> assertTrue(passwordService.verifyPassword("correct horse battery staple", hash)),
                 () -> assertEquals(1, passwordHash.verificationCount()),
                 () -> assertEquals(hash, passwordHash.lastVerifiedHash()));
-    }
-
-    private String storedHashWithIterationCount(int iterationCount) {
-        return "pbkdf2_sha256$"
-                + iterationCount
-                + "$Dw4NDAsKCQgHBgUEAwIBAA$WoLnVJrYQNsIvn9kjgoVwTKIGzSCUXgJfY7_Ypn6Fp0";
     }
 }
