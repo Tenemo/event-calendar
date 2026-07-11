@@ -6,7 +6,7 @@ import app.event.CalendarEventService;
 import app.membership.CalendarAccessService;
 import app.membership.CalendarRole;
 import app.security.CurrentUser;
-import app.user.AppUser;
+import app.user.ApplicationUser;
 import app.util.AuthorizationException;
 import app.util.ConflictException;
 import app.util.NotFoundException;
@@ -54,21 +54,21 @@ public class CalendarView implements Serializable {
     private String eventTitle;
     private String eventDescription;
     private String eventLocation;
-    private LocalDateTime eventStartAt;
-    private LocalDateTime eventEndAt;
+    private LocalDateTime eventStartTime;
+    private LocalDateTime eventEndTime;
     private boolean eventAllDay;
 
     public void load() {
         try {
-            AppUser actor = currentUser.require();
-            role = calendarAccessService.findActiveRole(actor, calendarId)
+            ApplicationUser actingUser = currentUser.require();
+            role = calendarAccessService.findActiveRole(actingUser, calendarId)
                     .orElseThrow(() -> new NotFoundException("Calendar was not found."));
             Calendar calendar = calendarService.requireActiveCalendar(calendarId);
             calendarName = calendar.getName();
             calendarDescription = calendar.getDescription();
-            timeZone = calendar.getTimezone();
+            timeZone = calendar.getTimeZone();
             available = true;
-            reloadEvents(actor);
+            reloadEvents(actingUser);
             resetEventForm();
         } catch (AuthorizationException | NotFoundException exception) {
             markNotFound();
@@ -77,17 +77,17 @@ public class CalendarView implements Serializable {
 
     public void createEvent() {
         try {
-            AppUser actor = currentUser.require();
+            ApplicationUser actingUser = currentUser.require();
             calendarEventService.createEvent(
-                    actor,
+                    actingUser,
                     calendarId,
                     eventTitle,
                     eventDescription,
                     eventLocation,
-                    calendarTimeService.toStoredTime(eventStartAt, timeZone),
-                    calendarTimeService.toStoredTime(eventEndAt, timeZone),
+                    calendarTimeService.toStoredTime(eventStartTime, timeZone),
+                    calendarTimeService.toStoredTime(eventEndTime, timeZone),
                     eventAllDay);
-            reloadEvents(actor);
+            reloadEvents(actingUser);
             resetEventForm();
             addMessage(FacesMessage.SEVERITY_INFO, "Event created.", "The event is now on the calendar.");
         } catch (AuthorizationException | ValidationException exception) {
@@ -105,8 +105,8 @@ public class CalendarView implements Serializable {
         eventTitle = event.getTitle();
         eventDescription = event.getDescription();
         eventLocation = event.getLocation();
-        eventStartAt = event.getStartAt();
-        eventEndAt = event.getEndAt();
+        eventStartTime = event.getStartTime();
+        eventEndTime = event.getEndTime();
         eventAllDay = event.isAllDay();
     }
 
@@ -115,18 +115,18 @@ public class CalendarView implements Serializable {
             if (selectedEventId == null || selectedEventVersion == null) {
                 throw new ValidationException("Select an event to edit.");
             }
-            AppUser actor = currentUser.require();
+            ApplicationUser actingUser = currentUser.require();
             calendarEventService.updateEvent(
-                    actor,
+                    actingUser,
                     selectedEventId,
                     selectedEventVersion,
                     eventTitle,
                     eventDescription,
                     eventLocation,
-                    calendarTimeService.toStoredTime(eventStartAt, timeZone),
-                    calendarTimeService.toStoredTime(eventEndAt, timeZone),
+                    calendarTimeService.toStoredTime(eventStartTime, timeZone),
+                    calendarTimeService.toStoredTime(eventEndTime, timeZone),
                     eventAllDay);
-            reloadEvents(actor);
+            reloadEvents(actingUser);
             resetEventForm();
             addMessage(FacesMessage.SEVERITY_INFO, "Event updated.", "Your changes were saved.");
         } catch (AuthorizationException | ConflictException | NotFoundException | ValidationException exception) {
@@ -136,9 +136,9 @@ public class CalendarView implements Serializable {
 
     public void deleteEvent(Long eventId, Integer eventVersion) {
         try {
-            AppUser actor = currentUser.require();
-            calendarEventService.deleteEvent(actor, eventId, eventVersion);
-            reloadEvents(actor);
+            ApplicationUser actingUser = currentUser.require();
+            calendarEventService.deleteEvent(actingUser, eventId, eventVersion);
+            reloadEvents(actingUser);
             if (eventId.equals(selectedEventId)) {
                 resetEventForm();
             }
@@ -157,13 +157,13 @@ public class CalendarView implements Serializable {
         LocalDateTime nextHour = LocalDateTime.now(ZoneId.of(timeZone == null ? "UTC" : timeZone))
                 .plusHours(1)
                 .truncatedTo(ChronoUnit.HOURS);
-        eventStartAt = nextHour;
-        eventEndAt = nextHour.plusHours(1);
+        eventStartTime = nextHour;
+        eventEndTime = nextHour.plusHours(1);
         eventAllDay = false;
     }
 
-    private void reloadEvents(AppUser actor) {
-        events = calendarEventService.findMemberEvents(actor, calendarId, null, null).stream()
+    private void reloadEvents(ApplicationUser actingUser) {
+        events = calendarEventService.findMemberEvents(actingUser, calendarId, null, null).stream()
                 .map(event -> CalendarEventRow.from(event, timeZone, calendarTimeService))
                 .toList();
     }
@@ -196,10 +196,10 @@ public class CalendarView implements Serializable {
     public void setEventDescription(String eventDescription) { this.eventDescription = eventDescription; }
     public String getEventLocation() { return eventLocation; }
     public void setEventLocation(String eventLocation) { this.eventLocation = eventLocation; }
-    public LocalDateTime getEventStartAt() { return eventStartAt; }
-    public void setEventStartAt(LocalDateTime eventStartAt) { this.eventStartAt = eventStartAt; }
-    public LocalDateTime getEventEndAt() { return eventEndAt; }
-    public void setEventEndAt(LocalDateTime eventEndAt) { this.eventEndAt = eventEndAt; }
+    public LocalDateTime getEventStartTime() { return eventStartTime; }
+    public void setEventStartTime(LocalDateTime eventStartTime) { this.eventStartTime = eventStartTime; }
+    public LocalDateTime getEventEndTime() { return eventEndTime; }
+    public void setEventEndTime(LocalDateTime eventEndTime) { this.eventEndTime = eventEndTime; }
     public boolean isEventAllDay() { return eventAllDay; }
     public void setEventAllDay(boolean eventAllDay) { this.eventAllDay = eventAllDay; }
 }

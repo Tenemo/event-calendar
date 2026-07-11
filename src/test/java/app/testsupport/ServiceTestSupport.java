@@ -110,6 +110,9 @@ public final class ServiceTestSupport {
 
         private Object invokeEntityManager(Object proxy, Method method, Object[] arguments) {
             String methodName = method.getName();
+            if (method.getDeclaringClass() == Object.class) {
+                return invokeObjectMethod(proxy, methodName, arguments, "EntityManager");
+            }
             if (methodName.equals("find")) {
                 return findResults.get(new FindKey((Class<?>) arguments[0], arguments[1]));
             }
@@ -132,7 +135,7 @@ public final class ServiceTestSupport {
             if (methodName.equals("createQuery") && arguments != null && arguments.length >= 1 && arguments[0] instanceof String queryText) {
                 return createTypedQuery(queryText);
             }
-            return defaultValue(method.getReturnType(), "EntityManager", methodName);
+            throw new AssertionError("Unsupported EntityManager method: " + methodName);
         }
 
         private void assignMissingGeneratedIds() {
@@ -168,6 +171,9 @@ public final class ServiceTestSupport {
         private TypedQuery<?> createTypedQuery(String queryText) {
             InvocationHandler queryHandler = (proxy, method, arguments) -> {
                 String methodName = method.getName();
+                if (method.getDeclaringClass() == Object.class) {
+                    return invokeObjectMethod(proxy, methodName, arguments, "TypedQuery");
+                }
                 if (methodName.equals("setParameter")) {
                     return proxy;
                 }
@@ -188,7 +194,7 @@ public final class ServiceTestSupport {
                 if (methodName.equals("getResultList")) {
                     return matchingBehavior(queryText).resultList();
                 }
-                return defaultValue(method.getReturnType(), "TypedQuery", methodName);
+                throw new AssertionError("Unsupported TypedQuery method: " + methodName);
             };
 
             return (TypedQuery<?>) Proxy.newProxyInstance(
@@ -206,23 +212,13 @@ public final class ServiceTestSupport {
             throw new AssertionError("No query behavior matched query: " + queryText);
         }
 
-        private Object defaultValue(Class<?> returnType, String objectName, String methodName) {
-            if (returnType == Void.TYPE) {
-                return null;
-            }
-            if (returnType == Boolean.TYPE) {
-                return false;
-            }
-            if (returnType.isPrimitive()) {
-                return 0;
-            }
-            if (methodName.equals("toString")) {
-                return objectName + " test proxy";
-            }
-            if (methodName.equals("hashCode")) {
-                return System.identityHashCode(this);
-            }
-            return null;
+        private Object invokeObjectMethod(Object proxy, String methodName, Object[] arguments, String objectName) {
+            return switch (methodName) {
+                case "toString" -> objectName + " test proxy";
+                case "hashCode" -> System.identityHashCode(proxy);
+                case "equals" -> proxy == arguments[0];
+                default -> throw new AssertionError("Unsupported Object method: " + methodName);
+            };
         }
     }
 

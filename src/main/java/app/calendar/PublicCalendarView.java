@@ -47,7 +47,7 @@ public class PublicCalendarView {
             }
             calendarName = calendar.getName();
             calendarDescription = calendar.getDescription();
-            timeZone = calendar.getTimezone();
+            timeZone = calendar.getTimeZone();
             events = calendarEventService.findPublicEvents(publicToken, null, null).stream()
                     .map(event -> CalendarEventRow.from(event, timeZone, calendarTimeService))
                     .toList();

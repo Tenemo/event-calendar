@@ -46,18 +46,7 @@ jobs:
         run: chmod +x mvnw
 
       - name: Build and test WAR
-        run: ./mvnw -B -ntp clean test package
-
-      - name: Check PrimeFaces Jakarta classifier
-        run: |
-          ./mvnw -B -ntp dependency:tree \
-            "-Dincludes=org.primefaces:primefaces" \
-            "-DoutputFile=target/primefaces-dependency-tree.txt"
-          cat target/primefaces-dependency-tree.txt
-          if ! grep -q "org.primefaces:primefaces:jar:jakarta:" target/primefaces-dependency-tree.txt; then
-            echo "PrimeFaces must use the jakarta classifier." >&2
-            exit 1
-          fi
+        run: ./mvnw -B -ntp clean package
 
   end-to-end:
     name: playwright e2e

@@ -10,14 +10,14 @@ import jakarta.inject.Inject;
 @Singleton
 @Startup
 public class CalendarConfiguration {
-    private static final String DEFAULT_TIMEZONE_ENVIRONMENT_VARIABLE = "APP_TIMEZONE";
-    private static final String FALLBACK_DEFAULT_TIMEZONE = "Europe/Warsaw";
+    private static final String DEFAULT_TIME_ZONE_ENVIRONMENT_VARIABLE = "APP_TIMEZONE";
+    private static final String FALLBACK_DEFAULT_TIME_ZONE = "Europe/Warsaw";
 
     @Inject
     private CalendarTimeService calendarTimeService;
 
     private String configuredDefaultTimeZone =
-            System.getenv().getOrDefault(DEFAULT_TIMEZONE_ENVIRONMENT_VARIABLE, FALLBACK_DEFAULT_TIMEZONE);
+            System.getenv().getOrDefault(DEFAULT_TIME_ZONE_ENVIRONMENT_VARIABLE, FALLBACK_DEFAULT_TIME_ZONE);
     private String defaultTimeZone;
 
     @PostConstruct
@@ -26,7 +26,7 @@ public class CalendarConfiguration {
             defaultTimeZone = calendarTimeService.normalizeTimeZone(configuredDefaultTimeZone);
         } catch (ValidationException exception) {
             throw new IllegalStateException(
-                    "APP_TIMEZONE must be a valid IANA timezone such as Europe/Warsaw.", exception);
+                    "APP_TIMEZONE must be a valid IANA time zone such as Europe/Warsaw.", exception);
         }
     }
 

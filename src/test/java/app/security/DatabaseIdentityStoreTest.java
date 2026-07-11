@@ -5,7 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import app.user.AppUser;
+import app.user.ApplicationUser;
 import app.user.UserService;
 import jakarta.security.enterprise.credential.UsernamePasswordCredential;
 import jakarta.security.enterprise.identitystore.CredentialValidationResult;
@@ -30,7 +30,7 @@ final class DatabaseIdentityStoreTest {
 
     @Test
     void validUsersVerifyAgainstTheirStoredHash() {
-        AppUser user = new AppUser();
+        ApplicationUser user = new ApplicationUser();
         user.setUsername("piotr");
         user.setPasswordHash("stored-user-hash");
         user.setActive(true);
@@ -51,7 +51,7 @@ final class DatabaseIdentityStoreTest {
 
     @Test
     void callerGroupsAreReloadedForActiveUsers() {
-        AppUser user = new AppUser();
+        ApplicationUser user = new ApplicationUser();
         user.setUsername("piotr");
         user.setPasswordHash("stored-user-hash");
         user.setActive(true);
@@ -73,14 +73,14 @@ final class DatabaseIdentityStoreTest {
     }
 
     private static final class FixedUserService extends UserService {
-        private final Optional<AppUser> user;
+        private final Optional<ApplicationUser> user;
 
-        private FixedUserService(Optional<AppUser> user) {
+        private FixedUserService(Optional<ApplicationUser> user) {
             this.user = user;
         }
 
         @Override
-        public Optional<AppUser> findActiveByUsername(String username) {
+        public Optional<ApplicationUser> findActiveByUsername(String username) {
             return user;
         }
     }

@@ -27,6 +27,7 @@
                 </h:form>
             </p:panel>
 
+            <div class="table-scroll-region" role="region" aria-label="Calendars table" tabindex="0">
             <p:dataTable value="#{calendarListView.calendarMemberships}"
                          var="calendar"
                          emptyMessage="No calendars yet."
@@ -56,6 +57,7 @@
                     </h:outputLink>
                 </p:column>
             </p:dataTable>
+            </div>
         </section>
     </ui:define>
 </ui:composition>

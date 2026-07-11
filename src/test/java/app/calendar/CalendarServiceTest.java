@@ -17,7 +17,9 @@ import app.membership.CalendarMember;
 import app.membership.CalendarRole;
 import app.security.TokenService;
 import app.testsupport.ServiceTestSupport.EntityManagerStub;
-import app.user.AppUser;
+import app.user.ApplicationUser;
+import app.util.AuthorizationException;
+import app.util.ConflictException;
 import app.util.ValidationException;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -26,9 +28,9 @@ import org.junit.jupiter.api.Test;
 final class CalendarServiceTest {
     @Test
     void calendarCreationGrantsExactlyOneInitialAdminMembershipToTheCreator() {
-        AppUser creator = activeUser(42L);
+        ApplicationUser creator = activeUser(42L);
         EntityManagerStub entityManagerStub = entityManagerStub()
-                .find(AppUser.class, creator.getId(), creator)
+                .find(ApplicationUser.class, creator.getId(), creator)
                 .singleResult("count(calendarEntity)", 0L);
 
         CalendarService calendarService = new CalendarService();
@@ -74,8 +76,8 @@ final class CalendarServiceTest {
 
     @Test
     void updatesValidatedSettingsAndRotatesThePublicLinkWithAuditRecords() {
-        AppUser actor = activeUser(42L);
-        Calendar calendar = activeCalendar(80L, actor);
+        ApplicationUser actingUser = activeUser(42L);
+        Calendar calendar = activeCalendar(80L, actingUser);
         EntityManagerStub entityManagerStub = entityManagerStub()
                 .find(Calendar.class, calendar.getId(), calendar)
                 .singleResult("count(calendarEntity)", 0L);
@@ -88,19 +90,19 @@ final class CalendarServiceTest {
         setField(calendarService, "calendarTimeService", new CalendarTimeService());
 
         calendarService.updateCalendarSettings(
-                actor,
+                actingUser,
                 calendar.getId(),
                 " River days ",
                 " Summer plans ",
                 "Europe/London",
                 false,
                 calendar.getVersion());
-        Calendar rotatedCalendar = calendarService.rotatePublicToken(actor, calendar.getId(), calendar.getVersion());
+        Calendar rotatedCalendar = calendarService.rotatePublicToken(actingUser, calendar.getId(), calendar.getVersion());
 
         assertAll(
                 () -> assertEquals("River days", calendar.getName()),
                 () -> assertEquals("Summer plans", calendar.getDescription()),
-                () -> assertEquals("Europe/London", calendar.getTimezone()),
+                () -> assertEquals("Europe/London", calendar.getTimeZone()),
                 () -> assertFalse(calendar.isPublicAccessEnabled()),
                 () -> assertEquals(calendar, rotatedCalendar),
                 () -> assertEquals("rotated-token-123456789012345678901234567890", rotatedCalendar.getPublicToken()),
@@ -110,8 +112,8 @@ final class CalendarServiceTest {
 
     @Test
     void rejectsUnknownCalendarTimeZonesBeforeChangingSettings() {
-        AppUser actor = activeUser(42L);
-        Calendar calendar = activeCalendar(80L, actor);
+        ApplicationUser actingUser = activeUser(42L);
+        Calendar calendar = activeCalendar(80L, actingUser);
         CalendarService calendarService = new CalendarService();
         setField(calendarService, "entityManager", entityManagerStub().find(Calendar.class, calendar.getId(), calendar).entityManager());
         setField(calendarService, "calendarAccessService", new AllowingAccessService());
@@ -120,21 +122,66 @@ final class CalendarServiceTest {
         assertThrows(
                 ValidationException.class,
                 () -> calendarService.updateCalendarSettings(
-                        actor,
+                        actingUser,
                         calendar.getId(),
                         calendar.getName(),
                         null,
-                        "Unknown/Timezone",
+                        "Unknown/TimeZone",
                         true,
                         calendar.getVersion()));
     }
 
-    private static Calendar activeCalendar(Long id, AppUser creator) {
+    @Test
+    void settingsAndTokenRotationRequireAdminAccessBeforeLoadingOrChangingTheCalendar() {
+        CalendarService calendarService = new CalendarService();
+        setField(calendarService, "calendarAccessService", new RejectingAccessService());
+
+        assertAll(
+                () -> assertThrows(
+                        AuthorizationException.class,
+                        () -> calendarService.updateCalendarSettings(
+                                activeUser(42L), 80L, "Changed", null, "Europe/Warsaw", true, 0)),
+                () -> assertThrows(
+                        AuthorizationException.class,
+                        () -> calendarService.rotatePublicToken(activeUser(42L), 80L, 0)));
+    }
+
+    @Test
+    void staleCalendarVersionsRejectSettingsAndTokenChangesWithoutMutation() {
+        ApplicationUser actingUser = activeUser(42L);
+        Calendar calendar = activeCalendar(80L, actingUser);
+        EntityManagerStub entityManagerStub = entityManagerStub().find(Calendar.class, calendar.getId(), calendar);
+        CalendarService calendarService = new CalendarService();
+        setField(calendarService, "entityManager", entityManagerStub.entityManager());
+        setField(calendarService, "calendarAccessService", new AllowingAccessService());
+
+        assertAll(
+                () -> assertThrows(
+                        ConflictException.class,
+                        () -> calendarService.updateCalendarSettings(
+                                actingUser,
+                                calendar.getId(),
+                                "Changed",
+                                null,
+                                "Europe/Warsaw",
+                                false,
+                                calendar.getVersion() + 1)),
+                () -> assertThrows(
+                        ConflictException.class,
+                        () -> calendarService.rotatePublicToken(
+                                actingUser, calendar.getId(), calendar.getVersion() + 1)),
+                () -> assertEquals("Kayaking", calendar.getName()),
+                () -> assertTrue(calendar.isPublicAccessEnabled()),
+                () -> assertEquals("public-token-123456789012345678901234567890", calendar.getPublicToken()),
+                () -> assertEquals(0, entityManagerStub.flushCount()));
+    }
+
+    private static Calendar activeCalendar(Long id, ApplicationUser creator) {
         Calendar calendar = new Calendar();
         setEntityId(calendar, id);
         calendar.setName("Kayaking");
         calendar.setPublicToken("public-token-123456789012345678901234567890");
-        calendar.setTimezone("Europe/Warsaw");
+        calendar.setTimeZone("Europe/Warsaw");
         calendar.setPublicAccessEnabled(true);
         calendar.setActive(true);
         calendar.setCreatedByUser(creator);
@@ -147,8 +194,8 @@ final class CalendarServiceTest {
         return calendarConfiguration;
     }
 
-    private static AppUser activeUser(Long id) {
-        AppUser user = new AppUser();
+    private static ApplicationUser activeUser(Long id) {
+        ApplicationUser user = new ApplicationUser();
         setEntityId(user, id);
         user.setUsername("piotr");
         user.setDisplayName("Piotr");
@@ -171,13 +218,20 @@ final class CalendarServiceTest {
 
     private static final class NoopAuditService extends AuditService {
         @Override
-        public void record(AppUser actorUser, Calendar calendar, String entityType, Long entityId, String action, String details) {
+        public void record(ApplicationUser actingUser, Calendar calendar, String entityType, Long entityId, String action, String details) {
         }
     }
 
     private static final class AllowingAccessService extends CalendarAccessService {
         @Override
-        public void requireCanAdminister(AppUser user, Long calendarId) {
+        public void requireCanAdminister(ApplicationUser user, Long calendarId) {
+        }
+    }
+
+    private static final class RejectingAccessService extends CalendarAccessService {
+        @Override
+        public void requireCanAdminister(ApplicationUser user, Long calendarId) {
+            throw new AuthorizationException("Admin access is required.");
         }
     }
 
@@ -185,7 +239,7 @@ final class CalendarServiceTest {
         private final java.util.List<String> actions = new java.util.ArrayList<>();
 
         @Override
-        public void record(AppUser actorUser, Calendar calendar, String entityType, Long entityId, String action, String details) {
+        public void record(ApplicationUser actingUser, Calendar calendar, String entityType, Long entityId, String action, String details) {
             actions.add(action);
         }
     }

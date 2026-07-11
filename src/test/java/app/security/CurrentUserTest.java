@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import app.user.AppUser;
+import app.user.ApplicationUser;
 import app.user.UserService;
 import app.util.AuthorizationException;
 import jakarta.security.enterprise.SecurityContext;
@@ -20,7 +20,7 @@ import org.junit.jupiter.api.Test;
 final class CurrentUserTest {
     @Test
     void signedInRequiresAnActiveApplicationUser() {
-        AppUser activeUser = activeUser("piotr");
+        ApplicationUser activeUser = activeUser("piotr");
         RecordingUserService userService = new RecordingUserService(Optional.of(activeUser));
         CurrentUser currentUser = currentUser("piotr", userService);
 
@@ -83,8 +83,8 @@ final class CurrentUserTest {
                 });
     }
 
-    private static AppUser activeUser(String username) {
-        AppUser user = new AppUser();
+    private static ApplicationUser activeUser(String username) {
+        ApplicationUser user = new ApplicationUser();
         user.setUsername(username);
         user.setDisplayName("Piotr");
         user.setActive(true);
@@ -92,16 +92,16 @@ final class CurrentUserTest {
     }
 
     private static final class RecordingUserService extends UserService {
-        private final Optional<AppUser> user;
+        private final Optional<ApplicationUser> user;
         private int lookupCount;
         private String lastUsername;
 
-        private RecordingUserService(Optional<AppUser> user) {
+        private RecordingUserService(Optional<ApplicationUser> user) {
             this.user = user;
         }
 
         @Override
-        public Optional<AppUser> findActiveByUsername(String username) {
+        public Optional<ApplicationUser> findActiveByUsername(String username) {
             lookupCount++;
             lastUsername = username;
             return user;

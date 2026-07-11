@@ -26,7 +26,7 @@ public class UserService {
     @Inject
     private PasswordService passwordService;
 
-    public AppUser createUser(String username, String displayName, String password) {
+    public ApplicationUser createUser(String username, String displayName, String password) {
         String normalizedUsername = normalizeUsername(username);
         String normalizedDisplayName = normalizeDisplayName(displayName);
 
@@ -43,7 +43,7 @@ public class UserService {
         }
 
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        AppUser user = new AppUser();
+        ApplicationUser user = new ApplicationUser();
         user.setUsername(normalizedUsername);
         user.setDisplayName(normalizedDisplayName);
         user.setPasswordHash(passwordService.hashPassword(normalizedUsername, password));
@@ -62,15 +62,15 @@ public class UserService {
         return user;
     }
 
-    public Optional<AppUser> findByUsername(String username) {
+    public Optional<ApplicationUser> findByUsername(String username) {
         String normalizedUsername = normalizeUsername(username);
         if (normalizedUsername.isBlank()) {
             return Optional.empty();
         }
 
         try {
-            AppUser user = entityManager
-                    .createQuery("select appUser from AppUser appUser where appUser.username = :username", AppUser.class)
+            ApplicationUser user = entityManager
+                    .createQuery("select applicationUser from ApplicationUser applicationUser where applicationUser.username = :username", ApplicationUser.class)
                     .setParameter("username", normalizedUsername)
                     .getSingleResult();
             return Optional.of(user);
@@ -79,19 +79,19 @@ public class UserService {
         }
     }
 
-    public Optional<AppUser> findActiveByUsername(String username) {
-        return findByUsername(username).filter(AppUser::isActive);
+    public Optional<ApplicationUser> findActiveByUsername(String username) {
+        return findByUsername(username).filter(ApplicationUser::isActive);
     }
 
     public boolean hasActiveUsers() {
         Long activeUserCount = entityManager
-                .createQuery("select count(appUser) from AppUser appUser where appUser.active = true", Long.class)
+                .createQuery("select count(applicationUser) from ApplicationUser applicationUser where applicationUser.active = true", Long.class)
                 .getSingleResult();
         return activeUserCount > 0;
     }
 
-    public AppUser requireActiveUser(Long userId) {
-        AppUser user = entityManager.find(AppUser.class, userId);
+    public ApplicationUser requireActiveUser(Long userId) {
+        ApplicationUser user = entityManager.find(ApplicationUser.class, userId);
         if (user == null || !user.isActive()) {
             throw new NotFoundException("User was not found.");
         }

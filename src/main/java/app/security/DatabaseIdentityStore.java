@@ -1,6 +1,6 @@
 package app.security;
 
-import app.user.AppUser;
+import app.user.ApplicationUser;
 import app.user.UserService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -35,7 +35,7 @@ public class DatabaseIdentityStore implements IdentityStore {
                 .orElseGet(() -> validateMissingUserPassword(password));
     }
 
-    private CredentialValidationResult validatePassword(AppUser user, String password) {
+    private CredentialValidationResult validatePassword(ApplicationUser user, String password) {
         if (passwordService.verifyPassword(password, user.getPasswordHash())) {
             return validUser(user);
         }
@@ -47,7 +47,7 @@ public class DatabaseIdentityStore implements IdentityStore {
         return CredentialValidationResult.INVALID_RESULT;
     }
 
-    private CredentialValidationResult validUser(AppUser user) {
+    private CredentialValidationResult validUser(ApplicationUser user) {
         return new CredentialValidationResult(user.getUsername(), Set.of("USER"));
     }
 

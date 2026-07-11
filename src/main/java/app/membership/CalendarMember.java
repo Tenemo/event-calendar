@@ -1,7 +1,7 @@
 package app.membership;
 
 import app.calendar.Calendar;
-import app.user.AppUser;
+import app.user.ApplicationUser;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -26,7 +26,7 @@ public class CalendarMember {
     @Id
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
-    private AppUser user;
+    private ApplicationUser user;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "role_name", nullable = false, length = 20)
@@ -49,11 +49,11 @@ public class CalendarMember {
         this.calendar = calendar;
     }
 
-    public AppUser getUser() {
+    public ApplicationUser getUser() {
         return user;
     }
 
-    public void setUser(AppUser user) {
+    public void setUser(ApplicationUser user) {
         this.user = user;
     }
 

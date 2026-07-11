@@ -5,7 +5,7 @@ import app.calendar.CalendarService;
 import app.config.ApplicationUrlService;
 import app.membership.CalendarRole;
 import app.security.CurrentUser;
-import app.user.AppUser;
+import app.user.ApplicationUser;
 import app.util.AuthorizationException;
 import app.util.ValidationException;
 import jakarta.annotation.PostConstruct;
@@ -15,11 +15,12 @@ import jakarta.faces.context.FacesContext;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 @Named
 @RequestScoped
-public class AppInvitationView {
+public class InvitationView {
     @Inject
     private CurrentUser currentUser;
 
@@ -27,33 +28,36 @@ public class AppInvitationView {
     private CalendarService calendarService;
 
     @Inject
-    private AppInvitationService appInvitationService;
+    private InvitationService invitationService;
 
     @Inject
     private ApplicationUrlService applicationUrlService;
 
+    @Inject
+    private InvitationPolicy invitationPolicy;
+
     private Long selectedCalendarId;
     private List<EditableCalendarOption> editableCalendars = List.of();
-    private List<AppInvitationRow> invitations = List.of();
-    private String generatedInviteLink;
+    private List<InvitationRow> invitations = List.of();
+    private String generatedInvitationLink;
 
     @PostConstruct
     public void load() {
-        AppUser actor = currentUser.require();
-        editableCalendars = calendarService.findCalendarsForUser(actor).stream()
+        ApplicationUser actingUser = currentUser.require();
+        editableCalendars = calendarService.findCalendarsForUser(actingUser).stream()
                 .filter(this::canCreateEditorInvitation)
                 .map(calendar -> new EditableCalendarOption(calendar.getCalendarId(), calendar.getCalendarName()))
                 .toList();
-        reloadInvitations(actor);
+        reloadInvitations(actingUser);
     }
 
-    public void createAppInvitation() {
+    public void createRegistrationInvitation() {
         try {
-            AppUser actor = currentUser.require();
-            AppInvitation invitation = appInvitationService.createAppInvitation(actor);
-            generatedInviteLink = invitationLink(invitation.getInviteToken());
-            reloadInvitations(actor);
-            addMessage(FacesMessage.SEVERITY_INFO, "App invitation created.", "Share the generated link directly.");
+            ApplicationUser actingUser = currentUser.require();
+            Invitation invitation = invitationService.createRegistrationInvitation(actingUser);
+            generatedInvitationLink = invitationLink(invitation.getInvitationToken());
+            reloadInvitations(actingUser);
+            addMessage(FacesMessage.SEVERITY_INFO, "Registration invitation created.", "Share the generated link directly.");
         } catch (AuthorizationException | ValidationException exception) {
             addMessage(FacesMessage.SEVERITY_ERROR, "Invitation failed.", exception.getMessage());
         }
@@ -64,10 +68,10 @@ public class AppInvitationView {
             if (selectedCalendarId == null) {
                 throw new ValidationException("Calendar is required.");
             }
-            AppUser actor = currentUser.require();
-            AppInvitation invitation = appInvitationService.createCalendarEditorInvitation(actor, selectedCalendarId, null);
-            generatedInviteLink = invitationLink(invitation.getInviteToken());
-            reloadInvitations(actor);
+            ApplicationUser actingUser = currentUser.require();
+            Invitation invitation = invitationService.createCalendarEditorInvitation(actingUser, selectedCalendarId, null);
+            generatedInvitationLink = invitationLink(invitation.getInvitationToken());
+            reloadInvitations(actingUser);
             addMessage(FacesMessage.SEVERITY_INFO, "Editor invitation created.", "Share the generated link directly.");
         } catch (AuthorizationException | ValidationException exception) {
             addMessage(FacesMessage.SEVERITY_ERROR, "Invitation failed.", exception.getMessage());
@@ -76,9 +80,9 @@ public class AppInvitationView {
 
     public void revokeInvitation(Long invitationId) {
         try {
-            AppUser actor = currentUser.require();
-            appInvitationService.revokeInvitation(actor, invitationId);
-            reloadInvitations(actor);
+            ApplicationUser actingUser = currentUser.require();
+            invitationService.revokeInvitation(actingUser, invitationId);
+            reloadInvitations(actingUser);
             addMessage(FacesMessage.SEVERITY_INFO, "Invitation revoked.", "The link can no longer be used.");
         } catch (AuthorizationException | ValidationException exception) {
             addMessage(FacesMessage.SEVERITY_ERROR, "Revoke failed.", exception.getMessage());
@@ -97,61 +101,66 @@ public class AppInvitationView {
         return editableCalendars;
     }
 
-    public boolean isHasEditableCalendars() {
+    public boolean hasEditableCalendars() {
         return !editableCalendars.isEmpty();
     }
 
-    public List<AppInvitationRow> getInvitations() {
+    public List<InvitationRow> getInvitations() {
         return invitations;
     }
 
-    public String getGeneratedInviteLink() {
-        return generatedInviteLink;
+    public String getGeneratedInvitationLink() {
+        return generatedInvitationLink;
     }
 
-    public boolean isHasGeneratedInviteLink() {
-        return generatedInviteLink != null && !generatedInviteLink.isBlank();
+    public boolean hasGeneratedInvitationLink() {
+        return generatedInvitationLink != null && !generatedInvitationLink.isBlank();
     }
 
     private boolean canCreateEditorInvitation(CalendarMembershipSummary calendar) {
         return calendar.getRole() == CalendarRole.EDITOR || calendar.getRole() == CalendarRole.ADMIN;
     }
 
-    private void reloadInvitations(AppUser actor) {
-        invitations = appInvitationService.listInvitations(actor).stream()
-                .map(this::toRow)
+    private void reloadInvitations(ApplicationUser actingUser) {
+        OffsetDateTime currentTime = OffsetDateTime.now(ZoneOffset.UTC);
+        invitations = invitationService.listInvitations(actingUser).stream()
+                .map(invitation -> toRow(invitation, currentTime))
                 .toList();
     }
 
-    private AppInvitationRow toRow(AppInvitation invitation) {
-        return new AppInvitationRow(
+    private InvitationRow toRow(Invitation invitation, OffsetDateTime currentTime) {
+        InvitationStatus status = invitationPolicy.status(
+                invitation.getRevokedAt(),
+                invitation.getAcceptedAt(),
+                invitation.getExpiresAt(),
+                currentTime);
+        return new InvitationRow(
                 invitation.getId(),
-                invitationLink(invitation.getInviteToken()),
+                invitationLink(invitation.getInvitationToken()),
                 invitationScope(invitation),
-                invitationStatus(invitation),
+                invitationStatus(status),
                 invitation.getCreatedAt(),
-                invitation.getAcceptedAt() == null && invitation.getRevokedAt() == null);
+                status.isRevocable());
     }
 
-    private String invitationScope(AppInvitation invitation) {
+    private String invitationScope(Invitation invitation) {
         if (invitation.getCalendar() == null) {
-            return "App only";
+            return "Registration invitation";
         }
         return "Editor: " + invitation.getCalendar().getName();
     }
 
-    private String invitationStatus(AppInvitation invitation) {
-        if (invitation.getAcceptedAt() != null) {
-            return "Used";
-        }
-        if (invitation.getRevokedAt() != null) {
-            return "Revoked";
-        }
-        return "Available";
+    private String invitationStatus(InvitationStatus status) {
+        return switch (status) {
+            case AVAILABLE -> "Available";
+            case USED -> "Used";
+            case REVOKED -> "Revoked";
+            case EXPIRED -> "Expired";
+        };
     }
 
-    private String invitationLink(String inviteToken) {
-        return applicationUrlService.linkTo("/register?token=" + inviteToken);
+    private String invitationLink(String invitationToken) {
+        return applicationUrlService.linkTo("/register?token=" + invitationToken);
     }
 
     private void addMessage(FacesMessage.Severity severity, String summary, String detail) {
@@ -176,23 +185,23 @@ public class AppInvitationView {
         }
     }
 
-    public static final class AppInvitationRow {
+    public static final class InvitationRow {
         private final Long id;
-        private final String inviteLink;
+        private final String invitationLink;
         private final String scope;
         private final String status;
         private final OffsetDateTime createdAt;
         private final boolean revocable;
 
-        private AppInvitationRow(
+        private InvitationRow(
                 Long id,
-                String inviteLink,
+                String invitationLink,
                 String scope,
                 String status,
                 OffsetDateTime createdAt,
                 boolean revocable) {
             this.id = id;
-            this.inviteLink = inviteLink;
+            this.invitationLink = invitationLink;
             this.scope = scope;
             this.status = status;
             this.createdAt = createdAt;
@@ -203,8 +212,8 @@ public class AppInvitationView {
             return id;
         }
 
-        public String getInviteLink() {
-            return inviteLink;
+        public String getInvitationLink() {
+            return invitationLink;
         }
 
         public String getScope() {

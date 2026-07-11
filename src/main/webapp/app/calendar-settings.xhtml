@@ -40,12 +40,12 @@
                                          rows="6"
                                          autoResize="false"/>
 
-                        <p:outputLabel for="timeZone" value="Timezone"/>
+                        <p:outputLabel for="timeZone" value="Time zone"/>
                         <p:inputText id="timeZone"
                                      value="#{calendarSettingsView.timeZone}"
                                      maxlength="80"
                                      required="true"
-                                     requiredMessage="Timezone is required."/>
+                                     requiredMessage="Time zone is required."/>
 
                         <div class="checkbox-field">
                             <p:selectBooleanCheckbox id="publicAccess" value="#{calendarSettingsView.publicAccessEnabled}"/>
@@ -86,7 +86,7 @@
                     </div>
                 </p:panel>
             </div>
-            <p:confirmDialog global="true" showEffect="fade" hideEffect="fade">
+            <p:confirmDialog global="true" showEffect="fade" hideEffect="fade" closeOnEscape="true">
                 <p:commandButton value="No"
                                  type="button"
                                  styleClass="ui-confirmdialog-no ui-button-secondary ui-button-outlined"/>

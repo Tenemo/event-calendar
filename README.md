@@ -53,11 +53,11 @@ Copy `.env.example` to `.env` for local development. Do not commit `.env`.
 | `PGDATABASE` | `calendar` | PostgreSQL database name. |
 | `PGUSER` | `calendar` | PostgreSQL user. |
 | `PGPASSWORD` | `calendar` | PostgreSQL password. Use a generated secret outside local development. |
-| `APP_TIMEZONE` | `Europe/Warsaw` | Default IANA timezone assigned to new calendars. |
+| `APP_TIMEZONE` | `Europe/Warsaw` | Default IANA time zone assigned to new calendars. |
 | `APP_BASE_URL` | `http://localhost:9080` | Canonical external base URL used for invitation and public-calendar links. |
 | `APP_BOOTSTRAP_INVITE_TOKEN` | blank | Optional one-time admission secret for creating the first account on an empty database. |
 
-`APP_TIMEZONE` must be a valid IANA timezone. Invalid values stop application startup.
+`APP_TIMEZONE` must be a valid IANA time zone. Invalid values stop application startup.
 
 `APP_BASE_URL` must be an absolute HTTP or HTTPS URL without credentials, query parameters, or a fragment. Request-derived links are accepted only on loopback development hosts; production requires an explicit value.
 
@@ -182,7 +182,7 @@ Registration requires an unused, unrevoked invitation token. On a brand-new empt
 
 After the first account is created, clear `APP_BOOTSTRAP_INVITE_TOKEN` and restart or redeploy the application. The normal registration path uses single-use links created from `/app/invitations`.
 
-Passwords must be between 14 and 1024 characters, nonblank, and different from the username. They are stored as PBKDF2-HMAC-SHA256 hashes with 600,000 iterations, a 32-byte salt, and a 32-byte derived key. Plaintext passwords are never stored.
+Passwords must be between 14 and 512 characters, nonblank, and different from the username. They are stored as PBKDF2-HMAC-SHA256 hashes with 600,000 iterations, a 32-byte salt, and a 32-byte derived key. Plaintext passwords are never stored.
 
 ## Calendar roles
 
@@ -200,7 +200,7 @@ Public pages are read-only and return a generic `404` for invalid, disabled, or 
 
 ## Invitations
 
-Signed-in users can create app-only registration invitations. Calendar editors and admins can create invitations that also grant `EDITOR` membership on a selected calendar.
+Signed-in users can create registration invitations. Calendar editors and admins can create editor invitations that also grant `EDITOR` membership on a selected calendar.
 
 Invitation links are single-use bearer secrets. They can be revoked by their creator while unused. A new user registers through the link; an existing user signs in and explicitly accepts it. Tokens are not written to application logs.
 

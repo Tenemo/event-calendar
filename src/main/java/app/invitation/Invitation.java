@@ -2,7 +2,7 @@ package app.invitation;
 
 import app.calendar.Calendar;
 import app.membership.CalendarRole;
-import app.user.AppUser;
+import app.user.ApplicationUser;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -18,7 +18,7 @@ import java.time.OffsetDateTime;
 
 @Entity
 @Table(name = "app_invitation")
-public class AppInvitation {
+public class Invitation {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -28,7 +28,7 @@ public class AppInvitation {
     private Calendar calendar;
 
     @Column(name = "invite_token", nullable = false, unique = true, length = 80)
-    private String inviteToken;
+    private String invitationToken;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "role_name", length = 20)
@@ -36,11 +36,11 @@ public class AppInvitation {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "created_by_user_id", nullable = false)
-    private AppUser createdByUser;
+    private ApplicationUser createdByUser;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "accepted_by_user_id")
-    private AppUser acceptedByUser;
+    private ApplicationUser acceptedByUser;
 
     @Column(name = "revoked_at")
     private OffsetDateTime revokedAt;
@@ -66,12 +66,12 @@ public class AppInvitation {
         this.calendar = calendar;
     }
 
-    public String getInviteToken() {
-        return inviteToken;
+    public String getInvitationToken() {
+        return invitationToken;
     }
 
-    public void setInviteToken(String inviteToken) {
-        this.inviteToken = inviteToken;
+    public void setInvitationToken(String invitationToken) {
+        this.invitationToken = invitationToken;
     }
 
     public CalendarRole getRole() {
@@ -82,19 +82,19 @@ public class AppInvitation {
         this.role = role;
     }
 
-    public AppUser getCreatedByUser() {
+    public ApplicationUser getCreatedByUser() {
         return createdByUser;
     }
 
-    public void setCreatedByUser(AppUser createdByUser) {
+    public void setCreatedByUser(ApplicationUser createdByUser) {
         this.createdByUser = createdByUser;
     }
 
-    public AppUser getAcceptedByUser() {
+    public ApplicationUser getAcceptedByUser() {
         return acceptedByUser;
     }
 
-    public void setAcceptedByUser(AppUser acceptedByUser) {
+    public void setAcceptedByUser(ApplicationUser acceptedByUser) {
         this.acceptedByUser = acceptedByUser;
     }
 

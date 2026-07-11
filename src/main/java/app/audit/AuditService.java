@@ -1,7 +1,7 @@
 package app.audit;
 
 import app.calendar.Calendar;
-import app.user.AppUser;
+import app.user.ApplicationUser;
 import jakarta.ejb.Stateless;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -13,9 +13,9 @@ public class AuditService {
     @PersistenceContext(unitName = "calendarPU")
     private EntityManager entityManager;
 
-    public void record(AppUser actorUser, Calendar calendar, String entityType, Long entityId, String action, String details) {
+    public void record(ApplicationUser actingUser, Calendar calendar, String entityType, Long entityId, String action, String details) {
         AuditLog auditLog = new AuditLog();
-        auditLog.setActorUser(actorUser);
+        auditLog.setActingUser(actingUser);
         auditLog.setCalendar(calendar);
         auditLog.setEntityType(entityType);
         auditLog.setEntityId(entityId);

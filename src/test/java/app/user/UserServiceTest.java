@@ -48,10 +48,10 @@ final class UserServiceTest {
     @Test
     void rejectsDuplicateUsernameCaseInsensitively() {
         EntityManagerStub entityManagerStub = entityManagerStub();
-        AppUser existingUser = new AppUser();
+        ApplicationUser existingUser = new ApplicationUser();
         setEntityId(existingUser, 1L);
         existingUser.setUsername("piotr");
-        entityManagerStub.singleResult("from AppUser appUser", existingUser);
+        entityManagerStub.singleResult("from ApplicationUser applicationUser", existingUser);
 
         UserService userService = new UserService();
         setField(userService, "entityManager", entityManagerStub.entityManager());
@@ -65,14 +65,14 @@ final class UserServiceTest {
     @Test
     void normalizesAndPersistsNewUsersWithAHashedPassword() {
         EntityManagerStub entityManagerStub = entityManagerStub()
-                .singleResultNotFound("from AppUser appUser");
+                .singleResultNotFound("from ApplicationUser applicationUser");
         PasswordService passwordService = passwordService();
 
         UserService userService = new UserService();
         setField(userService, "entityManager", entityManagerStub.entityManager());
         setField(userService, "passwordService", passwordService);
 
-        AppUser createdUser = userService.createUser(" Piotr ", " Piotr Tenemo ", "correct horse battery staple");
+        ApplicationUser createdUser = userService.createUser(" Piotr ", " Piotr Tenemo ", "correct horse battery staple");
 
         assertAll(
                 () -> assertEquals("piotr", createdUser.getUsername()),
@@ -88,11 +88,11 @@ final class UserServiceTest {
     void detectsWhetherAnyActiveUserExists() {
         UserService withUsers = new UserService();
         setField(withUsers, "entityManager", entityManagerStub()
-                .singleResult("where appUser.active = true", 1L)
+                .singleResult("where applicationUser.active = true", 1L)
                 .entityManager());
         UserService withoutUsers = new UserService();
         setField(withoutUsers, "entityManager", entityManagerStub()
-                .singleResult("where appUser.active = true", 0L)
+                .singleResult("where applicationUser.active = true", 0L)
                 .entityManager());
 
         assertAll(
@@ -103,7 +103,7 @@ final class UserServiceTest {
     @Test
     void reportsDatabaseUsernameRaceAsValidationFailure() {
         EntityManagerStub entityManagerStub = entityManagerStub()
-                .singleResultNotFound("from AppUser appUser")
+                .singleResultNotFound("from ApplicationUser applicationUser")
                 .failOnFlush(new PersistenceException(new SQLException("duplicate username", "23505")));
 
         UserService userService = new UserService();

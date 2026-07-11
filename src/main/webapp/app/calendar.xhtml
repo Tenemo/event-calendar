@@ -112,7 +112,7 @@
                             <div class="field-stack">
                                 <p:outputLabel for="eventStart" value="Starts"/>
                                 <p:datePicker id="eventStart"
-                                              value="#{calendarView.eventStartAt}"
+                                              value="#{calendarView.eventStartTime}"
                                               pattern="yyyy-MM-dd HH:mm"
                                               showTime="true"
                                               hourFormat="24"
@@ -122,7 +122,7 @@
                             <div class="field-stack">
                                 <p:outputLabel for="eventEnd" value="Ends"/>
                                 <p:datePicker id="eventEnd"
-                                              value="#{calendarView.eventEndAt}"
+                                              value="#{calendarView.eventEndTime}"
                                               pattern="yyyy-MM-dd HH:mm"
                                               showTime="true"
                                               hourFormat="24"
@@ -166,7 +166,7 @@
                     </h:form>
                 </p:panel>
             </div>
-            <p:confirmDialog global="true" showEffect="fade" hideEffect="fade">
+            <p:confirmDialog global="true" showEffect="fade" hideEffect="fade" closeOnEscape="true">
                 <p:commandButton value="No"
                                  type="button"
                                  styleClass="ui-confirmdialog-no ui-button-secondary ui-button-outlined"/>

@@ -1,6 +1,6 @@
 package app.user;
 
-import app.invitation.AppInvitation;
+import app.invitation.Invitation;
 
-public record RegistrationAdmission(AppInvitation invitation, boolean bootstrap) {
+public record RegistrationAdmission(Invitation invitation, boolean bootstrap) {
 }

@@ -5,18 +5,20 @@
                 xmlns:p="primefaces"
                 template="/WEB-INF/templates/main.xhtml">
     <f:metadata>
-        <f:viewParam name="token" value="#{registrationView.inviteToken}"/>
+        <f:viewParam name="token" value="#{registrationView.invitationToken}"/>
     </f:metadata>
 
     <ui:define name="title">Register - Shared calendar</ui:define>
 
     <ui:define name="content">
         <section class="narrow-section">
-            <p:panel header="Accept invitation"
+            <h:panelGroup rendered="#{registrationView.signedIn}"><h1>Accept invitation</h1></h:panelGroup>
+            <h:panelGroup rendered="#{not registrationView.signedIn}"><h1>Create your calendar</h1></h:panelGroup>
+            <p:panel
                      styleClass="surface-panel form-panel"
                      rendered="#{registrationView.signedIn}">
                 <h:form styleClass="stacked-form">
-                    <h:inputHidden value="#{registrationView.inviteToken}"/>
+                    <h:inputHidden value="#{registrationView.invitationToken}"/>
                     <p>You are already signed in. Accept this invitation with your current account.</p>
                     <p:commandButton value="Accept invitation"
                                      action="#{registrationView.acceptInvitation}"
@@ -24,11 +26,11 @@
                 </h:form>
             </p:panel>
 
-            <p:panel header="Create your calendar"
+            <p:panel
                      styleClass="surface-panel form-panel"
                      rendered="#{not registrationView.signedIn}">
                 <h:form styleClass="stacked-form">
-                    <h:inputHidden id="inviteToken" value="#{registrationView.inviteToken}"/>
+                    <h:inputHidden id="invitationToken" value="#{registrationView.invitationToken}"/>
 
                     <p:outputLabel for="username" value="Username"/>
                     <p:inputText id="username"
@@ -68,7 +70,7 @@
                     Already registered?
                     <h:outputLink value="#{request.contextPath}/login">
                         Sign in to accept
-                        <f:param name="invite" value="#{registrationView.inviteToken}"/>
+                        <f:param name="invite" value="#{registrationView.invitationToken}"/>
                     </h:outputLink>
                 </p>
             </p:panel>
