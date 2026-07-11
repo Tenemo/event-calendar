@@ -2,6 +2,7 @@
                 xmlns:f="jakarta.faces.core"
                 xmlns:h="jakarta.faces.html"
                 xmlns:ui="jakarta.faces.facelets"
+                xmlns:pt="jakarta.faces.passthrough"
                 xmlns:p="primefaces"
                 template="/WEB-INF/templates/main.xhtml">
     <f:metadata>
@@ -36,7 +37,7 @@
                     <p:inputText id="username"
                                  value="#{registrationView.username}"
                                  autocomplete="username"
-                                 maxlength="80"
+                                 pt:maxlength="80"
                                  required="true"
                                  requiredMessage="Username is required."/>
 
@@ -44,14 +45,14 @@
                     <p:inputText id="displayName"
                                  value="#{registrationView.displayName}"
                                  autocomplete="name"
-                                 maxlength="160"
+                                 pt:maxlength="160"
                                  required="true"
                                  requiredMessage="Display name is required."/>
 
                     <p:outputLabel for="calendarName" value="Calendar name"/>
                     <p:inputText id="calendarName"
                                  value="#{registrationView.calendarName}"
-                                 maxlength="160"
+                                 pt:maxlength="160"
                                  required="true"
                                  requiredMessage="Calendar name is required."/>
 

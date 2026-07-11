@@ -2,6 +2,7 @@
                 xmlns:f="jakarta.faces.core"
                 xmlns:h="jakarta.faces.html"
                 xmlns:ui="jakarta.faces.facelets"
+                xmlns:pt="jakarta.faces.passthrough"
                 xmlns:p="primefaces"
                 template="/WEB-INF/templates/main.xhtml">
     <f:metadata>
@@ -101,12 +102,12 @@
                         <p:outputLabel for="eventTitle" value="Title"/>
                         <p:inputText id="eventTitle"
                                      value="#{calendarView.eventTitle}"
-                                     maxlength="200"
+                                     pt:maxlength="200"
                                      required="true"
                                      requiredMessage="Event title is required."/>
 
                         <p:outputLabel for="eventLocation" value="Location"/>
-                        <p:inputText id="eventLocation" value="#{calendarView.eventLocation}" maxlength="200"/>
+                        <p:inputText id="eventLocation" value="#{calendarView.eventLocation}" pt:maxlength="200"/>
 
                         <div class="two-column-fields">
                             <div class="field-stack">

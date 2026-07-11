@@ -134,7 +134,7 @@ a {
 a:focus-visible,
 .link-button:focus-visible,
 .button-link:focus-visible,
-.ui-button:focus-visible,
+body .ui-button:focus-visible,
 .ui-inputfield:focus-visible,
 select:focus-visible,
 .ui-selectonemenu.ui-state-focus,

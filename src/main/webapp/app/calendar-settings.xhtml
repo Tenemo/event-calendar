@@ -2,6 +2,7 @@
                 xmlns:f="jakarta.faces.core"
                 xmlns:h="jakarta.faces.html"
                 xmlns:ui="jakarta.faces.facelets"
+                xmlns:pt="jakarta.faces.passthrough"
                 xmlns:p="primefaces"
                 template="/WEB-INF/templates/main.xhtml">
     <f:metadata>
@@ -30,7 +31,7 @@
                         <p:outputLabel for="calendarName" value="Name"/>
                         <p:inputText id="calendarName"
                                      value="#{calendarSettingsView.name}"
-                                     maxlength="160"
+                                     pt:maxlength="160"
                                      required="true"
                                      requiredMessage="Calendar name is required."/>
 
@@ -43,7 +44,7 @@
                         <p:outputLabel for="timeZone" value="Time zone"/>
                         <p:inputText id="timeZone"
                                      value="#{calendarSettingsView.timeZone}"
-                                     maxlength="80"
+                                     pt:maxlength="80"
                                      required="true"
                                      requiredMessage="Time zone is required."/>
 
