@@ -4,7 +4,6 @@ import static app.testsupport.ServiceTestSupport.entityManagerStub;
 import static app.testsupport.ServiceTestSupport.setEntityId;
 import static app.testsupport.ServiceTestSupport.setField;
 import static org.junit.jupiter.api.Assertions.assertAll;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -14,59 +13,52 @@ import app.calendar.Calendar;
 import app.calendar.CalendarService;
 import app.membership.CalendarAccessService;
 import app.testsupport.ServiceTestSupport.EntityManagerStub;
-import app.user.AppUser;
-import app.util.ValidationException;
+import app.user.ApplicationUser;
 import app.util.ConflictException;
+import app.util.ValidationException;
 import jakarta.persistence.OptimisticLockException;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
 
 final class CalendarEventServiceTest {
-    private final CalendarEventService calendarEventService = new CalendarEventService();
-
     @Test
     void acceptsEventsWithTitleAndStrictlyIncreasingTimes() {
-        OffsetDateTime startAt = OffsetDateTime.parse("2026-07-08T12:00:00Z");
-        OffsetDateTime endAt = startAt.plusHours(2);
+        OffsetDateTime startTime = OffsetDateTime.parse("2026-07-08T12:00:00Z");
+        OffsetDateTime endTime = startTime.plusHours(2);
 
-        assertDoesNotThrow(() -> calendarEventService.validateEvent("Kayaking", startAt, endAt));
+        CalendarEvent createdEvent = configuredCreationService(activeCalendar(200L)).createEvent(
+                activeUser(100L), 200L, "Kayaking", null, null, startTime, endTime, false);
+
+        assertAll(
+                () -> assertEquals("Kayaking", createdEvent.getTitle()),
+                () -> assertEquals(startTime, createdEvent.getStartTime()),
+                () -> assertEquals(endTime, createdEvent.getEndTime()));
     }
 
     @Test
     void rejectsMissingTitlesAndInvalidTimeRanges() {
-        OffsetDateTime startAt = OffsetDateTime.parse("2026-07-08T12:00:00Z");
+        OffsetDateTime startTime = OffsetDateTime.parse("2026-07-08T12:00:00Z");
+
+        CalendarEventService eventService = validationService();
 
         assertAll(
-                () -> assertThrows(ValidationException.class, () -> calendarEventService.validateEvent(null, startAt, startAt.plusHours(1))),
-                () -> assertThrows(ValidationException.class, () -> calendarEventService.validateEvent("   ", startAt, startAt.plusHours(1))),
-                () -> assertThrows(ValidationException.class, () -> calendarEventService.validateEvent("Kayaking", null, startAt.plusHours(1))),
-                () -> assertThrows(ValidationException.class, () -> calendarEventService.validateEvent("Kayaking", startAt, null)),
-                () -> assertThrows(ValidationException.class, () -> calendarEventService.validateEvent("Kayaking", startAt, startAt)),
-                () -> assertThrows(ValidationException.class, () -> calendarEventService.validateEvent("Kayaking", startAt, startAt.minusMinutes(1))));
+                () -> assertInvalidCreation(eventService, null, null, startTime, startTime.plusHours(1)),
+                () -> assertInvalidCreation(eventService, "   ", null, startTime, startTime.plusHours(1)),
+                () -> assertInvalidCreation(eventService, "Kayaking", null, null, startTime.plusHours(1)),
+                () -> assertInvalidCreation(eventService, "Kayaking", null, startTime, null),
+                () -> assertInvalidCreation(eventService, "Kayaking", null, startTime, startTime),
+                () -> assertInvalidCreation(eventService, "Kayaking", null, startTime, startTime.minusMinutes(1)));
     }
 
     @Test
     void rejectsTitleAndLocationLongerThanTheSchemaAllowsBeforePersistence() {
-        OffsetDateTime startAt = OffsetDateTime.parse("2026-07-08T12:00:00Z");
-        CalendarEventService eventService = new CalendarEventService();
-        setField(eventService, "calendarAccessService", new AllowingAccessService());
+        OffsetDateTime startTime = OffsetDateTime.parse("2026-07-08T12:00:00Z");
+        CalendarEventService eventService = validationService();
 
         assertAll(
-                () -> assertThrows(
-                        ValidationException.class,
-                        () -> calendarEventService.validateEvent("K".repeat(201), startAt, startAt.plusHours(2))),
-                () -> assertThrows(
-                        ValidationException.class,
-                        () -> eventService.createEvent(
-                                activeUser(100L),
-                                200L,
-                                "Kayaking",
-                                null,
-                                "R".repeat(201),
-                                startAt,
-                                startAt.plusHours(2),
-                                false)));
+                () -> assertInvalidCreation(eventService, "K".repeat(201), null, startTime, startTime.plusHours(2)),
+                () -> assertInvalidCreation(eventService, "Kayaking", "R".repeat(201), startTime, startTime.plusHours(2)));
     }
 
     @Test
@@ -75,7 +67,7 @@ final class CalendarEventServiceTest {
         Calendar calendar = activeCalendar(200L);
         RecordingAuditService auditService = new RecordingAuditService();
         CalendarEventService eventService = new CalendarEventService();
-        OffsetDateTime startAt = OffsetDateTime.parse("2026-07-08T12:00:00Z");
+        OffsetDateTime startTime = OffsetDateTime.parse("2026-07-08T12:00:00Z");
 
         setField(eventService, "entityManager", entityManagerStub.entityManager());
         setField(eventService, "calendarAccessService", new AllowingAccessService());
@@ -88,8 +80,8 @@ final class CalendarEventServiceTest {
                 " Kayaking ",
                 " Paddle ",
                 " River ",
-                startAt,
-                startAt.plusHours(2),
+                startTime,
+                startTime.plusHours(2),
                 false);
 
         assertAll(
@@ -109,8 +101,8 @@ final class CalendarEventServiceTest {
         setEntityId(event, 300L);
         event.setCalendar(calendar);
         event.setTitle("Kayaking");
-        event.setStartAt(OffsetDateTime.parse("2026-07-08T12:00:00Z"));
-        event.setEndAt(OffsetDateTime.parse("2026-07-08T14:00:00Z"));
+        event.setStartTime(OffsetDateTime.parse("2026-07-08T12:00:00Z"));
+        event.setEndTime(OffsetDateTime.parse("2026-07-08T14:00:00Z"));
 
         EntityManagerStub staleVersionEntityManager = entityManagerStub()
                 .find(CalendarEvent.class, event.getId(), event);
@@ -125,8 +117,8 @@ final class CalendarEventServiceTest {
                         "Updated",
                         null,
                         null,
-                        event.getStartAt(),
-                        event.getEndAt(),
+                        event.getStartTime(),
+                        event.getEndTime(),
                         false));
 
         EntityManagerStub providerConflictEntityManager = entityManagerStub()
@@ -143,8 +135,8 @@ final class CalendarEventServiceTest {
                         "Updated",
                         null,
                         null,
-                        event.getStartAt(),
-                        event.getEndAt(),
+                        event.getStartTime(),
+                        event.getEndTime(),
                         false));
     }
 
@@ -154,6 +146,32 @@ final class CalendarEventServiceTest {
         setField(eventService, "calendarAccessService", new AllowingAccessService());
         setField(eventService, "auditService", new NoopAuditService());
         return eventService;
+    }
+
+    private static CalendarEventService configuredCreationService(Calendar calendar) {
+        CalendarEventService eventService = validationService();
+        setField(eventService, "entityManager", entityManagerStub().entityManager());
+        setField(eventService, "calendarService", new FixedCalendarService(calendar));
+        setField(eventService, "auditService", new NoopAuditService());
+        return eventService;
+    }
+
+    private static CalendarEventService validationService() {
+        CalendarEventService eventService = new CalendarEventService();
+        setField(eventService, "calendarAccessService", new AllowingAccessService());
+        return eventService;
+    }
+
+    private static void assertInvalidCreation(
+            CalendarEventService eventService,
+            String title,
+            String location,
+            OffsetDateTime startTime,
+            OffsetDateTime endTime) {
+        assertThrows(
+                ValidationException.class,
+                () -> eventService.createEvent(
+                        activeUser(100L), 200L, title, null, location, startTime, endTime, false));
     }
 
     private static Calendar activeCalendar(Long id) {
@@ -166,8 +184,8 @@ final class CalendarEventServiceTest {
         return calendar;
     }
 
-    private static AppUser activeUser(Long id) {
-        AppUser user = new AppUser();
+    private static ApplicationUser activeUser(Long id) {
+        ApplicationUser user = new ApplicationUser();
         setEntityId(user, id);
         user.setUsername("piotr");
         user.setDisplayName("Piotr");
@@ -177,7 +195,7 @@ final class CalendarEventServiceTest {
 
     private static final class AllowingAccessService extends CalendarAccessService {
         @Override
-        public void requireCanEdit(AppUser user, Long calendarId) {
+        public void requireCanEdit(ApplicationUser user, Long calendarId) {
         }
     }
 
@@ -200,7 +218,7 @@ final class CalendarEventServiceTest {
         private String action;
 
         @Override
-        public void record(AppUser actorUser, Calendar calendar, String entityType, Long entityId, String action, String details) {
+        public void record(ApplicationUser actingUser, Calendar calendar, String entityType, Long entityId, String action, String details) {
             this.entityType = entityType;
             this.entityId = entityId;
             this.action = action;
@@ -209,7 +227,7 @@ final class CalendarEventServiceTest {
 
     private static final class NoopAuditService extends AuditService {
         @Override
-        public void record(AppUser actorUser, Calendar calendar, String entityType, Long entityId, String action, String details) {
+        public void record(ApplicationUser actingUser, Calendar calendar, String entityType, Long entityId, String action, String details) {
         }
     }
 }

@@ -7,7 +7,7 @@ import app.membership.CalendarAccessService;
 import app.membership.CalendarMembershipService;
 import app.membership.CalendarRole;
 import app.security.TokenService;
-import app.user.AppUser;
+import app.user.ApplicationUser;
 import app.user.RegistrationAdmission;
 import app.user.UserService;
 import app.util.AuthorizationException;
@@ -28,9 +28,9 @@ import java.util.List;
 import java.util.Optional;
 
 @Stateless
-public class AppInvitationService {
+public class InvitationService {
     private static final int MAXIMUM_TOKEN_GENERATION_ATTEMPTS = 10;
-    private static final String BOOTSTRAP_INVITE_TOKEN_ENVIRONMENT_VARIABLE = "APP_BOOTSTRAP_INVITE_TOKEN";
+    private static final String BOOTSTRAP_INVITATION_TOKEN_ENVIRONMENT_VARIABLE = "APP_BOOTSTRAP_INVITE_TOKEN";
 
     @PersistenceContext(unitName = "calendarPU")
     private EntityManager entityManager;
@@ -56,69 +56,76 @@ public class AppInvitationService {
     @Inject
     private AuditService auditService;
 
-    private String bootstrapInviteToken = System.getenv(BOOTSTRAP_INVITE_TOKEN_ENVIRONMENT_VARIABLE);
+    private String bootstrapInvitationToken = System.getenv(BOOTSTRAP_INVITATION_TOKEN_ENVIRONMENT_VARIABLE);
 
-    public AppInvitation createAppInvitation(AppUser actor) {
-        requireActiveUser(actor);
-        AppInvitation invitation = createInvitation(actor, null, null, null);
-        auditService.record(actor, null, "app_invitation", invitation.getId(), "created", "App invitation created.");
+    public Invitation createRegistrationInvitation(ApplicationUser actingUser) {
+        requireActiveUser(actingUser);
+        Invitation invitation = createInvitation(actingUser, null, null, null);
+        auditService.record(actingUser, null, "app_invitation", invitation.getId(), "created", "Registration invitation created.");
         return invitation;
     }
 
-    public AppInvitation createCalendarEditorInvitation(AppUser actor, Long calendarId, OffsetDateTime expiresAt) {
-        requireActiveUser(actor);
-        calendarAccessService.requireCanEdit(actor, calendarId);
+    public Invitation createCalendarEditorInvitation(ApplicationUser actingUser, Long calendarId, OffsetDateTime expiresAt) {
+        requireActiveUser(actingUser);
+        calendarAccessService.requireCanEdit(actingUser, calendarId);
         Calendar calendar = calendarService.requireActiveCalendar(calendarId);
-        AppInvitation invitation = createInvitation(actor, calendar, CalendarRole.EDITOR, expiresAt);
-        auditService.record(actor, calendar, "app_invitation", invitation.getId(), "created", "Calendar editor invitation created.");
+        Invitation invitation = createInvitation(actingUser, calendar, CalendarRole.EDITOR, expiresAt);
+        auditService.record(actingUser, calendar, "app_invitation", invitation.getId(), "created", "Calendar editor invitation created.");
         return invitation;
     }
 
-    public List<AppInvitation> listInvitations(AppUser actor) {
-        requireActiveUser(actor);
+    public List<Invitation> listInvitations(ApplicationUser actingUser) {
+        requireActiveUser(actingUser);
         return entityManager
                 .createQuery(
-                        "select invitation from AppInvitation invitation "
+                        "select invitation from Invitation invitation "
                                 + "left join fetch invitation.calendar "
-                                + "where invitation.createdByUser.id = :actorUserId "
+                                + "where invitation.createdByUser.id = :actingUserId "
                                 + "order by invitation.createdAt desc, invitation.id desc",
-                        AppInvitation.class)
-                .setParameter("actorUserId", actor.getId())
+                        Invitation.class)
+                .setParameter("actingUserId", actingUser.getId())
                 .setMaxResults(50)
                 .getResultList();
     }
 
-    public void revokeInvitation(AppUser actor, Long invitationId) {
-        requireActiveUser(actor);
-        AppInvitation invitation = requireInvitationForUpdate(invitationId);
-        requireInvitationCreator(actor, invitation);
-        if (invitation.getAcceptedAt() != null) {
-            throw new ValidationException("Invitation has already been used.");
-        }
-        if (invitation.getRevokedAt() == null) {
-            invitation.setRevokedAt(OffsetDateTime.now(ZoneOffset.UTC));
-            auditService.record(actor, invitation.getCalendar(), "app_invitation", invitation.getId(), "revoked", "Invitation revoked.");
+    public void revokeInvitation(ApplicationUser actingUser, Long invitationId) {
+        requireActiveUser(actingUser);
+        Invitation invitation = requireInvitationForUpdate(invitationId);
+        requireInvitationCreator(actingUser, invitation);
+        OffsetDateTime currentTime = OffsetDateTime.now(ZoneOffset.UTC);
+        InvitationStatus status = invitationPolicy.status(
+                invitation.getRevokedAt(), invitation.getAcceptedAt(), invitation.getExpiresAt(), currentTime);
+        switch (status) {
+            case AVAILABLE -> {
+                invitation.setRevokedAt(currentTime);
+                auditService.record(actingUser, invitation.getCalendar(), "app_invitation", invitation.getId(), "revoked", "Invitation revoked.");
+            }
+            case USED -> throw new ValidationException("Invitation has already been used.");
+            case EXPIRED -> throw new ValidationException("Invitation is expired.");
+            case REVOKED -> {
+                // Revocation is idempotent for an already-revoked invitation.
+            }
         }
     }
 
-    public RegistrationAdmission requireAdmission(String inviteToken) {
-        String normalizedInviteToken = normalizeInviteToken(inviteToken);
-        if (normalizedInviteToken.isBlank()) {
+    public RegistrationAdmission requireAdmission(String invitationToken) {
+        String normalizedInvitationToken = normalizeInvitationToken(invitationToken);
+        if (normalizedInvitationToken.isBlank()) {
             throw invalidInvitationException();
         }
 
-        return findInvitationByTokenForUpdate(normalizedInviteToken)
+        return findInvitationByTokenForUpdate(normalizedInvitationToken)
                 .map(this::admissionForInvitation)
-                .orElseGet(() -> bootstrapAdmission(normalizedInviteToken));
+                .orElseGet(() -> bootstrapAdmission(normalizedInvitationToken));
     }
 
-    public AppInvitation acceptInvitation(String inviteToken, AppUser acceptingUser) {
-        RegistrationAdmission admission = requireAdmission(inviteToken);
+    public Invitation acceptInvitation(String invitationToken, ApplicationUser acceptingUser) {
+        RegistrationAdmission admission = requireAdmission(invitationToken);
         acceptAdmission(admission, acceptingUser);
         return admission.invitation();
     }
 
-    public void acceptAdmission(RegistrationAdmission admission, AppUser acceptingUser) {
+    public void acceptAdmission(RegistrationAdmission admission, ApplicationUser acceptingUser) {
         if (admission.bootstrap()) {
             return;
         }
@@ -126,7 +133,7 @@ public class AppInvitationService {
             throw new ValidationException("An active user is required to accept an invitation.");
         }
 
-        AppInvitation invitation = admission.invitation();
+        Invitation invitation = admission.invitation();
         if (invitation.getCalendar() != null) {
             if (!invitation.getCalendar().isActive()) {
                 throw invalidInvitationException();
@@ -142,18 +149,18 @@ public class AppInvitationService {
         auditService.record(acceptingUser, invitation.getCalendar(), "app_invitation", invitation.getId(), "accepted", "Invitation accepted.");
     }
 
-    private AppInvitation createInvitation(
-            AppUser actor,
+    private Invitation createInvitation(
+            ApplicationUser actingUser,
             Calendar calendar,
             CalendarRole role,
             OffsetDateTime expiresAt) {
         invitationPolicy.requireValidScope(calendar, role);
 
-        AppInvitation invitation = new AppInvitation();
+        Invitation invitation = new Invitation();
         invitation.setCalendar(calendar);
-        invitation.setInviteToken(generateUniqueInviteToken());
+        invitation.setInvitationToken(generateUniqueInvitationToken());
         invitation.setRole(role);
-        invitation.setCreatedByUser(actor);
+        invitation.setCreatedByUser(actingUser);
         invitation.setExpiresAt(expiresAt);
         invitation.setCreatedAt(OffsetDateTime.now(ZoneOffset.UTC));
         entityManager.persist(invitation);
@@ -161,7 +168,7 @@ public class AppInvitationService {
         return invitation;
     }
 
-    private RegistrationAdmission admissionForInvitation(AppInvitation invitation) {
+    private RegistrationAdmission admissionForInvitation(Invitation invitation) {
         invitationPolicy.requireOpen(
                 invitation.getRevokedAt(),
                 invitation.getAcceptedAt(),
@@ -171,14 +178,14 @@ public class AppInvitationService {
         return new RegistrationAdmission(invitation, false);
     }
 
-    private RegistrationAdmission bootstrapAdmission(String inviteToken) {
-        if (!matchesBootstrapInviteToken(inviteToken) || userService.hasActiveUsers()) {
+    private RegistrationAdmission bootstrapAdmission(String invitationToken) {
+        if (!matchesBootstrapInvitationToken(invitationToken) || userService.hasActiveUsers()) {
             throw invalidInvitationException();
         }
         return new RegistrationAdmission(null, true);
     }
 
-    private AppInvitation requireInvitationForUpdate(Long invitationId) {
+    private Invitation requireInvitationForUpdate(Long invitationId) {
         if (invitationId == null) {
             throw new NotFoundException("Invitation was not found.");
         }
@@ -186,10 +193,10 @@ public class AppInvitationService {
         try {
             return entityManager
                     .createQuery(
-                            "select invitation from AppInvitation invitation "
+                            "select invitation from Invitation invitation "
                                     + "join fetch invitation.createdByUser "
                                     + "where invitation.id = :invitationId",
-                            AppInvitation.class)
+                            Invitation.class)
                     .setParameter("invitationId", invitationId)
                     .setLockMode(LockModeType.PESSIMISTIC_WRITE)
                     .getSingleResult();
@@ -198,39 +205,39 @@ public class AppInvitationService {
         }
     }
 
-    private Optional<AppInvitation> findInvitationByTokenForUpdate(String inviteToken) {
+    private Optional<Invitation> findInvitationByTokenForUpdate(String invitationToken) {
         try {
-            TypedQuery<AppInvitation> query = entityManager
+            TypedQuery<Invitation> query = entityManager
                     .createQuery(
-                            "select invitation from AppInvitation invitation "
-                                    + "where invitation.inviteToken = :inviteToken",
-                            AppInvitation.class)
-                    .setParameter("inviteToken", inviteToken);
+                            "select invitation from Invitation invitation "
+                                    + "where invitation.invitationToken = :invitationToken",
+                            Invitation.class)
+                    .setParameter("invitationToken", invitationToken);
             return Optional.of(query.setLockMode(LockModeType.PESSIMISTIC_WRITE).getSingleResult());
         } catch (NoResultException exception) {
             return Optional.empty();
         }
     }
 
-    private void requireInvitationCreator(AppUser actor, AppInvitation invitation) {
-        if (invitation.getCreatedByUser() == null || !actor.getId().equals(invitation.getCreatedByUser().getId())) {
+    private void requireInvitationCreator(ApplicationUser actingUser, Invitation invitation) {
+        if (invitation.getCreatedByUser() == null || !actingUser.getId().equals(invitation.getCreatedByUser().getId())) {
             throw new AuthorizationException("Only the invitation creator can revoke this invitation.");
         }
     }
 
-    private void requireActiveUser(AppUser actor) {
-        if (actor == null || actor.getId() == null || !actor.isActive()) {
+    private void requireActiveUser(ApplicationUser actingUser) {
+        if (actingUser == null || actingUser.getId() == null || !actingUser.isActive()) {
             throw new AuthorizationException("Sign-in is required.");
         }
     }
 
-    private String generateUniqueInviteToken() {
+    private String generateUniqueInvitationToken() {
         for (int attempt = 0; attempt < MAXIMUM_TOKEN_GENERATION_ATTEMPTS; attempt++) {
             String token = tokenService.generateToken();
             Long existingCount = entityManager
                     .createQuery(
-                            "select count(invitation) from AppInvitation invitation "
-                                    + "where invitation.inviteToken = :token",
+                            "select count(invitation) from Invitation invitation "
+                                    + "where invitation.invitationToken = :token",
                             Long.class)
                     .setParameter("token", token)
                     .getSingleResult();
@@ -238,25 +245,25 @@ public class AppInvitationService {
                 return token;
             }
         }
-        throw new IllegalStateException("Could not generate a unique invite token.");
+        throw new IllegalStateException("Could not generate a unique invitation token.");
     }
 
-    private boolean matchesBootstrapInviteToken(String inviteToken) {
-        String configuredBootstrapInviteToken = normalizeInviteToken(bootstrapInviteToken);
-        if (configuredBootstrapInviteToken.isBlank()) {
+    private boolean matchesBootstrapInvitationToken(String invitationToken) {
+        String configuredBootstrapInvitationToken = normalizeInvitationToken(bootstrapInvitationToken);
+        if (configuredBootstrapInvitationToken.isBlank()) {
             return false;
         }
 
         return MessageDigest.isEqual(
-                configuredBootstrapInviteToken.getBytes(StandardCharsets.UTF_8),
-                inviteToken.getBytes(StandardCharsets.UTF_8));
+                configuredBootstrapInvitationToken.getBytes(StandardCharsets.UTF_8),
+                invitationToken.getBytes(StandardCharsets.UTF_8));
     }
 
-    private String normalizeInviteToken(String inviteToken) {
-        if (inviteToken == null) {
+    private String normalizeInvitationToken(String invitationToken) {
+        if (invitationToken == null) {
             return "";
         }
-        return inviteToken.trim();
+        return invitationToken.trim();
     }
 
     private ValidationException invalidInvitationException() {

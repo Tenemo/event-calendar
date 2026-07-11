@@ -1,7 +1,6 @@
 <ui:composition xmlns="http://www.w3.org/1999/xhtml"
                 xmlns:h="jakarta.faces.html"
                 xmlns:ui="jakarta.faces.facelets"
-                xmlns:p="primefaces"
                 template="/WEB-INF/templates/main.xhtml">
     <ui:define name="title">Shared calendar</ui:define>
 
@@ -46,11 +45,7 @@
                     <b class="has-event">13</b>
                     <b>14</b>
                 </div>
-                <p:dataTable value="#{[]}" var="event" emptyMessage="Create an account to start planning." styleClass="compact-table">
-                    <p:column headerText="Event"/>
-                    <p:column headerText="Time"/>
-                    <p:column headerText="Place"/>
-                </p:dataTable>
+                <div class="preview-empty-state">Create an account to start planning.</div>
             </section>
         </section>
     </ui:define>

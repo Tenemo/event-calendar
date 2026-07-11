@@ -19,7 +19,13 @@
     --control-radius: 0.45rem;
     --panel-radius: 0.5rem;
     --focus-ring: rgba(37, 99, 235, 0.42);
-    --shadow: 0 18px 45px rgba(17, 24, 39, 0.08);
+    --shadow: 0 1px 3px rgba(17, 24, 39, 0.08);
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
 }
 
 body {
@@ -30,6 +36,24 @@ body {
 
 a {
     color: var(--primary);
+}
+
+.skip-link {
+    position: fixed;
+    top: 0.75rem;
+    left: 0.75rem;
+    z-index: 1000;
+    padding: 0.75rem 1rem;
+    border-radius: var(--control-radius);
+    background: var(--text);
+    color: #ffffff;
+    font-weight: 700;
+    text-decoration: none;
+    transform: translateY(-200%);
+}
+
+.skip-link:focus {
+    transform: translateY(0);
 }
 
 .app-header {
@@ -110,12 +134,29 @@ a {
 a:focus-visible,
 .link-button:focus-visible,
 .button-link:focus-visible,
-.calendar-row:focus-visible,
-.ui-button:focus-visible,
+body .ui-button:focus-visible,
 .ui-inputfield:focus-visible,
-.ui-tabs .ui-tabs-nav li a:focus-visible {
+select:focus-visible,
+.ui-selectonemenu.ui-state-focus,
+body .ui-chkbox:focus-within .ui-chkbox-box,
+body .ui-chkbox .ui-chkbox-box.ui-state-focus,
+body .ui-dialog .ui-button:focus,
+body .ui-confirm-dialog .ui-button:focus,
+.table-scroll-region:focus-visible {
     outline: 3px solid var(--focus-ring);
     outline-offset: 3px;
+}
+
+:target,
+h1,
+h2,
+h3,
+input,
+select,
+textarea,
+button,
+[tabindex] {
+    scroll-margin-block-start: 7rem;
 }
 
 .app-main {
@@ -124,11 +165,20 @@ a:focus-visible,
     padding: 2.25rem;
 }
 
+.app-main:focus {
+    outline: none;
+}
+
 .page-section,
 .narrow-section,
 .home-layout {
     display: grid;
     gap: 1.25rem;
+}
+
+.page-section,
+.narrow-section {
+    grid-template-columns: minmax(0, 1fr);
 }
 
 .home-layout {
@@ -169,8 +219,7 @@ a:focus-visible,
 
 .preview-header h2,
 .event-item h2,
-.event-item h3,
-.invite-grid h2 {
+.event-item h3 {
     margin: 0;
     font-size: 1rem;
     letter-spacing: 0;
@@ -179,7 +228,6 @@ a:focus-visible,
 .lead-text,
 .preview-header p,
 .event-item p,
-.invite-grid p,
 .form-footer {
     color: var(--muted-text);
     line-height: 1.6;
@@ -265,16 +313,6 @@ a:focus-visible,
     padding: 1.25rem;
 }
 
-.large-preview {
-    min-height: 100%;
-}
-
-.public-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(260px, 0.36fr);
-    gap: 1rem;
-}
-
 .month-grid {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
@@ -309,8 +347,7 @@ a:focus-visible,
     color: var(--primary-strong);
 }
 
-.role-chip,
-.token-sample {
+.role-chip {
     display: inline-flex;
     max-width: 100%;
     align-items: center;
@@ -326,14 +363,7 @@ a:focus-visible,
     padding: 0.45rem 0.7rem;
 }
 
-.token-sample {
-    overflow-wrap: anywhere;
-    padding: 0.55rem 0.8rem;
-}
-
-.event-board,
-.calendar-list,
-.invite-grid {
+.event-board {
     display: grid;
     gap: 0.75rem;
 }
@@ -511,9 +541,7 @@ a:focus-visible,
     margin: 0 auto;
 }
 
-.event-item,
-.calendar-row,
-.invite-grid > div {
+.event-item {
     display: flex;
     align-items: center;
     gap: 1rem;
@@ -521,17 +549,6 @@ a:focus-visible,
     border-radius: var(--panel-radius);
     background: var(--subtle-surface);
     padding: 1rem;
-}
-
-.calendar-row {
-    justify-content: space-between;
-    color: var(--text);
-    text-decoration: none;
-}
-
-.calendar-row:hover {
-    border-color: rgba(37, 99, 235, 0.4);
-    background: var(--primary-soft);
 }
 
 .event-date {
@@ -547,8 +564,7 @@ a:focus-visible,
     font-weight: 800;
 }
 
-.form-panel,
-.slim-panel {
+.form-panel {
     max-width: 100%;
 }
 
@@ -562,6 +578,12 @@ a:focus-visible,
     display: grid;
     gap: 0.75rem;
     margin-top: 1rem;
+}
+
+.stacked-form select {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .generated-invite {
@@ -579,19 +601,28 @@ a:focus-visible,
     margin-bottom: 0;
 }
 
-.surface-table {
+.table-scroll-region {
+    width: 100%;
+    min-width: 0;
     max-width: 100%;
     overflow-x: auto;
     border: 1px solid var(--border);
     border-radius: var(--panel-radius);
 }
 
+.surface-table {
+    min-width: 42rem;
+    max-width: 100%;
+    border: 0;
+    border-radius: 0;
+}
+
 .surface-table .ui-datatable-tablewrapper {
-    overflow-x: auto;
+    overflow: visible !important;
 }
 
 .surface-table table {
-    min-width: 42rem;
+    min-width: 42rem !important;
 }
 
 .ui-panel.surface-panel .ui-panel-titlebar {
@@ -604,9 +635,43 @@ a:focus-visible,
     background: var(--surface);
 }
 
-.compact-table {
+.preview-empty-state {
+    padding: 1rem;
+    border: 1px solid var(--border);
     border-radius: var(--control-radius);
-    overflow: hidden;
+    background: var(--subtle-surface);
+    color: var(--muted-text);
+    line-height: 1.5;
+}
+
+.section-header > *,
+.preview-header > *,
+.subsection-header > *,
+.calendar-workspace > *,
+.settings-grid > *,
+.event-item > *,
+.heading-meta,
+.generated-invite,
+.inline-role-form,
+.surface-table td,
+.surface-table th {
+    min-width: 0;
+}
+
+.section-header h1,
+.preview-header,
+.lead-text,
+.eyebrow,
+.event-copy,
+.event-copy h3,
+.event-copy p,
+.event-description,
+.secondary-line,
+.generated-invite,
+.table-copy-field,
+.surface-table td,
+.surface-table a {
+    overflow-wrap: anywhere;
 }
 
 @media (max-width: 1100px) {
@@ -623,8 +688,11 @@ a:focus-visible,
         flex-direction: column;
     }
 
+    .app-header {
+        position: static;
+    }
+
     .home-layout,
-    .public-layout,
     .calendar-workspace,
     .settings-grid {
         grid-template-columns: 1fr;
@@ -669,5 +737,15 @@ a:focus-visible,
 
     .month-grid b {
         min-height: 2.5rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        animation: none !important;
+        transition: none !important;
     }
 }

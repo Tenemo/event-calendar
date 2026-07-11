@@ -20,7 +20,7 @@
                     <p class="lead-text">Manage calendar-specific roles and access.</p>
                 </div>
                 <div class="action-row compact-actions">
-                    <h:outputLink value="#{request.contextPath}/app/invitations" styleClass="button-link primary-link">Create editor invite</h:outputLink>
+                    <h:outputLink value="#{request.contextPath}/app/invitations" styleClass="button-link primary-link">Create editor invitation</h:outputLink>
                     <h:outputLink value="#{request.contextPath}/app/calendar" styleClass="button-link secondary-link">
                         Back to calendar
                         <f:param name="id" value="#{calendarMembersView.calendarId}"/>
@@ -28,6 +28,7 @@
                 </div>
             </div>
 
+            <div class="table-scroll-region" role="region" aria-label="Calendar members table" tabindex="0">
             <p:dataTable value="#{calendarMembersView.members}"
                          var="member"
                          emptyMessage="No members are available."
@@ -71,7 +72,8 @@
                     </h:form>
                 </p:column>
             </p:dataTable>
-            <p:confirmDialog global="true" showEffect="fade" hideEffect="fade">
+            </div>
+            <p:confirmDialog global="true" showEffect="fade" hideEffect="fade" closeOnEscape="true">
                 <p:commandButton value="No"
                                  type="button"
                                  styleClass="ui-confirmdialog-no ui-button-secondary ui-button-outlined"/>

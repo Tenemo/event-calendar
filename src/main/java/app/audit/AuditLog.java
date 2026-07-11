@@ -1,7 +1,7 @@
 package app.audit;
 
 import app.calendar.Calendar;
-import app.user.AppUser;
+import app.user.ApplicationUser;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -22,7 +22,7 @@ public class AuditLog {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "actor_user_id")
-    private AppUser actorUser;
+    private ApplicationUser actingUser;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "calendar_id")
@@ -46,12 +46,12 @@ public class AuditLog {
         return id;
     }
 
-    public AppUser getActorUser() {
-        return actorUser;
+    public ApplicationUser getActingUser() {
+        return actingUser;
     }
 
-    public void setActorUser(AppUser actorUser) {
-        this.actorUser = actorUser;
+    public void setActingUser(ApplicationUser actingUser) {
+        this.actingUser = actingUser;
     }
 
     public Calendar getCalendar() {

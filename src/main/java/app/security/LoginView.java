@@ -23,7 +23,7 @@ public class LoginView {
 
     private String username;
     private String password;
-    private String inviteToken;
+    private String invitationToken;
 
     public void login() throws IOException {
         if (isBlank(username) || isBlank(password)) {
@@ -43,9 +43,9 @@ public class LoginView {
                         .newAuthentication(true));
 
         if (status == AuthenticationStatus.SUCCESS) {
-            String route = isBlank(inviteToken)
+            String route = isBlank(invitationToken)
                     ? "/app/calendars"
-                    : "/register?token=" + URLEncoder.encode(inviteToken.trim(), StandardCharsets.UTF_8);
+                    : "/register?token=" + URLEncoder.encode(invitationToken.trim(), StandardCharsets.UTF_8);
             redirectToApplication(facesContext, route);
         } else if (status == AuthenticationStatus.SEND_CONTINUE) {
             facesContext.responseComplete();
@@ -71,12 +71,12 @@ public class LoginView {
         this.password = password;
     }
 
-    public String getInviteToken() {
-        return inviteToken;
+    public String getInvitationToken() {
+        return invitationToken;
     }
 
-    public void setInviteToken(String inviteToken) {
-        this.inviteToken = inviteToken;
+    public void setInvitationToken(String invitationToken) {
+        this.invitationToken = invitationToken;
     }
 
     private void redirectToApplication(FacesContext facesContext, String route) throws IOException {

@@ -4,7 +4,7 @@ import app.audit.AuditService;
 import app.calendar.Calendar;
 import app.calendar.CalendarService;
 import app.membership.CalendarAccessService;
-import app.user.AppUser;
+import app.user.ApplicationUser;
 import app.util.ConflictException;
 import app.util.NotFoundException;
 import app.util.ValidationException;
@@ -35,26 +35,26 @@ public class CalendarEventService {
     @Inject
     private AuditService auditService;
 
-    public List<CalendarEvent> findPublicEvents(String publicToken, OffsetDateTime rangeStart, OffsetDateTime rangeEnd) {
+    public List<CalendarEvent> findPublicEvents(String publicToken, OffsetDateTime rangeStartTime, OffsetDateTime rangeEndTime) {
         Calendar calendar = calendarAccessService.requirePublicReadableCalendar(publicToken);
-        return findEvents(calendar.getId(), rangeStart, rangeEnd);
+        return findEvents(calendar.getId(), rangeStartTime, rangeEndTime);
     }
 
-    public List<CalendarEvent> findMemberEvents(AppUser user, Long calendarId, OffsetDateTime rangeStart, OffsetDateTime rangeEnd) {
+    public List<CalendarEvent> findMemberEvents(ApplicationUser user, Long calendarId, OffsetDateTime rangeStartTime, OffsetDateTime rangeEndTime) {
         calendarAccessService.requireCanView(user, calendarId);
-        return findEvents(calendarId, rangeStart, rangeEnd);
+        return findEvents(calendarId, rangeStartTime, rangeEndTime);
     }
 
     public CalendarEvent createEvent(
-            AppUser actor,
+            ApplicationUser actingUser,
             Long calendarId,
             String title,
             String description,
             String location,
-            OffsetDateTime startAt,
-            OffsetDateTime endAt,
+            OffsetDateTime startTime,
+            OffsetDateTime endTime,
             boolean allDay) {
-        calendarAccessService.requireCanEdit(actor, calendarId);
+        calendarAccessService.requireCanEdit(actingUser, calendarId);
         String normalizedTitle = normalizeRequiredText(
                 title,
                 "Event title is required.",
@@ -64,7 +64,7 @@ public class CalendarEventService {
                 location,
                 MAXIMUM_EVENT_LOCATION_LENGTH,
                 "Event location must be 200 characters or fewer.");
-        validateEventTimes(startAt, endAt);
+        validateEventTimes(startTime, endTime);
 
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         Calendar calendar = calendarService.requireActiveCalendar(calendarId);
@@ -73,43 +73,31 @@ public class CalendarEventService {
         event.setTitle(normalizedTitle);
         event.setDescription(normalizeOptionalText(description));
         event.setLocation(normalizedLocation);
-        event.setStartAt(startAt);
-        event.setEndAt(endAt);
+        event.setStartTime(startTime);
+        event.setEndTime(endTime);
         event.setAllDay(allDay);
-        event.setCreatedByUser(actor);
-        event.setUpdatedByUser(actor);
+        event.setCreatedByUser(actingUser);
+        event.setUpdatedByUser(actingUser);
         event.setCreatedAt(now);
         event.setUpdatedAt(now);
         entityManager.persist(event);
         entityManager.flush();
-        auditService.record(actor, calendar, "calendar_event", event.getId(), "created", "Event created.");
+        auditService.record(actingUser, calendar, "calendar_event", event.getId(), "created", "Event created.");
         return event;
     }
 
     public CalendarEvent updateEvent(
-            AppUser actor,
-            Long eventId,
-            String title,
-            String description,
-            String location,
-            OffsetDateTime startAt,
-            OffsetDateTime endAt,
-            boolean allDay) {
-        return updateEvent(actor, eventId, null, title, description, location, startAt, endAt, allDay);
-    }
-
-    public CalendarEvent updateEvent(
-            AppUser actor,
+            ApplicationUser actingUser,
             Long eventId,
             Integer expectedVersion,
             String title,
             String description,
             String location,
-            OffsetDateTime startAt,
-            OffsetDateTime endAt,
+            OffsetDateTime startTime,
+            OffsetDateTime endTime,
             boolean allDay) {
         CalendarEvent event = requireEvent(eventId);
-        calendarAccessService.requireCanEdit(actor, event.getCalendar().getId());
+        calendarAccessService.requireCanEdit(actingUser, event.getCalendar().getId());
         requireExpectedVersion(event, expectedVersion);
         String normalizedTitle = normalizeRequiredText(
                 title,
@@ -120,51 +108,38 @@ public class CalendarEventService {
                 location,
                 MAXIMUM_EVENT_LOCATION_LENGTH,
                 "Event location must be 200 characters or fewer.");
-        validateEventTimes(startAt, endAt);
+        validateEventTimes(startTime, endTime);
 
         event.setTitle(normalizedTitle);
         event.setDescription(normalizeOptionalText(description));
         event.setLocation(normalizedLocation);
-        event.setStartAt(startAt);
-        event.setEndAt(endAt);
+        event.setStartTime(startTime);
+        event.setEndTime(endTime);
         event.setAllDay(allDay);
-        event.setUpdatedByUser(actor);
+        event.setUpdatedByUser(actingUser);
         event.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
-        auditService.record(actor, event.getCalendar(), "calendar_event", event.getId(), "updated", "Event updated.");
+        auditService.record(actingUser, event.getCalendar(), "calendar_event", event.getId(), "updated", "Event updated.");
         flushWithConflictMessage();
         return event;
     }
 
-    public void deleteEvent(AppUser actor, Long eventId) {
-        deleteEvent(actor, eventId, null);
-    }
-
-    public void deleteEvent(AppUser actor, Long eventId, Integer expectedVersion) {
+    public void deleteEvent(ApplicationUser actingUser, Long eventId, Integer expectedVersion) {
         CalendarEvent event = requireEvent(eventId);
-        calendarAccessService.requireCanEdit(actor, event.getCalendar().getId());
+        calendarAccessService.requireCanEdit(actingUser, event.getCalendar().getId());
         requireExpectedVersion(event, expectedVersion);
-        auditService.record(actor, event.getCalendar(), "calendar_event", event.getId(), "deleted", "Event deleted.");
+        auditService.record(actingUser, event.getCalendar(), "calendar_event", event.getId(), "deleted", "Event deleted.");
         entityManager.remove(event);
         flushWithConflictMessage();
     }
 
-    public void validateEvent(String title, OffsetDateTime startAt, OffsetDateTime endAt) {
-        normalizeRequiredText(
-                title,
-                "Event title is required.",
-                MAXIMUM_EVENT_TITLE_LENGTH,
-                "Event title must be 200 characters or fewer.");
-        validateEventTimes(startAt, endAt);
-    }
-
-    private void validateEventTimes(OffsetDateTime startAt, OffsetDateTime endAt) {
-        if (startAt == null) {
+    private void validateEventTimes(OffsetDateTime startTime, OffsetDateTime endTime) {
+        if (startTime == null) {
             throw new ValidationException("Event start time is required.");
         }
-        if (endAt == null) {
+        if (endTime == null) {
             throw new ValidationException("Event end time is required.");
         }
-        if (!endAt.isAfter(startAt)) {
+        if (!endTime.isAfter(startTime)) {
             throw new ValidationException("Event end time must be after the start time.");
         }
     }
@@ -180,25 +155,25 @@ public class CalendarEventService {
         return normalizedValue;
     }
 
-    private List<CalendarEvent> findEvents(Long calendarId, OffsetDateTime rangeStart, OffsetDateTime rangeEnd) {
+    private List<CalendarEvent> findEvents(Long calendarId, OffsetDateTime rangeStartTime, OffsetDateTime rangeEndTime) {
         StringBuilder queryText = new StringBuilder(
                 "select calendarEvent from CalendarEvent calendarEvent "
                         + "where calendarEvent.calendar.id = :calendarId ");
-        if (rangeStart != null) {
-            queryText.append("and calendarEvent.endAt > :rangeStart ");
+        if (rangeStartTime != null) {
+            queryText.append("and calendarEvent.endTime > :rangeStartTime ");
         }
-        if (rangeEnd != null) {
-            queryText.append("and calendarEvent.startAt < :rangeEnd ");
+        if (rangeEndTime != null) {
+            queryText.append("and calendarEvent.startTime < :rangeEndTime ");
         }
-        queryText.append("order by calendarEvent.startAt");
+        queryText.append("order by calendarEvent.startTime");
 
         TypedQuery<CalendarEvent> query = entityManager.createQuery(queryText.toString(), CalendarEvent.class)
                 .setParameter("calendarId", calendarId);
-        if (rangeStart != null) {
-            query.setParameter("rangeStart", rangeStart);
+        if (rangeStartTime != null) {
+            query.setParameter("rangeStartTime", rangeStartTime);
         }
-        if (rangeEnd != null) {
-            query.setParameter("rangeEnd", rangeEnd);
+        if (rangeEndTime != null) {
+            query.setParameter("rangeEndTime", rangeEndTime);
         }
         return query.getResultList();
     }

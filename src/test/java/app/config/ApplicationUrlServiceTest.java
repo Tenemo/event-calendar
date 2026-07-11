@@ -21,6 +21,21 @@ final class ApplicationUrlServiceTest {
         assertEquals(
                 "https://calendar.example.com/friends/register?token=invite-123",
                 applicationUrlService.linkTo("register?token=invite-123"));
+
+        setField(applicationUrlService, "configuredBaseUrl", "HTTPS://calendar.example.com:9443/team/");
+        assertEquals(
+                "HTTPS://calendar.example.com:9443/team/calendar/token-456",
+                applicationUrlService.linkTo("calendar/token-456"));
+
+        setField(applicationUrlService, "configuredBaseUrl", "http://127.0.0.1:9080/calendar-app/");
+        assertEquals(
+                "http://127.0.0.1:9080/calendar-app/register",
+                applicationUrlService.linkTo("register"));
+
+        setField(applicationUrlService, "configuredBaseUrl", "https://[2001:db8::1]/friends/");
+        assertEquals(
+                "https://[2001:db8::1]/friends/calendar/token-789",
+                applicationUrlService.linkTo("calendar/token-789"));
     }
 
     @Test
@@ -32,6 +47,16 @@ final class ApplicationUrlServiceTest {
 
         setField(applicationUrlService, "configuredBaseUrl", "https://calendar.example.com?redirect=attacker.example");
         assertThrows(IllegalStateException.class, () -> applicationUrlService.linkTo("/calendar/token"));
+
+        assertAll(
+                () -> assertRejectedBaseUrl(applicationUrlService, "https://user:password@calendar.example.com"),
+                () -> assertRejectedBaseUrl(applicationUrlService, "https://calendar.example.com#fragment"),
+                () -> assertRejectedBaseUrl(applicationUrlService, "mailto:calendar@example.com"),
+                () -> assertRejectedBaseUrl(applicationUrlService, "https:///deployment-path"),
+                () -> assertRejectedBaseUrl(applicationUrlService, "https://calendar_example.com"),
+                () -> assertRejectedBaseUrl(applicationUrlService, "https://calendar.example.com:"),
+                () -> assertRejectedBaseUrl(applicationUrlService, "https://calendar.example.com:65536"),
+                () -> assertRejectedBaseUrl(applicationUrlService, "https://[::1"));
     }
 
     @Test
@@ -64,5 +89,10 @@ final class ApplicationUrlServiceTest {
                         IllegalStateException.class,
                         () -> ApplicationUrlService.requestDerivedBaseUrl(
                                 "https", "calendar.example.com", 443, "")));
+    }
+
+    private static void assertRejectedBaseUrl(ApplicationUrlService applicationUrlService, String configuredBaseUrl) {
+        setField(applicationUrlService, "configuredBaseUrl", configuredBaseUrl);
+        assertThrows(IllegalStateException.class, () -> applicationUrlService.linkTo("/calendar/token"));
     }
 }

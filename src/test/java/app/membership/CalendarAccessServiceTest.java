@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import app.testsupport.ServiceTestSupport.EntityManagerStub;
-import app.user.AppUser;
+import app.user.ApplicationUser;
 import app.util.AuthorizationException;
 import org.junit.jupiter.api.Test;
 
@@ -16,7 +16,7 @@ final class CalendarAccessServiceTest {
     @Test
     void viewerCanViewButCannotEditOrAdminister() {
         CalendarAccessService accessService = accessServiceReturningRole(CalendarRole.VIEWER);
-        AppUser user = activeUser();
+        ApplicationUser user = activeUser();
 
         assertAll(
                 () -> assertDoesNotThrow(() -> accessService.requireCanView(user, 10L)),
@@ -27,7 +27,7 @@ final class CalendarAccessServiceTest {
     @Test
     void editorCanEditButCannotAdminister() {
         CalendarAccessService accessService = accessServiceReturningRole(CalendarRole.EDITOR);
-        AppUser user = activeUser();
+        ApplicationUser user = activeUser();
 
         assertAll(
                 () -> assertDoesNotThrow(() -> accessService.requireCanView(user, 10L)),
@@ -38,7 +38,7 @@ final class CalendarAccessServiceTest {
     @Test
     void adminCanViewEditAndAdminister() {
         CalendarAccessService accessService = accessServiceReturningRole(CalendarRole.ADMIN);
-        AppUser user = activeUser();
+        ApplicationUser user = activeUser();
 
         assertAll(
                 () -> assertDoesNotThrow(() -> accessService.requireCanView(user, 10L)),
@@ -52,7 +52,6 @@ final class CalendarAccessServiceTest {
                 .singleResultNotFound("from CalendarMember");
         CalendarAccessService accessService = new CalendarAccessService();
         setField(accessService, "entityManager", entityManagerStub.entityManager());
-        setField(accessService, "calendarRolePolicy", new CalendarRolePolicy());
 
         assertThrows(AuthorizationException.class, () -> accessService.requireCanView(activeUser(), 10L));
     }
@@ -62,12 +61,11 @@ final class CalendarAccessServiceTest {
                 .singleResult("select calendarMember.role", role);
         CalendarAccessService accessService = new CalendarAccessService();
         setField(accessService, "entityManager", entityManagerStub.entityManager());
-        setField(accessService, "calendarRolePolicy", new CalendarRolePolicy());
         return accessService;
     }
 
-    private static AppUser activeUser() {
-        AppUser user = new AppUser();
+    private static ApplicationUser activeUser() {
+        ApplicationUser user = new ApplicationUser();
         setEntityId(user, 20L);
         user.setUsername("piotr");
         user.setDisplayName("Piotr");

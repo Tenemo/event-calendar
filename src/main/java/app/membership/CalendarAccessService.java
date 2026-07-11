@@ -1,11 +1,10 @@
 package app.membership;
 
 import app.calendar.Calendar;
-import app.user.AppUser;
+import app.user.ApplicationUser;
 import app.util.AuthorizationException;
 import app.util.NotFoundException;
 import jakarta.ejb.Stateless;
-import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.NoResultException;
 import jakarta.persistence.PersistenceContext;
@@ -16,10 +15,7 @@ public class CalendarAccessService {
     @PersistenceContext(unitName = "calendarPU")
     private EntityManager entityManager;
 
-    @Inject
-    private CalendarRolePolicy calendarRolePolicy;
-
-    public Optional<CalendarRole> findActiveRole(AppUser user, Long calendarId) {
+    public Optional<CalendarRole> findActiveRole(ApplicationUser user, Long calendarId) {
         if (user == null || user.getId() == null || calendarId == null) {
             return Optional.empty();
         }
@@ -62,26 +58,26 @@ public class CalendarAccessService {
         }
     }
 
-    public void requireCanView(AppUser user, Long calendarId) {
+    public void requireCanView(ApplicationUser user, Long calendarId) {
         CalendarRole role = findActiveRole(user, calendarId)
                 .orElseThrow(() -> new AuthorizationException("Calendar access is required."));
-        if (!calendarRolePolicy.canView(role)) {
+        if (!role.canView()) {
             throw new AuthorizationException("Calendar access is required.");
         }
     }
 
-    public void requireCanEdit(AppUser user, Long calendarId) {
+    public void requireCanEdit(ApplicationUser user, Long calendarId) {
         CalendarRole role = findActiveRole(user, calendarId)
                 .orElseThrow(() -> new AuthorizationException("Editor access is required."));
-        if (!calendarRolePolicy.canEdit(role)) {
+        if (!role.canEdit()) {
             throw new AuthorizationException("Editor access is required.");
         }
     }
 
-    public void requireCanAdminister(AppUser user, Long calendarId) {
+    public void requireCanAdminister(ApplicationUser user, Long calendarId) {
         CalendarRole role = findActiveRole(user, calendarId)
                 .orElseThrow(() -> new AuthorizationException("Admin access is required."));
-        if (!calendarRolePolicy.canAdminister(role)) {
+        if (!role.canAdminister()) {
             throw new AuthorizationException("Admin access is required.");
         }
     }

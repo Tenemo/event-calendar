@@ -13,14 +13,14 @@ import java.util.List;
 public class CalendarTimeService {
     public String normalizeTimeZone(String timeZone) {
         if (timeZone == null || timeZone.isBlank()) {
-            throw new ValidationException("Timezone is required.");
+            throw new ValidationException("Time zone is required.");
         }
 
         String normalizedTimeZone = timeZone.trim();
         try {
             return ZoneId.of(normalizedTimeZone).getId();
         } catch (DateTimeException exception) {
-            throw new ValidationException("Timezone must be a valid region such as Europe/Warsaw.");
+            throw new ValidationException("Time zone must be a valid region such as Europe/Warsaw.");
         }
     }
 
@@ -32,10 +32,10 @@ public class CalendarTimeService {
         ZoneId zoneId = ZoneId.of(normalizeTimeZone(timeZone));
         List<ZoneOffset> validOffsets = zoneId.getRules().getValidOffsets(localDateTime);
         if (validOffsets.isEmpty()) {
-            throw new ValidationException("The selected time does not exist in the calendar timezone because of a clock change.");
+            throw new ValidationException("The selected time does not exist in the calendar time zone because of a clock change.");
         }
         if (validOffsets.size() > 1) {
-            throw new ValidationException("The selected time occurs twice in the calendar timezone because of a clock change. Choose another time.");
+            throw new ValidationException("The selected time occurs twice in the calendar time zone because of a clock change. Choose another time.");
         }
         return OffsetDateTime.of(localDateTime, validOffsets.getFirst());
     }

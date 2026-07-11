@@ -17,15 +17,23 @@ public class ApplicationUrlService {
     private String baseUrl() {
         if (configuredBaseUrl != null && !configuredBaseUrl.isBlank()) {
             String normalizedBaseUrl = removeTrailingSlashes(configuredBaseUrl.trim());
-            URI baseUri = URI.create(normalizedBaseUrl);
-            String scheme = baseUri.getScheme();
-            if (("http".equals(scheme) || "https".equals(scheme))
-                    && baseUri.getHost() != null
-                    && baseUri.getRawQuery() == null
-                    && baseUri.getRawFragment() == null) {
-                return normalizedBaseUrl;
+            try {
+                URI baseUri = URI.create(normalizedBaseUrl);
+                String scheme = baseUri.getScheme();
+                if (!baseUri.isOpaque()
+                        && ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
+                        && baseUri.getHost() != null
+                        && baseUri.getPort() <= 65_535
+                        && !baseUri.getRawAuthority().endsWith(":")
+                        && baseUri.getRawUserInfo() == null
+                        && baseUri.getRawQuery() == null
+                        && baseUri.getRawFragment() == null) {
+                    return normalizedBaseUrl;
+                }
+            } catch (IllegalArgumentException exception) {
+                throw invalidBaseUrlException(exception);
             }
-            throw new IllegalStateException("APP_BASE_URL must be an absolute HTTP or HTTPS URL without a query or fragment.");
+            throw invalidBaseUrlException(null);
         }
 
         FacesContext facesContext = FacesContext.getCurrentInstance();
@@ -89,5 +97,10 @@ public class ApplicationUrlService {
             normalizedValue = normalizedValue.substring(0, normalizedValue.length() - 1);
         }
         return normalizedValue;
+    }
+
+    private static IllegalStateException invalidBaseUrlException(IllegalArgumentException cause) {
+        String message = "APP_BASE_URL must be an absolute HTTP or HTTPS URL without credentials, a query, or a fragment.";
+        return cause == null ? new IllegalStateException(message) : new IllegalStateException(message, cause);
     }
 }

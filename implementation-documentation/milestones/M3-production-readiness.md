@@ -2,142 +2,103 @@
 
 Use this milestone to make the app packageable, deployable, recoverable, documented, and safe enough for real personal use.
 
+## Implementation status
+
+The repository implementation was completed and locally verified on 2026-07-10. Railway project creation, deployment, generated-domain validation, custom-domain DNS, HTTPS validation, and persistence checks across a real production redeploy are explicitly deferred to a separate operational task.
+
+Implemented repository deliverables:
+
+1. Multi-stage Java 25 and Open Liberty production image.
+2. Opt-in Compose application profile using the production image and Dockerized PostgreSQL.
+3. JSON Liberty logs on standard output and standard error.
+4. Portable `mise` and Java commands for image build, container startup, backup, guarded restore, and isolated restore verification.
+5. Fresh tmpfs PostgreSQL restore-verification service with schema and row-count comparison.
+6. Maven, database-backed browser tests, production container smoke, Dependency Review, and CodeQL configuration.
+7. Complete public operating runbook in `README.md`.
+
+Local verification evidence:
+
+1. `mise run docker-build` produced `shared-calendar:local` from the repository Dockerfile.
+2. The production container ran on local port `9082` with `COOKIE_SECURE=false` and returned `200 ok` from `/health`.
+3. The runtime image contained the WAR and PostgreSQL driver but no Maven installation or build source directory.
+4. Liberty emitted JSON console logs without passwords, public tokens, or invitation tokens.
+5. Flyway migrations 1 through 4 were present and successful.
+6. Invalid public calendar routes returned `404` and included `noindex`.
+7. The local session cookie was `HttpOnly`, `SameSite=Lax`, and correctly omitted `Secure` for HTTP.
+8. `mise run verify-backup-restore` restored a custom-format dump into a fresh tmpfs PostgreSQL service and matched all application-table and Flyway-history row counts.
+9. `mise run e2e` against the production container passed 69 unit tests and all 4 browser workflows.
+
 ## Milestone checklist
 
-Outcome: the app is packaged, deployable to Railway, recoverable from backup, and documented for real use with registration, public calendar links, invite links, calendar roles, and event workflows.
+Outcome: the repository is packaged, Railway-deployable, recoverable from backup, and documented for real use. Live Railway acceptance remains deferred.
 
-Tasks:
+- [x] Build the production Docker image.
+- [x] Run the app container locally against Dockerized PostgreSQL.
+- [x] Confirm health, registration, login, calendar creation, public links, invite links, event CRUD, member management, environment variables, and `COOKIE_SECURE=false` locally.
+- [x] Add Dockerized backup and restore commands.
+- [x] Test backup and restore against a fresh local Docker Compose database.
+- [ ] Create the Railway project, PostgreSQL service, and web service. Deferred by the owner.
+- [ ] Configure Railway variables and deploy. Deferred by the owner.
+- [ ] Confirm generated Railway domain, then custom domain and HTTPS. Deferred by the owner.
+- [ ] Verify invitation, account, calendar, editor, and event persistence across a Railway redeploy. Deferred by the owner.
+- [x] Update README with setup, deployment, environment variables, roles, registration, public links, invitations, backup/restore, troubleshooting, and known limitations.
+- [x] Extend GitHub PR checks with Docker build coverage and available security checks.
 
-1. Build the production Docker image.
-2. Run the app container locally against Dockerized PostgreSQL.
-3. Confirm health, registration, login, calendar creation, public links, invite links, event CRUD, member management, environment variables, and `COOKIE_SECURE=false` locally.
-4. Add Dockerized backup and restore scripts.
-5. Test backup and restore against a fresh local Docker Compose database.
-6. Create the Railway project, PostgreSQL service, and web service.
-7. Configure Railway variables and deploy.
-8. Confirm generated Railway domain, then custom domain and HTTPS.
-9. Create an app invitation link, register a real account with that link, create a calendar, create an editor invitation link for that calendar, accept the invite with a second account, and verify events persist across redeploy.
-10. Update README with local setup, deployment, environment variables, roles, registration, public links, invitations, backup/restore, troubleshooting, and known limitations.
-11. Extend GitHub PR checks with Docker build coverage and available security checks.
-
-Verification:
+Verification commands:
 
 ```bash
-./mvnw clean test package
-docker compose up -d postgres
-docker build -t shared-calendar:local .
-docker run --rm -p 9080:9080 ... shared-calendar:local
-curl -i http://localhost:9080/health
-scripts/backup-postgres.sh
-scripts/restore-postgres.sh path/to/backup.dump
+mise run package
+mise run docker-build
+mise run docker-up
+mise run verify-backup-restore
+mise run e2e
 ```
 
-Acceptance criteria:
+## Acceptance status
 
-1. Docker image builds from a clean checkout.
-2. Runtime does not need Maven.
-3. App logs to stdout/stderr.
-4. No secrets are baked into the image.
-5. Dockerized backup and restore work without host PostgreSQL client utilities.
-6. `https://<railway-domain>/health` returns `ok`.
-7. Custom domain works over HTTPS.
-8. Invitation-only registration works in production.
-9. Login works after redeploy.
-10. Calendar public links work after redeploy.
-11. Invite links work after redeploy.
-12. Events persist after redeploy.
-13. Railway logs do not contain passwords, public tokens, invite tokens, or database credentials.
-14. README has local setup, deploy setup, backup/restore, registration, roles, public links, invitations, troubleshooting, and known limitations.
-15. PR checks include the Maven build, database-backed tests, app smoke where deterministic, Docker image build, and enabled security checks.
+| Criterion | Status |
+| --- | --- |
+| Docker image builds from repository source | Verified locally |
+| Runtime does not need Maven | Verified locally |
+| Application logs to stdout/stderr | Verified locally with JSON console logs |
+| No secrets are baked into the image | Verified from explicit Docker build inputs and runtime inspection |
+| Dockerized backup and restore work without host PostgreSQL clients | Verified locally |
+| Railway health and custom HTTPS domain | Deferred |
+| Invitation-only registration and links in production | Deferred; verified in the local production container |
+| Login, public links, invite links, and events persist after redeploy | Deferred |
+| Railway logs exclude passwords and bearer tokens | Deferred; verified in local production-container logs |
+| README contains the complete operating runbook | Implemented |
+| PR definitions cover build, database/browser tests, container smoke, and security checks | Implemented; remote workflow execution pending push |
 
 ## Docker build
 
-Create `.dockerignore`:
+The root `Dockerfile` uses a disposable `eclipse-temurin:25-jdk` build stage and the Open Liberty `kernel-slim-java25-openj9-ubi-minimal` runtime. It installs only build-time wrapper prerequisites, packages the WAR with tests skipped because tests run in a separate required build, copies the Maven-managed PostgreSQL driver into Liberty shared resources, installs the declared Jakarta features, and does not require a database during image construction.
 
-```text
-.git
-.idea
-.vscode
-target
-.env
-*.log
-```
+The `.dockerignore` excludes source-control state, local environments, build output, private planning material, logs, and local scratch files. The runtime receives only Liberty configuration, container logging configuration, the PostgreSQL driver, and the WAR.
 
-Create `Dockerfile`:
-
-```dockerfile
-FROM eclipse-temurin:25-jdk AS build
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-COPY .mvn .mvn
-COPY mvnw pom.xml ./
-RUN chmod +x mvnw && ./mvnw -q -DskipTests dependency:go-offline
-
-COPY src ./src
-RUN ./mvnw -DskipTests package \
-    dependency:copy \
-    -Dartifact=org.postgresql:postgresql:42.7.13 \
-    -DoutputDirectory=target/driver
-
-FROM icr.io/appcafe/open-liberty:kernel-slim-java25-openj9-ubi-minimal
-
-COPY --chown=1001:0 src/main/liberty/config/server.xml /config/
-
-RUN features.sh
-
-COPY --chown=1001:0 --from=build /app/target/driver/postgresql-*.jar /config/resources/
-COPY --chown=1001:0 --from=build /app/target/shared-calendar.war /config/apps/shared-calendar.war
-
-RUN configure.sh
-```
-
-Local Docker test:
+Local image and container commands:
 
 ```bash
-docker build -t shared-calendar:local .
-
-docker run --rm \
-  -p 9080:9080 \
-  -e PORT=9080 \
-  -e COOKIE_SECURE=false \
-  -e PGHOST=host.docker.internal \
-  -e PGPORT=5432 \
-  -e PGDATABASE=calendar \
-  -e PGUSER=calendar \
-  -e PGPASSWORD=calendar \
-  -e APP_TIMEZONE=Europe/Warsaw \
-  -e APP_BASE_URL=http://localhost:9080 \
-  -e APP_BOOTSTRAP_INVITE_TOKEN= \
-  shared-calendar:local
+mise run docker-build
+mise run docker-up
+docker compose --profile application logs --follow web
 ```
 
-On Linux, `host.docker.internal` may need extra configuration. If it fails, run the app and PostgreSQL in one Docker network or use the host IP.
+The Compose `application` profile keeps PostgreSQL and the web service on one Docker network, avoiding host-specific database routing.
 
-## GitHub PR checks after M3
+## GitHub PR checks
 
-M3 should make production packaging visible in PRs.
+The PR workflow now provides:
 
-Required PR checks should include:
+1. Maven Wrapper clean test and package build.
+2. PrimeFaces Jakarta classifier assertion.
+3. PostgreSQL-backed Liberty and Playwright workflows.
+4. Production Docker image build and container smoke against PostgreSQL.
+5. Health, home, invalid-public-route, and Flyway checks on the production container.
+6. Dependency Review for pull requests, failing on new moderate-or-higher vulnerable dependencies.
+7. CodeQL Java analysis on pull requests, pushes to `master`, and a weekly schedule.
 
-1. Maven wrapper build: `./mvnw -B -ntp clean test package`.
-2. PostgreSQL-backed migration and service tests.
-3. App smoke against a running Liberty app using the deterministic M2 route and browser checks.
-4. Docker image build: `docker build -t shared-calendar:ci .`.
-
-Add a container smoke check after the Docker image can reliably connect to the CI PostgreSQL service. The smoke should confirm `/health` and one or two stable application routes, not perform deployment.
-
-Security checks:
-
-1. Add GitHub Dependency Review on pull requests if the repository has Dependency Review available. Configure it to fail on new vulnerable dependencies, not on unrelated existing alerts.
-2. Add CodeQL Java analysis on pull requests, pushes to `master`, and a weekly schedule if code scanning is available for the repository.
-3. Add Dependabot configuration for Maven dependencies and GitHub Actions updates after the initial workflow is stable.
-
-Do not deploy to Railway from pull requests. Production deploys should remain manual or protected on `master` until the owner explicitly asks for automated deployment. PR workflows must not require Railway secrets.
+PR workflows do not deploy to Railway and do not require Railway secrets.
 
 ## Railway deployment plan
 
@@ -145,29 +106,28 @@ Create one Railway project with two services:
 
 ```text
 shared-calendar-web
-postgres
+Postgres
 ```
 
 The web service uses the repository root `Dockerfile`. PostgreSQL is a Railway PostgreSQL service.
 
 Set these variables on the web service:
 
-```bash
-PORT=${{PORT}}
+```text
 COOKIE_SECURE=true
 
-PGHOST=${{Postgres.PGHOST}}
-PGPORT=${{Postgres.PGPORT}}
-PGDATABASE=${{Postgres.PGDATABASE}}
-PGUSER=${{Postgres.PGUSER}}
-PGPASSWORD=${{Postgres.PGPASSWORD}}
+PGHOST=${{ Postgres.PGHOST }}
+PGPORT=${{ Postgres.PGPORT }}
+PGDATABASE=${{ Postgres.PGDATABASE }}
+PGUSER=${{ Postgres.PGUSER }}
+PGPASSWORD=${{ Postgres.PGPASSWORD }}
 
 APP_TIMEZONE=Europe/Warsaw
 APP_BASE_URL=https://calendar.example.com
 APP_BOOTSTRAP_INVITE_TOKEN=
 ```
 
-Adjust the `${{Postgres.*}}` namespace to match the actual Railway PostgreSQL service name.
+Railway injects `PORT`; do not replace it with a fixed value. Adjust the `Postgres` namespace if the PostgreSQL service uses another name.
 
 Railway requirements:
 
@@ -192,18 +152,21 @@ Do not skip the TXT record; Railway uses it to verify ownership before routing t
 
 ## Backup and restore
 
-Backup and restore must not depend on host-installed PostgreSQL client tools. Use Dockerized clients:
+Backup and restore use portable Java orchestration and Dockerized PostgreSQL 17 clients. No host `psql`, `pg_dump`, or `pg_restore` installation is required.
+Backup output is staged in a unique partial file and atomically replaces the requested destination only after a successful non-empty dump.
 
-1. For the local Docker Compose database, run `pg_dump` and `pg_restore` inside the `postgres` service container.
-2. For remote databases, run a temporary `postgres:17` client container and connect with `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, and `PGPASSWORD`.
+```bash
+mise run backup-postgres
+mise run backup-postgres -- target/backups/calendar-before-upgrade.dump
+mise run restore-postgres -- target/backups/calendar-before-upgrade.dump calendar
+mise run verify-backup-restore
+```
 
-Acceptance criteria for backups:
+The restore command requires the configured database name as an explicit second argument before it runs `pg_restore --clean --if-exists --single-transaction --exit-on-error`. The archive is validated before restore. The application must be stopped before a real restore.
 
-1. Agent can run backup against the local Docker Compose database.
-2. Agent can restore into a fresh local Docker Compose database.
-3. README documents production backup process.
-4. README states that host PostgreSQL client utilities are not required.
-5. Do not claim production readiness until a restore has been tested.
+Local operations execute clients inside the Compose PostgreSQL service. Remote operations use a temporary `postgres:17` client container with `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, and optional `PGSSLMODE`; the password is passed through the container environment rather than the command line.
+
+`mise run verify-backup-restore` force-recreates a dedicated PostgreSQL service whose data directory is tmpfs, restores the local backup, compares counts for every application table and Flyway history, and stops the verification service. This workflow passed locally.
 
 ## README requirements
 

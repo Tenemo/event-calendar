@@ -1,7 +1,7 @@
 package app.user;
 
-import app.invitation.AppInvitation;
-import app.invitation.AppInvitationService;
+import app.invitation.Invitation;
+import app.invitation.InvitationService;
 import app.security.CurrentUser;
 import app.util.AuthorizationException;
 import app.util.ValidationException;
@@ -31,17 +31,17 @@ public class RegistrationView {
     private CurrentUser currentUser;
 
     @Inject
-    private AppInvitationService appInvitationService;
+    private InvitationService invitationService;
 
     private String username;
     private String displayName;
     private String calendarName;
     private String password;
-    private String inviteToken;
+    private String invitationToken;
 
     public void register() throws IOException {
         try {
-            registrationService.register(inviteToken, username, displayName, password, calendarName);
+            registrationService.register(invitationToken, username, displayName, password, calendarName);
             authenticateAndRedirect();
         } catch (ValidationException exception) {
             FacesContext.getCurrentInstance().addMessage(
@@ -52,7 +52,7 @@ public class RegistrationView {
 
     public void acceptInvitation() throws IOException {
         try {
-            AppInvitation invitation = appInvitationService.acceptInvitation(inviteToken, currentUser.require());
+            Invitation invitation = invitationService.acceptInvitation(invitationToken, currentUser.require());
             String route = invitation.getCalendar() == null
                     ? "/app/calendars"
                     : "/app/calendar?id=" + invitation.getCalendar().getId();
@@ -102,12 +102,12 @@ public class RegistrationView {
         this.password = password;
     }
 
-    public String getInviteToken() {
-        return inviteToken;
+    public String getInvitationToken() {
+        return invitationToken;
     }
 
-    public void setInviteToken(String inviteToken) {
-        this.inviteToken = inviteToken;
+    public void setInvitationToken(String invitationToken) {
+        this.invitationToken = invitationToken;
     }
 
     private void authenticateAndRedirect() throws IOException {

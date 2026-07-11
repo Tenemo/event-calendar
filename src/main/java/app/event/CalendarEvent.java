@@ -1,7 +1,7 @@
 package app.event;
 
 import app.calendar.Calendar;
-import app.user.AppUser;
+import app.user.ApplicationUser;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -34,21 +34,21 @@ public class CalendarEvent {
     private String location;
 
     @Column(name = "start_at", nullable = false)
-    private OffsetDateTime startAt;
+    private OffsetDateTime startTime;
 
     @Column(name = "end_at", nullable = false)
-    private OffsetDateTime endAt;
+    private OffsetDateTime endTime;
 
     @Column(name = "all_day", nullable = false)
     private boolean allDay;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by_user_id")
-    private AppUser createdByUser;
+    private ApplicationUser createdByUser;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "updated_by_user_id")
-    private AppUser updatedByUser;
+    private ApplicationUser updatedByUser;
 
     @Version
     @Column(nullable = false)
@@ -96,20 +96,20 @@ public class CalendarEvent {
         this.location = location;
     }
 
-    public OffsetDateTime getStartAt() {
-        return startAt;
+    public OffsetDateTime getStartTime() {
+        return startTime;
     }
 
-    public void setStartAt(OffsetDateTime startAt) {
-        this.startAt = startAt;
+    public void setStartTime(OffsetDateTime startTime) {
+        this.startTime = startTime;
     }
 
-    public OffsetDateTime getEndAt() {
-        return endAt;
+    public OffsetDateTime getEndTime() {
+        return endTime;
     }
 
-    public void setEndAt(OffsetDateTime endAt) {
-        this.endAt = endAt;
+    public void setEndTime(OffsetDateTime endTime) {
+        this.endTime = endTime;
     }
 
     public boolean isAllDay() {
@@ -120,19 +120,19 @@ public class CalendarEvent {
         this.allDay = allDay;
     }
 
-    public AppUser getCreatedByUser() {
+    public ApplicationUser getCreatedByUser() {
         return createdByUser;
     }
 
-    public void setCreatedByUser(AppUser createdByUser) {
+    public void setCreatedByUser(ApplicationUser createdByUser) {
         this.createdByUser = createdByUser;
     }
 
-    public AppUser getUpdatedByUser() {
+    public ApplicationUser getUpdatedByUser() {
         return updatedByUser;
     }
 
-    public void setUpdatedByUser(AppUser updatedByUser) {
+    public void setUpdatedByUser(ApplicationUser updatedByUser) {
         this.updatedByUser = updatedByUser;
     }
 

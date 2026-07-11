@@ -4,46 +4,46 @@
                 xmlns:ui="jakarta.faces.facelets"
                 xmlns:p="primefaces"
                 template="/WEB-INF/templates/main.xhtml">
-    <ui:define name="title">App invitations - Shared calendar</ui:define>
+    <ui:define name="title">Invitations - Shared calendar</ui:define>
 
     <ui:define name="content">
         <section class="page-section">
             <div class="section-header">
                 <div>
-                    <h1>App invitations</h1>
+                    <h1>Invitations</h1>
                     <p class="lead-text">Create single-use links for new accounts.</p>
                 </div>
             </div>
 
             <div class="form-grid">
-                <p:panel header="App invitation" styleClass="surface-panel form-panel">
+                <p:panel header="Registration invitation" styleClass="surface-panel form-panel">
                     <h:form styleClass="stacked-form">
-                        <p:commandButton value="Generate app link"
-                                         action="#{appInvitationView.createAppInvitation}"
+                        <p:commandButton value="Generate registration link"
+                                         action="#{invitationView.createRegistrationInvitation}"
                                          ajax="false"/>
                     </h:form>
                 </p:panel>
 
                 <p:panel header="Editor invitation" styleClass="surface-panel form-panel">
-                    <h:form styleClass="stacked-form" rendered="#{appInvitationView.hasEditableCalendars}">
+                    <h:form styleClass="stacked-form" rendered="#{invitationView.hasEditableCalendars()}">
                         <p:outputLabel for="calendar" value="Calendar"/>
                         <h:selectOneMenu id="calendar"
-                                         value="#{appInvitationView.selectedCalendarId}"
+                                         value="#{invitationView.selectedCalendarId}"
                                          required="true"
                                          requiredMessage="Calendar is required."
                                          styleClass="ui-inputfield ui-widget ui-state-default ui-corner-all">
                             <f:selectItem itemLabel="Select calendar" noSelectionOption="true"/>
-                            <f:selectItems value="#{appInvitationView.editableCalendars}"
+                            <f:selectItems value="#{invitationView.editableCalendars}"
                                            var="calendar"
                                            itemValue="#{calendar.id}"
                                            itemLabel="#{calendar.name}"/>
                         </h:selectOneMenu>
 
                         <p:commandButton value="Generate editor link"
-                                         action="#{appInvitationView.createEditorInvitation}"
+                                         action="#{invitationView.createEditorInvitation}"
                                          ajax="false"/>
                     </h:form>
-                    <h:panelGroup layout="block" rendered="#{not appInvitationView.hasEditableCalendars}">
+                    <h:panelGroup layout="block" rendered="#{not invitationView.hasEditableCalendars()}">
                         <p>No editable calendars are available.</p>
                     </h:panelGroup>
                 </p:panel>
@@ -51,19 +51,20 @@
 
             <h:panelGroup layout="block"
                           styleClass="generated-invite"
-                          rendered="#{appInvitationView.hasGeneratedInviteLink}">
-                <p:outputLabel for="generatedInviteLink" value="Generated link"/>
-                <p:inputText id="generatedInviteLink"
-                             value="#{appInvitationView.generatedInviteLink}"
+                          rendered="#{invitationView.hasGeneratedInvitationLink()}">
+                <p:outputLabel for="generatedInvitationLink" value="Generated link"/>
+                <p:inputText id="generatedInvitationLink"
+                             value="#{invitationView.generatedInvitationLink}"
                              readonly="true"/>
             </h:panelGroup>
 
-            <p:dataTable value="#{appInvitationView.invitations}"
+            <div class="table-scroll-region" role="region" aria-label="Invitations table" tabindex="0">
+            <p:dataTable value="#{invitationView.invitations}"
                          var="invitation"
-                         emptyMessage="No app invitations yet."
+                         emptyMessage="No invitations yet."
                          styleClass="surface-table">
-                <p:column headerText="Invite link">
-                    <p:inputText value="#{invitation.inviteLink}" readonly="true" styleClass="table-copy-field"/>
+                <p:column headerText="Invitation link">
+                    <p:inputText value="#{invitation.invitationLink}" readonly="true" styleClass="table-copy-field"/>
                 </p:column>
                 <p:column headerText="Scope">
                     <h:outputText value="#{invitation.scope}"/>
@@ -77,12 +78,13 @@
                 <p:column headerText="Action">
                     <h:form rendered="#{invitation.revocable}">
                         <p:commandButton value="Revoke"
-                                         action="#{appInvitationView.revokeInvitation(invitation.id)}"
+                                         action="#{invitationView.revokeInvitation(invitation.id)}"
                                          ajax="false"/>
                     </h:form>
                     <h:outputText value="-" rendered="#{not invitation.revocable}"/>
                 </p:column>
             </p:dataTable>
+            </div>
         </section>
     </ui:define>
 </ui:composition>

@@ -16,8 +16,8 @@ public final class CalendarEventRow implements Serializable {
     private final String title;
     private final String description;
     private final String location;
-    private final LocalDateTime startAt;
-    private final LocalDateTime endAt;
+    private final LocalDateTime startTime;
+    private final LocalDateTime endTime;
     private final boolean allDay;
 
     private CalendarEventRow(
@@ -26,16 +26,16 @@ public final class CalendarEventRow implements Serializable {
             String title,
             String description,
             String location,
-            LocalDateTime startAt,
-            LocalDateTime endAt,
+            LocalDateTime startTime,
+            LocalDateTime endTime,
             boolean allDay) {
         this.id = id;
         this.version = version;
         this.title = title;
         this.description = description;
         this.location = location;
-        this.startAt = startAt;
-        this.endAt = endAt;
+        this.startTime = startTime;
+        this.endTime = endTime;
         this.allDay = allDay;
     }
 
@@ -49,8 +49,8 @@ public final class CalendarEventRow implements Serializable {
                 event.getTitle(),
                 event.getDescription(),
                 event.getLocation(),
-                calendarTimeService.toCalendarTime(event.getStartAt(), timeZone),
-                calendarTimeService.toCalendarTime(event.getEndAt(), timeZone),
+                calendarTimeService.toCalendarTime(event.getStartTime(), timeZone),
+                calendarTimeService.toCalendarTime(event.getEndTime(), timeZone),
                 event.isAllDay());
     }
 
@@ -74,12 +74,12 @@ public final class CalendarEventRow implements Serializable {
         return location;
     }
 
-    public LocalDateTime getStartAt() {
-        return startAt;
+    public LocalDateTime getStartTime() {
+        return startTime;
     }
 
-    public LocalDateTime getEndAt() {
-        return endAt;
+    public LocalDateTime getEndTime() {
+        return endTime;
     }
 
     public boolean isAllDay() {
@@ -87,20 +87,20 @@ public final class CalendarEventRow implements Serializable {
     }
 
     public String getDateLabel() {
-        return startAt.format(DATE_LABEL_FORMAT);
+        return startTime.format(DATE_LABEL_FORMAT);
     }
 
     public String getTimeLabel() {
         if (allDay) {
-            if (!startAt.toLocalDate().equals(endAt.toLocalDate())) {
+            if (!startTime.toLocalDate().equals(endTime.toLocalDate())) {
                 return "All day from "
-                        + startAt.format(ALL_DAY_DATE_FORMAT)
+                        + startTime.format(ALL_DAY_DATE_FORMAT)
                         + " to "
-                        + endAt.format(ALL_DAY_DATE_FORMAT);
+                        + endTime.format(ALL_DAY_DATE_FORMAT);
             }
             return "All day";
         }
-        return startAt.format(DATE_TIME_FORMAT) + " to " + endAt.format(DATE_TIME_FORMAT);
+        return startTime.format(DATE_TIME_FORMAT) + " to " + endTime.format(DATE_TIME_FORMAT);
     }
 
     public String getDetailLabel() {

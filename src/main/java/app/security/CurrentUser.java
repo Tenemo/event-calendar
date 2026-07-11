@@ -1,6 +1,6 @@
 package app.security;
 
-import app.user.AppUser;
+import app.user.ApplicationUser;
 import app.user.UserService;
 import app.util.AuthorizationException;
 import jakarta.enterprise.context.RequestScoped;
@@ -19,10 +19,10 @@ public class CurrentUser {
     @Inject
     private UserService userService;
 
-    private Optional<AppUser> currentUser = Optional.empty();
+    private Optional<ApplicationUser> currentUser = Optional.empty();
     private boolean currentUserLoaded;
 
-    public Optional<AppUser> find() {
+    public Optional<ApplicationUser> find() {
         if (!currentUserLoaded) {
             currentUser = loadCurrentUser();
             currentUserLoaded = true;
@@ -30,7 +30,7 @@ public class CurrentUser {
         return currentUser;
     }
 
-    public AppUser require() {
+    public ApplicationUser require() {
         return find().orElseThrow(() -> new AuthorizationException("Sign-in is required."));
     }
 
@@ -38,7 +38,7 @@ public class CurrentUser {
         return find().isPresent();
     }
 
-    private Optional<AppUser> loadCurrentUser() {
+    private Optional<ApplicationUser> loadCurrentUser() {
         Principal callerPrincipal = securityContext.getCallerPrincipal();
         if (callerPrincipal == null) {
             return Optional.empty();

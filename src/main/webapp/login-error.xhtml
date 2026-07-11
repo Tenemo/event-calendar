@@ -1,4 +1,5 @@
 <ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:h="jakarta.faces.html"
                 xmlns:ui="jakarta.faces.facelets"
                 xmlns:p="primefaces"
                 template="/WEB-INF/templates/main.xhtml">
@@ -6,7 +7,8 @@
 
     <ui:define name="content">
         <section class="narrow-section">
-            <p:panel header="Sign-in error" styleClass="surface-panel">
+            <h1>Sign-in error</h1>
+            <p:panel styleClass="surface-panel">
                 <p:staticMessage severity="warn"
                                  summary="Sign-in failed."
                                  detail="Check your username and password, then try again."/>

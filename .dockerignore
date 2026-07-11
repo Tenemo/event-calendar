@@ -1,4 +1,5 @@
 .git
+.github
 .idea
 .vscode
 target
@@ -6,3 +7,5 @@ target
 .env.*
 *.log
 temp
+implementation-documentation
+README.md

@@ -2,7 +2,7 @@ package app.calendar;
 
 import app.config.ApplicationUrlService;
 import app.security.CurrentUser;
-import app.user.AppUser;
+import app.user.ApplicationUser;
 import app.util.AuthorizationException;
 import app.util.ConflictException;
 import app.util.NotFoundException;
@@ -38,8 +38,8 @@ public class CalendarSettingsView implements Serializable {
 
     public void load() {
         try {
-            AppUser actor = currentUser.require();
-            Calendar calendar = calendarService.requireAdminCalendar(actor, calendarId);
+            ApplicationUser actingUser = currentUser.require();
+            Calendar calendar = calendarService.requireAdminCalendar(actingUser, calendarId);
             copyCalendar(calendar);
             available = true;
         } catch (AuthorizationException | NotFoundException exception) {
@@ -82,7 +82,7 @@ public class CalendarSettingsView implements Serializable {
     private void copyCalendar(Calendar calendar) {
         name = calendar.getName();
         description = calendar.getDescription();
-        timeZone = calendar.getTimezone();
+        timeZone = calendar.getTimeZone();
         publicAccessEnabled = calendar.isPublicAccessEnabled();
         publicToken = calendar.getPublicToken();
         version = calendar.getVersion();

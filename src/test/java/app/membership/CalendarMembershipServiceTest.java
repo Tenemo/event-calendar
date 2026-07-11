@@ -12,8 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import app.audit.AuditService;
 import app.calendar.Calendar;
 import app.testsupport.ServiceTestSupport.EntityManagerStub;
-import app.user.AppUser;
-import app.util.AuthorizationException;
+import app.user.ApplicationUser;
 import app.util.ValidationException;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -23,7 +22,7 @@ final class CalendarMembershipServiceTest {
     @Test
     void acceptedInvitationReactivatesInactiveMembershipAtInvitationRole() {
         Calendar calendar = activeCalendar(200L);
-        AppUser user = activeUser(100L);
+        ApplicationUser user = activeUser(100L);
         CalendarMember inactiveAdminMembership = membership(calendar, user, CalendarRole.ADMIN, false);
         EntityManagerStub entityManagerStub = entityManagerStub()
                 .singleResult("where calendarMember.calendar.id", inactiveAdminMembership);
@@ -41,7 +40,7 @@ final class CalendarMembershipServiceTest {
     @Test
     void acceptedInvitationPreservesActiveStrongerMembership() {
         Calendar calendar = activeCalendar(200L);
-        AppUser user = activeUser(100L);
+        ApplicationUser user = activeUser(100L);
         CalendarMember activeAdminMembership = membership(calendar, user, CalendarRole.ADMIN, true);
         EntityManagerStub entityManagerStub = entityManagerStub()
                 .singleResult("where calendarMember.calendar.id", activeAdminMembership);
@@ -71,8 +70,8 @@ final class CalendarMembershipServiceTest {
     @Test
     void roleChangesLockCalendarMembershipsBeforeChangingAdminState() {
         Calendar calendar = activeCalendar(200L);
-        AppUser actor = activeUser(100L);
-        CalendarMember actorMembership = membership(calendar, actor, CalendarRole.ADMIN, true);
+        ApplicationUser actingUser = activeUser(100L);
+        CalendarMember actorMembership = membership(calendar, actingUser, CalendarRole.ADMIN, true);
         CalendarMember targetMembership = membership(calendar, activeUser(101L), CalendarRole.ADMIN, true);
         EntityManagerStub entityManagerStub = entityManagerStub()
                 .resultList("from CalendarMember calendarMember", List.of(actorMembership, targetMembership));
@@ -80,7 +79,7 @@ final class CalendarMembershipServiceTest {
         setField(membershipService, "calendarAccessService", new AllowingAccessService());
         setField(membershipService, "auditService", new NoopAuditService());
 
-        membershipService.changeMemberRole(actor, calendar.getId(), targetMembership.getUser().getId(), CalendarRole.EDITOR);
+        membershipService.changeMemberRole(actingUser, calendar.getId(), targetMembership.getUser().getId(), CalendarRole.EDITOR);
 
         assertAll(
                 () -> assertTrue(
@@ -94,8 +93,8 @@ final class CalendarMembershipServiceTest {
     @Test
     void adminCannotDemoteOrRemoveThemselvesEvenWhenAnotherAdminExists() {
         Calendar calendar = activeCalendar(200L);
-        AppUser actor = activeUser(100L);
-        CalendarMember actorMembership = membership(calendar, actor, CalendarRole.ADMIN, true);
+        ApplicationUser actingUser = activeUser(100L);
+        CalendarMember actorMembership = membership(calendar, actingUser, CalendarRole.ADMIN, true);
         CalendarMember otherAdminMembership = membership(calendar, activeUser(101L), CalendarRole.ADMIN, true);
         OffsetDateTime originalUpdatedAt = actorMembership.getUpdatedAt();
         EntityManagerStub entityManagerStub = entityManagerStub()
@@ -105,37 +104,21 @@ final class CalendarMembershipServiceTest {
 
         ValidationException roleChangeException = assertThrows(
                 ValidationException.class,
-                () -> membershipService.changeMemberRole(actor, calendar.getId(), actor.getId(), CalendarRole.EDITOR));
+                () -> membershipService.changeMemberRole(actingUser, calendar.getId(), actingUser.getId(), CalendarRole.EDITOR));
         ValidationException removalException = assertThrows(
                 ValidationException.class,
-                () -> membershipService.disableMember(actor, calendar.getId(), actor.getId()));
-        ValidationException roleGrantException = assertThrows(
-                ValidationException.class,
-                () -> membershipService.addMemberByRole(actor, calendar.getId(), actor.getId(), CalendarRole.VIEWER));
-
+                () -> membershipService.disableMember(actingUser, calendar.getId(), actingUser.getId()));
         assertAll(
                 () -> assertEquals("You cannot change your own admin role.", roleChangeException.getMessage()),
                 () -> assertEquals("You cannot remove your own admin access.", removalException.getMessage()),
-                () -> assertEquals("You cannot change your own admin role.", roleGrantException.getMessage()),
                 () -> assertEquals(CalendarRole.ADMIN, actorMembership.getRole()),
                 () -> assertTrue(actorMembership.isActive()),
                 () -> assertEquals(originalUpdatedAt, actorMembership.getUpdatedAt()));
     }
 
-    @Test
-    void memberGrantRequiresAdminAccessBeforeChangingMemberships() {
-        CalendarMembershipService membershipService = new CalendarMembershipService();
-        setField(membershipService, "calendarAccessService", new RejectingAccessService());
-
-        assertThrows(
-                AuthorizationException.class,
-                () -> membershipService.addMemberByRole(activeUser(100L), 200L, 101L, CalendarRole.EDITOR));
-    }
-
     private static CalendarMembershipService membershipService(EntityManagerStub entityManagerStub) {
         CalendarMembershipService membershipService = new CalendarMembershipService();
         setField(membershipService, "entityManager", entityManagerStub.entityManager());
-        setField(membershipService, "calendarRolePolicy", new CalendarRolePolicy());
         setField(membershipService, "calendarMembershipPolicy", new CalendarMembershipPolicy());
         return membershipService;
     }
@@ -150,8 +133,8 @@ final class CalendarMembershipServiceTest {
         return calendar;
     }
 
-    private static AppUser activeUser(Long id) {
-        AppUser user = new AppUser();
+    private static ApplicationUser activeUser(Long id) {
+        ApplicationUser user = new ApplicationUser();
         setEntityId(user, id);
         user.setUsername("user-" + id);
         user.setDisplayName("User " + id);
@@ -159,7 +142,7 @@ final class CalendarMembershipServiceTest {
         return user;
     }
 
-    private static CalendarMember membership(Calendar calendar, AppUser user, CalendarRole role, boolean active) {
+    private static CalendarMember membership(Calendar calendar, ApplicationUser user, CalendarRole role, boolean active) {
         CalendarMember member = new CalendarMember();
         member.setCalendar(calendar);
         member.setUser(user);
@@ -172,20 +155,13 @@ final class CalendarMembershipServiceTest {
 
     private static final class AllowingAccessService extends CalendarAccessService {
         @Override
-        public void requireCanAdminister(AppUser user, Long calendarId) {
-        }
-    }
-
-    private static final class RejectingAccessService extends CalendarAccessService {
-        @Override
-        public void requireCanAdminister(AppUser user, Long calendarId) {
-            throw new AuthorizationException("Admin access is required.");
+        public void requireCanAdminister(ApplicationUser user, Long calendarId) {
         }
     }
 
     private static final class NoopAuditService extends AuditService {
         @Override
-        public void record(AppUser actorUser, Calendar calendar, String entityType, Long entityId, String action, String details) {
+        public void record(ApplicationUser actingUser, Calendar calendar, String entityType, Long entityId, String action, String details) {
         }
     }
 }

@@ -3,7 +3,7 @@ package app.user;
 import app.audit.AuditService;
 import app.calendar.Calendar;
 import app.calendar.CalendarService;
-import app.invitation.AppInvitationService;
+import app.invitation.InvitationService;
 import jakarta.ejb.Stateless;
 import jakarta.inject.Inject;
 
@@ -19,19 +19,18 @@ public class RegistrationService {
     private AuditService auditService;
 
     @Inject
-    private AppInvitationService appInvitationService;
+    private InvitationService invitationService;
 
-    public RegistrationResult register(
-            String inviteToken,
+    public void register(
+            String invitationToken,
             String username,
             String displayName,
             String password,
             String initialCalendarName) {
-        RegistrationAdmission admission = appInvitationService.requireAdmission(inviteToken);
-        AppUser user = userService.createUser(username, displayName, password);
+        RegistrationAdmission admission = invitationService.requireAdmission(invitationToken);
+        ApplicationUser user = userService.createUser(username, displayName, password);
         Calendar calendar = calendarService.createCalendar(user, initialCalendarName);
-        appInvitationService.acceptAdmission(admission, user);
+        invitationService.acceptAdmission(admission, user);
         auditService.record(user, calendar, "app_user", user.getId(), "registered", "User registered.");
-        return new RegistrationResult(user, calendar);
     }
 }

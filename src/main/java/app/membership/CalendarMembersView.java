@@ -3,7 +3,7 @@ package app.membership;
 import app.calendar.Calendar;
 import app.calendar.CalendarService;
 import app.security.CurrentUser;
-import app.user.AppUser;
+import app.user.ApplicationUser;
 import app.util.AuthorizationException;
 import app.util.NotFoundException;
 import app.util.ValidationException;
@@ -36,11 +36,11 @@ public class CalendarMembersView implements Serializable {
 
     public void load() {
         try {
-            AppUser actor = currentUser.require();
-            currentUserId = actor.getId();
-            Calendar calendar = calendarService.requireAdminCalendar(actor, calendarId);
+            ApplicationUser actingUser = currentUser.require();
+            currentUserId = actingUser.getId();
+            Calendar calendar = calendarService.requireAdminCalendar(actingUser, calendarId);
             calendarName = calendar.getName();
-            reloadMembers(actor);
+            reloadMembers(actingUser);
             available = true;
         } catch (AuthorizationException | NotFoundException exception) {
             markNotFound();
@@ -49,9 +49,9 @@ public class CalendarMembersView implements Serializable {
 
     public void saveRole(Long userId, CalendarRole role) {
         try {
-            AppUser actor = currentUser.require();
-            calendarMembershipService.changeMemberRole(actor, calendarId, userId, role);
-            reloadMembers(actor);
+            ApplicationUser actingUser = currentUser.require();
+            calendarMembershipService.changeMemberRole(actingUser, calendarId, userId, role);
+            reloadMembers(actingUser);
             addMessage(FacesMessage.SEVERITY_INFO, "Member role saved.", "The member's access has been updated.");
         } catch (ValidationException exception) {
             reloadMembersAfterRejectedChange();
@@ -63,9 +63,9 @@ public class CalendarMembersView implements Serializable {
 
     public void disableMember(Long userId) {
         try {
-            AppUser actor = currentUser.require();
-            calendarMembershipService.disableMember(actor, calendarId, userId);
-            reloadMembers(actor);
+            ApplicationUser actingUser = currentUser.require();
+            calendarMembershipService.disableMember(actingUser, calendarId, userId);
+            reloadMembers(actingUser);
             addMessage(FacesMessage.SEVERITY_INFO, "Member access removed.", "The member can no longer open this calendar.");
         } catch (ValidationException exception) {
             reloadMembersAfterRejectedChange();
@@ -75,8 +75,8 @@ public class CalendarMembersView implements Serializable {
         }
     }
 
-    private void reloadMembers(AppUser actor) {
-        members = calendarMembershipService.listMembers(actor, calendarId).stream()
+    private void reloadMembers(ApplicationUser actingUser) {
+        members = calendarMembershipService.listMembers(actingUser, calendarId).stream()
                 .map(member -> new MemberRow(
                         member.getUser().getId(),
                         member.getUser().getDisplayName(),

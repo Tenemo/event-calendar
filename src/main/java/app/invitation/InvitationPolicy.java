@@ -15,18 +15,33 @@ public class InvitationPolicy {
         if (calendar != null && role == CalendarRole.EDITOR) {
             return;
         }
-        throw new ValidationException("Invitations must be app-only or grant editor access to a calendar.");
+        throw new ValidationException("Invitations must support registration only or grant editor access to a calendar.");
     }
 
     public void requireOpen(OffsetDateTime revokedAt, OffsetDateTime acceptedAt, OffsetDateTime expiresAt, OffsetDateTime now) {
-        if (revokedAt != null) {
-            throw new ValidationException("Invitation is revoked.");
+        switch (status(revokedAt, acceptedAt, expiresAt, now)) {
+            case USED -> throw new ValidationException("Invitation is already accepted.");
+            case REVOKED -> throw new ValidationException("Invitation is revoked.");
+            case EXPIRED -> throw new ValidationException("Invitation is expired.");
+            case AVAILABLE -> {
+            }
         }
+    }
+
+    public InvitationStatus status(
+            OffsetDateTime revokedAt,
+            OffsetDateTime acceptedAt,
+            OffsetDateTime expiresAt,
+            OffsetDateTime currentTime) {
         if (acceptedAt != null) {
-            throw new ValidationException("Invitation is already accepted.");
+            return InvitationStatus.USED;
         }
-        if (expiresAt != null && !expiresAt.isAfter(now)) {
-            throw new ValidationException("Invitation is expired.");
+        if (revokedAt != null) {
+            return InvitationStatus.REVOKED;
         }
+        if (expiresAt != null && !expiresAt.isAfter(currentTime)) {
+            return InvitationStatus.EXPIRED;
+        }
+        return InvitationStatus.AVAILABLE;
     }
 }

@@ -46,7 +46,7 @@ final class CalendarEventRowTest {
     }
 
     @Test
-    void timedEventDisplaysCalendarTimezoneAndLocation() {
+    void timedEventDisplaysCalendarTimeZoneAndLocation() {
         CalendarEvent event = event(
                 "2026-07-20T08:00:00Z",
                 "2026-07-20T10:00:00Z",
@@ -64,11 +64,11 @@ final class CalendarEventRowTest {
                         row.getDetailLabel()));
     }
 
-    private CalendarEvent event(String startAt, String endAt, boolean allDay, String location) {
+    private CalendarEvent event(String startTime, String endTime, boolean allDay, String location) {
         CalendarEvent event = new CalendarEvent();
         event.setTitle("River launch");
-        event.setStartAt(OffsetDateTime.parse(startAt));
-        event.setEndAt(OffsetDateTime.parse(endAt));
+        event.setStartTime(OffsetDateTime.parse(startTime));
+        event.setEndTime(OffsetDateTime.parse(endTime));
         event.setAllDay(allDay);
         event.setLocation(location);
         return event;

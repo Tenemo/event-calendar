@@ -1,6 +1,6 @@
 package app.calendar;
 
-import app.user.AppUser;
+import app.user.ApplicationUser;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -28,8 +28,8 @@ public class Calendar {
     @Column(name = "public_token", nullable = false, unique = true, length = 80)
     private String publicToken;
 
-    @Column(nullable = false, length = 80)
-    private String timezone = "Europe/Warsaw";
+    @Column(name = "timezone", nullable = false, length = 80)
+    private String timeZone = "Europe/Warsaw";
 
     @Column(name = "public_access_enabled", nullable = false)
     private boolean publicAccessEnabled = true;
@@ -39,7 +39,7 @@ public class Calendar {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "created_by_user_id", nullable = false)
-    private AppUser createdByUser;
+    private ApplicationUser createdByUser;
 
     @Version
     @Column(nullable = false)
@@ -79,12 +79,12 @@ public class Calendar {
         this.publicToken = publicToken;
     }
 
-    public String getTimezone() {
-        return timezone;
+    public String getTimeZone() {
+        return timeZone;
     }
 
-    public void setTimezone(String timezone) {
-        this.timezone = timezone;
+    public void setTimeZone(String timeZone) {
+        this.timeZone = timeZone;
     }
 
     public boolean isPublicAccessEnabled() {
@@ -103,11 +103,11 @@ public class Calendar {
         this.active = active;
     }
 
-    public AppUser getCreatedByUser() {
+    public ApplicationUser getCreatedByUser() {
         return createdByUser;
     }
 
-    public void setCreatedByUser(AppUser createdByUser) {
+    public void setCreatedByUser(ApplicationUser createdByUser) {
         this.createdByUser = createdByUser;
     }
 

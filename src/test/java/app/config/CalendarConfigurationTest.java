@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 
 final class CalendarConfigurationTest {
     @Test
-    void normalizesTheConfiguredDefaultTimezoneAtStartup() {
+    void normalizesTheConfiguredDefaultTimeZoneAtStartup() {
         CalendarConfiguration calendarConfiguration = configurationWithTimeZone(" Europe/London ");
 
         calendarConfiguration.initialize();
@@ -20,13 +20,13 @@ final class CalendarConfigurationTest {
     }
 
     @Test
-    void rejectsAnInvalidDefaultTimezoneAtStartupWithAnOperationalError() {
-        CalendarConfiguration calendarConfiguration = configurationWithTimeZone("Unknown/Timezone");
+    void rejectsAnInvalidDefaultTimeZoneAtStartupWithAnOperationalError() {
+        CalendarConfiguration calendarConfiguration = configurationWithTimeZone("Unknown/TimeZone");
 
         IllegalStateException exception = assertThrows(IllegalStateException.class, calendarConfiguration::initialize);
 
         assertEquals(
-                "APP_TIMEZONE must be a valid IANA timezone such as Europe/Warsaw.", exception.getMessage());
+                "APP_TIMEZONE must be a valid IANA time zone such as Europe/Warsaw.", exception.getMessage());
         assertInstanceOf(ValidationException.class, exception.getCause());
     }
 

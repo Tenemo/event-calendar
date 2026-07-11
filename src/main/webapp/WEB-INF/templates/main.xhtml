@@ -2,7 +2,8 @@
 <html xmlns="http://www.w3.org/1999/xhtml"
       xmlns:h="jakarta.faces.html"
       xmlns:ui="jakarta.faces.facelets"
-      xmlns:p="primefaces">
+      xmlns:p="primefaces"
+      lang="en">
 <h:head>
     <title><ui:insert name="title">Shared calendar</ui:insert></title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -10,6 +11,7 @@
     <h:outputStylesheet library="css" name="app.css"/>
 </h:head>
 <h:body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
     <header class="app-header">
         <div>
             <h:outputLink value="#{request.contextPath}/" styleClass="app-brand">Shared calendar</h:outputLink>
@@ -18,7 +20,7 @@
         <nav class="app-nav" aria-label="Main navigation">
             <h:outputLink value="#{request.contextPath}/">Home</h:outputLink>
             <h:outputLink value="#{request.contextPath}/app/calendars" rendered="#{currentUser.signedIn}">My calendars</h:outputLink>
-            <h:outputLink value="#{request.contextPath}/app/invitations" rendered="#{currentUser.signedIn}">App invitations</h:outputLink>
+            <h:outputLink value="#{request.contextPath}/app/invitations" rendered="#{currentUser.signedIn}">Invitations</h:outputLink>
             <h:outputLink value="#{request.contextPath}/login" rendered="#{not currentUser.signedIn}">Sign in</h:outputLink>
             <h:form styleClass="nav-form" rendered="#{currentUser.signedIn}">
                 <h:commandButton value="Sign out" action="#{logoutView.logout}" styleClass="nav-action link-button"/>
@@ -26,7 +28,7 @@
         </nav>
     </header>
 
-    <main class="app-main">
+    <main id="main-content" class="app-main" tabindex="-1">
         <p:messages id="messages" showDetail="true" closable="true"/>
         <ui:insert name="content"/>
     </main>
