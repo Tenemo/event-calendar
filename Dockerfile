@@ -16,6 +16,11 @@ RUN ./mvnw -B -ntp -DskipTests package
 
 FROM icr.io/appcafe/open-liberty:kernel-slim-java25-openj9-ubi-minimal
 
+USER 0
+RUN microdnf install -y curl-minimal \
+    && microdnf clean all
+USER 1001
+
 ENV OPENJ9_SCC=false
 
 COPY --chown=1001:0 src/main/liberty/config/server.xml /config/

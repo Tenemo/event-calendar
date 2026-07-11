@@ -815,8 +815,9 @@ final class CalendarTool {
 
     private static void requireArgumentRange(String[] arguments, int minimumCount, int maximumCount) {
         if (arguments.length < minimumCount || arguments.length > maximumCount) {
+            System.err.println("Invalid arguments for command '" + arguments[0] + "'.");
             printUsage();
-            throw new IllegalArgumentException("Invalid arguments for command '" + arguments[0] + "'.");
+            System.exit(1);
         }
     }
 
