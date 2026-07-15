@@ -239,6 +239,16 @@ button,
     font-size: 1.05rem;
 }
 
+.notice-message {
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--primary);
+    border-radius: var(--control-radius);
+    background: var(--subtle-surface);
+    color: var(--text);
+    line-height: 1.5;
+}
+
 .intro-panel,
 .calendar-preview,
 .surface-panel,

@@ -9,6 +9,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.reflect.Proxy;
@@ -17,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 final class SessionCookieRefreshFilterTest {
@@ -137,6 +139,37 @@ final class SessionCookieRefreshFilterTest {
                 () -> assertTrue(errorResponseCookies.isEmpty()));
     }
 
+    @Test
+    void invalidatesStaleAuthenticatedSessionsBeforeProtectedContentRuns() throws Exception {
+        for (StaleSessionCase staleSessionCase : List.of(
+                new StaleSessionCase(
+                        "/app/calendars",
+                        "/login?reauthenticationRequired=true"),
+                new StaleSessionCase(
+                        "/calendar/current-token",
+                        "/calendar/current-token"))) {
+            AtomicBoolean loggedOut = new AtomicBoolean();
+            AtomicBoolean sessionInvalidated = new AtomicBoolean();
+            AtomicReference<String> redirectLocation = new AtomicReference<>();
+            AtomicInteger filterChainCalls = new AtomicInteger();
+
+            new SessionCookieRefreshFilter(currentUser(false), true)
+                    .doFilter(
+                            staleSessionRequest(
+                                    staleSessionCase.requestUri(),
+                                    loggedOut,
+                                    sessionInvalidated),
+                            redirectResponse(redirectLocation),
+                            filterChain(filterChainCalls));
+
+            assertAll(
+                    () -> assertTrue(loggedOut.get()),
+                    () -> assertTrue(sessionInvalidated.get()),
+                    () -> assertEquals(staleSessionCase.redirectLocation(), redirectLocation.get()),
+                    () -> assertEquals(0, filterChainCalls.get()));
+        }
+    }
+
     private CurrentUser currentUser(boolean signedIn) {
         return new CurrentUser() {
             @Override
@@ -197,6 +230,50 @@ final class SessionCookieRefreshFilterTest {
                 });
     }
 
+    private HttpServletRequest staleSessionRequest(
+            String requestUri,
+            AtomicBoolean loggedOut,
+            AtomicBoolean sessionInvalidated) {
+        HttpSession session = (HttpSession) Proxy.newProxyInstance(
+                HttpSession.class.getClassLoader(),
+                new Class<?>[] {HttpSession.class},
+                (proxy, method, arguments) -> {
+                    if (method.getName().equals("invalidate")) {
+                        sessionInvalidated.set(true);
+                        return null;
+                    }
+                    return defaultValue(method.getReturnType());
+                });
+        return (HttpServletRequest) Proxy.newProxyInstance(
+                HttpServletRequest.class.getClassLoader(),
+                new Class<?>[] {HttpServletRequest.class},
+                (proxy, method, arguments) -> switch (method.getName()) {
+                    case "getUserPrincipal" -> (Principal) () -> "stale-user";
+                    case "logout" -> {
+                        loggedOut.set(true);
+                        yield null;
+                    }
+                    case "getSession" -> session;
+                    case "getContextPath" -> "";
+                    case "getRequestURI" -> requestUri;
+                    case "getQueryString" -> null;
+                    default -> defaultValue(method.getReturnType());
+                });
+    }
+
+    private HttpServletResponse redirectResponse(AtomicReference<String> redirectLocation) {
+        return (HttpServletResponse) Proxy.newProxyInstance(
+                HttpServletResponse.class.getClassLoader(),
+                new Class<?>[] {HttpServletResponse.class},
+                (proxy, method, arguments) -> {
+                    if (method.getName().equals("sendRedirect")) {
+                        redirectLocation.set((String) arguments[0]);
+                        return null;
+                    }
+                    return defaultValue(method.getReturnType());
+                });
+    }
+
     private FilterChain filterChain(AtomicInteger calls) {
         return (request, response) -> calls.incrementAndGet();
     }
@@ -215,5 +292,8 @@ final class SessionCookieRefreshFilterTest {
     }
 
     private record TestCase(CurrentUser currentUser, HttpServletRequest request) {
+    }
+
+    private record StaleSessionCase(String requestUri, String redirectLocation) {
     }
 }

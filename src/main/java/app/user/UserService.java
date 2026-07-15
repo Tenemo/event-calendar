@@ -1,11 +1,14 @@
 package app.user;
 
+import app.audit.AuditService;
 import app.security.PasswordService;
+import app.util.AuthorizationException;
 import app.util.NotFoundException;
 import app.util.ValidationException;
 import jakarta.ejb.Stateless;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.NoResultException;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.PersistenceException;
@@ -25,6 +28,9 @@ public class UserService {
 
     @Inject
     private PasswordService passwordService;
+
+    @Inject
+    private AuditService auditService;
 
     public ApplicationUser createUser(String username, String displayName, String password) {
         String normalizedUsername = normalizeUsername(username);
@@ -47,6 +53,7 @@ public class UserService {
         user.setUsername(normalizedUsername);
         user.setDisplayName(normalizedDisplayName);
         user.setPasswordHash(passwordService.hashPassword(normalizedUsername, password));
+        user.setPasswordVersion(0);
         user.setActive(true);
         user.setCreatedAt(now);
         user.setUpdatedAt(now);
@@ -60,6 +67,29 @@ public class UserService {
             throw exception;
         }
         return user;
+    }
+
+    public void changePassword(
+            ApplicationUser actingUser,
+            String currentPassword,
+            String newPassword,
+            String newPasswordConfirmation) {
+        ApplicationUser user = requireActiveUserForPasswordChange(actingUser);
+        if (!passwordService.verifyPassword(currentPassword, user.getPasswordHash())) {
+            throw new ValidationException("Current password is incorrect.");
+        }
+        if (newPassword == null || !newPassword.equals(newPasswordConfirmation)) {
+            throw new ValidationException("New password and confirmation must match.");
+        }
+        if (newPassword.equals(currentPassword)) {
+            throw new ValidationException("New password must be different from the current password.");
+        }
+
+        user.setPasswordHash(passwordService.hashPassword(user.getUsername(), newPassword));
+        user.setPasswordVersion(Math.incrementExact(user.getPasswordVersion()));
+        user.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
+        auditService.record(user, null, "app_user", user.getId(), "password_changed", "Password changed.");
+        entityManager.flush();
     }
 
     public Optional<ApplicationUser> findByUsername(String username) {
@@ -89,6 +119,27 @@ public class UserService {
             throw new NotFoundException("User was not found.");
         }
         return user;
+    }
+
+    private ApplicationUser requireActiveUserForPasswordChange(ApplicationUser actingUser) {
+        if (actingUser == null || actingUser.getId() == null) {
+            throw new AuthorizationException("Sign-in is required.");
+        }
+        try {
+            ApplicationUser user = entityManager
+                    .createQuery(
+                            "select applicationUser from ApplicationUser applicationUser where applicationUser.id = :userId",
+                            ApplicationUser.class)
+                    .setParameter("userId", actingUser.getId())
+                    .setLockMode(LockModeType.PESSIMISTIC_WRITE)
+                    .getSingleResult();
+            if (!user.isActive()) {
+                throw new AuthorizationException("Sign-in is required.");
+            }
+            return user;
+        } catch (NoResultException exception) {
+            throw new AuthorizationException("Sign-in is required.");
+        }
     }
 
     public String normalizeUsername(String username) {

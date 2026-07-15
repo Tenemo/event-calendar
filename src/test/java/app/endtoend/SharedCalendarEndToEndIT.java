@@ -126,6 +126,89 @@ final class SharedCalendarEndToEndIT {
     }
 
     @Test
+    void signedInPasswordChangeValidatesInputAndRevokesEveryOlderSession() throws SQLException {
+        String uniqueSuffix = uniqueSuffix();
+        String username = "password-owner-" + uniqueSuffix;
+        String newPassword = "Changed password 2026 " + uniqueSuffix;
+        seedUser(username);
+        List<String> browserMessages = new ArrayList<>();
+
+        try (BrowserContext changingContext = browser.newContext();
+                BrowserContext otherSessionContext = browser.newContext()) {
+            Page changingPage = newPage(changingContext, browserMessages);
+            Page otherSessionPage = newPage(otherSessionContext, browserMessages);
+            signIn(changingPage, username, TEST_PASSWORD);
+            signIn(otherSessionPage, username, TEST_PASSWORD);
+
+            changingPage.locator("a:has-text('Account settings')").click();
+            changingPage.waitForURL("**/app/account-settings");
+            assertEquals("Account settings", changingPage.locator("h1").textContent().trim());
+            assertBodyContains(changingPage, "Signed in as " + username);
+            assertBodyContains(changingPage, "invalidates your other signed-in sessions");
+
+            fillPasswordChangeForm(
+                    changingPage,
+                    "Wrong current password 1",
+                    newPassword,
+                    newPassword);
+            changingPage.locator("button:has-text('Change password')").click();
+            assertBodyContains(changingPage, "Current password is incorrect.");
+
+            fillPasswordChangeForm(
+                    changingPage,
+                    TEST_PASSWORD,
+                    newPassword,
+                    newPassword + " mismatch");
+            changingPage.locator("button:has-text('Change password')").click();
+            assertBodyContains(changingPage, "New password and confirmation must match.");
+
+            fillPasswordChangeForm(
+                    changingPage,
+                    TEST_PASSWORD,
+                    "lowercase password 2026",
+                    "lowercase password 2026");
+            changingPage.locator("button:has-text('Change password')").click();
+            assertBodyContains(changingPage, "Password must contain at least one uppercase letter.");
+
+            fillPasswordChangeForm(
+                    changingPage,
+                    TEST_PASSWORD,
+                    TEST_PASSWORD,
+                    TEST_PASSWORD);
+            changingPage.locator("button:has-text('Change password')").click();
+            assertBodyContains(changingPage, "New password must be different from the current password.");
+
+            fillPasswordChangeForm(changingPage, TEST_PASSWORD, newPassword, newPassword);
+            changingPage.locator("button:has-text('Change password')").click();
+            changingPage.waitForURL("**/login?passwordChanged=true");
+            assertBodyContains(changingPage, "Your password was changed. Sign in with the new password.");
+            assertEquals(1, queryLong("select password_version from app_user where username = ?", username));
+            assertEquals(
+                    1,
+                    queryLong(
+                            "select count(*) from audit_log where actor_user_id = "
+                                    + "(select id from app_user where username = ?) and action = 'password_changed'",
+                            username));
+
+            otherSessionPage.navigate(route("/app/calendars"));
+            URI staleSessionUri = URI.create(otherSessionPage.url());
+            assertEquals("/login", staleSessionUri.getPath(), () -> "Unexpected stale-session URL " + staleSessionUri);
+            assertBodyContains(otherSessionPage, "Sign in");
+
+            changingPage.locator("input[id$='username']").fill(username);
+            changingPage.locator("input[id$='password']").fill(TEST_PASSWORD);
+            changingPage.locator("button:has-text('Sign in')").click();
+            assertBodyContains(changingPage, "Sign-in failed.");
+
+            signIn(changingPage, username, newPassword);
+            signIn(otherSessionPage, username, newPassword);
+            assertEquals("/app/calendars", URI.create(changingPage.url()).getPath());
+            assertEquals("/app/calendars", URI.create(otherSessionPage.url()).getPath());
+            assertNoBrowserMessages(browserMessages);
+        }
+    }
+
+    @Test
     void registrationAndInvitationAcceptanceUseUniqueSingleUseRecords() throws SQLException {
         String uniqueSuffix = uniqueSuffix();
         String ownerUsername = "invite-owner-" + uniqueSuffix;
@@ -275,7 +358,7 @@ final class SharedCalendarEndToEndIT {
             assertBodyContains(page, eventTitle + " updated");
             assertBodyContains(page, allDayEventTitle);
 
-            page.locator("a:has-text('Settings')").click();
+            calendarSettingsLink(page).click();
             page.locator("input[id$='timeZone']").fill("Mars/Olympus");
             page.locator("button:has-text('Save settings')").click();
             assertBodyContains(page, "Time zone must be a valid region such as Europe/Warsaw.");
@@ -313,7 +396,7 @@ final class SharedCalendarEndToEndIT {
             String originalCalendarLink = page.url();
             assertCanonicalCalendarRoute(page, Long.toString(findCalendarId(calendarName)));
             enterEvent(page, eventTitle, "River", "2026-08-20 10:00", "2026-08-20 12:00", false);
-            page.locator("a:has-text('Settings')").click();
+            calendarSettingsLink(page).click();
             page.locator("textarea[id$='calendarDescription']").fill(calendarDescription);
             page.locator("button:has-text('Save settings')").click();
             assertBodyContains(page, "Calendar settings saved.");
@@ -333,7 +416,7 @@ final class SharedCalendarEndToEndIT {
                 assertEquals(0, publicPage.locator("button:has-text('Create event')").count());
                 assertEquals(0, publicPage.locator("button:has-text('Edit')").count());
                 assertEquals(0, publicPage.locator("button:has-text('Delete')").count());
-                assertEquals(0, publicPage.locator("a:has-text('Settings')").count());
+                assertEquals(0, calendarSettingsLink(publicPage).count());
                 assertEquals(0, publicPage.locator("a:has-text('Members')").count());
                 assertNoBrowserMessages(publicBrowserMessages);
             }
@@ -474,7 +557,7 @@ final class SharedCalendarEndToEndIT {
             assertEquals(0, page.locator("button:has-text('Create event')").count());
             assertEquals(0, page.locator("button:has-text('Edit')").count());
             assertEquals(0, page.locator("button:has-text('Delete')").count());
-            assertEquals(0, page.locator("a:has-text('Settings')").count());
+            assertEquals(0, calendarSettingsLink(page).count());
             assertNoBrowserMessages(browserMessages);
         }
     }
@@ -1006,7 +1089,7 @@ final class SharedCalendarEndToEndIT {
             String sharedCalendarLink = ownerPage.url();
             String calendarId = Long.toString(findCalendarId(calendarName));
             enterEvent(ownerPage, eventTitle, null, "2026-11-01 10:00", "2026-11-01 11:00", false);
-            ownerPage.locator("a:has-text('Settings')").click();
+            calendarSettingsLink(ownerPage).click();
 
             assertEquals(200, publicPage.navigate(sharedCalendarLink).status());
             assertBodyContains(publicPage, eventTitle);
@@ -1023,7 +1106,7 @@ final class SharedCalendarEndToEndIT {
             assertBodyContains(ownerPage, eventTitle);
             assertBodyContains(ownerPage, "Public access disabled");
             assertThat(ownerPage.locator("button:has-text('Create event')")).isVisible();
-            ownerPage.locator("a:has-text('Settings')").click();
+            calendarSettingsLink(ownerPage).click();
 
             setPublicAccess(ownerPage, true);
             assertBodyContains(ownerPage, "Public access enabled");
@@ -1369,7 +1452,7 @@ final class SharedCalendarEndToEndIT {
             setupPage.keyboard().press("Escape");
             assertThat(setupPage.locator("button:has-text('Yes')")).isHidden();
             assertBodyContains(setupPage, longEventTitle);
-            setupPage.locator("a:has-text('Settings')").click();
+            calendarSettingsLink(setupPage).click();
             Locator publicAccessCheckbox = setupPage.getByLabel("Enable public read-only access");
             publicAccessCheckbox.focus();
             assertVisibleOutline(setupPage.locator(".ui-chkbox-box"));
@@ -1431,6 +1514,10 @@ final class SharedCalendarEndToEndIT {
                 assertFalse(hasHorizontalOverflow(page), "Authenticated page overflowed at " + viewportWidth + " pixels.");
                 assertHeaderPosition(page, viewportWidth);
                 assertResponsiveTableRegion(page, "Calendars table", viewportWidth);
+
+                page.navigate(route("/app/account-settings"));
+                assertEquals("Account settings", page.locator("h1").textContent().trim());
+                assertFalse(hasHorizontalOverflow(page), "Account settings overflowed at " + viewportWidth + " pixels.");
 
                 page.navigate(calendarLink(calendarId));
                 assertBodyContains(page, longEventTitle);
@@ -1495,6 +1582,10 @@ final class SharedCalendarEndToEndIT {
         return page.locator("tr").filter(new Locator.FilterOptions().setHas(invitationLinkInput));
     }
 
+    private Locator calendarSettingsLink(Page page) {
+        return page.locator("a[href*='/app/calendar-settings']");
+    }
+
     private String createEditorInvitation(Page page, String calendarName) {
         page.navigate(route("/app/invitations"));
         Locator calendarSelect = page.locator("select[id$='calendar']");
@@ -1545,6 +1636,16 @@ final class SharedCalendarEndToEndIT {
 
     private void signOut(Page page) {
         page.locator("input[value='Sign out']").click();
+    }
+
+    private void fillPasswordChangeForm(
+            Page page,
+            String currentPassword,
+            String newPassword,
+            String confirmation) {
+        page.locator("input[id$='currentPassword']").fill(currentPassword);
+        page.locator("input[id$='newPassword']").fill(newPassword);
+        page.locator("input[id$='newPasswordConfirmation']").fill(confirmation);
     }
 
     private void createCalendar(Page page, String calendarName) {
@@ -1881,6 +1982,28 @@ final class SharedCalendarEndToEndIT {
                 statement.setObject(parameterIndex + 1, parameters[parameterIndex]);
             }
             assertEquals(1, statement.executeUpdate(), "Expected one database record to be updated for test setup.");
+        }
+    }
+
+    private long queryLong(String sql, Object... parameters) throws SQLException {
+        String jdbcUrl = "jdbc:postgresql://"
+                + firstNonBlank(System.getenv(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE), "localhost")
+                + ":"
+                + firstNonBlank(System.getenv(POSTGRESQL_PORT_ENVIRONMENT_VARIABLE), "5432")
+                + "/"
+                + firstNonBlank(System.getenv(POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE), "calendar");
+        try (Connection connection = DriverManager.getConnection(
+                        jdbcUrl,
+                        firstNonBlank(System.getenv(POSTGRESQL_USER_ENVIRONMENT_VARIABLE), "calendar"),
+                        firstNonBlank(System.getenv(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE), "calendar"));
+                PreparedStatement statement = connection.prepareStatement(sql)) {
+            for (int parameterIndex = 0; parameterIndex < parameters.length; parameterIndex++) {
+                statement.setObject(parameterIndex + 1, parameters[parameterIndex]);
+            }
+            try (java.sql.ResultSet resultSet = statement.executeQuery()) {
+                assertTrue(resultSet.next(), "Expected the database query to return one row.");
+                return resultSet.getLong(1);
+            }
         }
     }
 

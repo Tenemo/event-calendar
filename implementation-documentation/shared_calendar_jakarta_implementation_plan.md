@@ -1,65 +1,29 @@
-# Shared calendar: Jakarta EE + JSF + PrimeFaces implementation plan
+# Shared calendar implementation plan
 
-**Revision:** implemented self-service multi-calendar repository as of 2026-07-15
+**Revision:** implementation and production deployment current as of 2026-07-15
 
-**Purpose:** Build and deploy a real shared-calendar application for events such as trips, birthdays, kayaking plans, and friend-group coordination while keeping the enterprise Java stack simple and reproducible.
+**Purpose:** Sequence repository work for the shared-calendar application.
 
-**Audience:** A local coding agent or developer working in this repository.
+The project specification is the authoritative source for product behavior, architecture, security, testing, and operations. Milestones contain implementation steps only; they must not introduce or redefine requirements.
 
-**Target outcome:** A live calendar app at a custom domain where invited people can register, create their own calendars, share public read-only calendar links, and invite more people to the app or to edit calendars.
+## Implementation order
 
----
+1. M0: project foundation
+2. M1: persistence and security core
+3. M2: calendar and account workflows
+4. M3: production readiness
 
-## How to use this plan
+All four milestones have been implemented. Extend the existing milestone that owns a new requirement instead of placing specification prose in a milestone.
 
-Read the project reference for product, architecture, security, testing, and operations context. Implementation details live in the milestone files.
+## Working method
 
-## Milestones
+1. Read the project specification before changing implementation.
+2. Select the milestone that owns the affected layer.
+3. Add or revise concrete implementation steps in that milestone.
+4. Implement the smallest complete vertical slice.
+5. Run the milestone's verification steps.
+6. Update the public README when setup, deployment, environment variables, roles, backup and restore, limitations, or operational behavior changes.
 
-Implement in this order:
+## Source boundary
 
-1. M0: project foundation (implemented)
-2. M1: persistence and security core (implemented)
-3. M2: calendar and member workflows (implemented)
-4. M3: production readiness (repository implementation complete; Railway deployment deferred)
-
-All repository milestones are implemented. Railway deployment and live-domain acceptance remain separate operational work.
-
-## Product model
-
-The app is multi-calendar from v1.
-
-1. Only people with an app invitation can create accounts.
-2. Signed-in users can generate app-only invitation links.
-3. Anyone with an account can create calendars.
-4. The creator of a calendar receives the calendar-level `ADMIN` role.
-5. Calendar editors and admins can generate app invitation links that also grant `EDITOR` access to that calendar.
-6. Calendar roles are `EDITOR` and `ADMIN`; they are scoped to one calendar, not global application roles.
-7. There is no read-only membership role. Read-only access uses the calendar's bearer link and has the same permissions whether the reader is signed in or anonymous.
-8. Invitations expire after seven days and become unusable when their creator's account becomes inactive. Their creators can revoke them, calendar admins can list and revoke unused editor invitations, and editor invitations also become unusable when their creator loses edit permission.
-9. Invitation acceptance is serialized so a single link cannot be consumed by multiple accounts under concurrent requests.
-10. Each calendar has one long, random, unguessable canonical URL used by its editors, admins, and anonymous readers. Public access can be disabled without changing that URL, or the URL can be regenerated to invalidate the previous one immediately.
-11. The canonical URL exposes mutation controls only to active editors and admins. Every other visitor receives read-only access while public access is enabled and must not see member management, invite management, or editing controls.
-12. Bootstrap registration is claimed atomically with the first account and remains permanently consumed after success.
-13. All-day form dates are inclusive and persist as calendar-zone-normalized, start-inclusive/end-exclusive ranges; timed values reject ambiguous or nonexistent daylight-saving times.
-14. Login throttling is source-aware, authenticated session cookies and inactivity roll for 30 days, redeploy requires reauthentication, and health checks require a usable database.
-15. Events are simple dated items. Recurrence, notifications, email delivery, and mobile apps are out of scope for v1.
-
-## Local database decision
-
-Local PostgreSQL runs through Docker Compose with `postgres:17`. PostgreSQL client commands use `docker compose exec postgres` or a temporary `postgres:17` container; host-installed `psql`, `pg_dump`, and `pg_restore` are not prerequisites.
-
-## CI strategy
-
-GitHub PR checks now provide:
-
-1. A Maven wrapper build and the focused unit suite.
-2. PostgreSQL-backed migration and deterministic Playwright scenarios against Open Liberty.
-3. An isolated real-PostgreSQL bootstrap rollback and concurrency scenario against the production image.
-4. A production-container smoke check, Dependency Review, and CodeQL.
-
-Do not deploy to Railway from pull requests, and do not require secrets for PR checks.
-
-## Source boundaries
-
-This folder is private planning material. Public docs should use final product wording and should not expose planning-only file paths, milestone labels, unfinished notes, or private implementation names.
+This folder is private planning material. Public documentation and product code must use final product language without exposing planning-only labels or file names.

@@ -24,6 +24,9 @@ public class ApplicationUser {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
+    @Column(name = "password_version", nullable = false)
+    private long passwordVersion;
+
     @Column(nullable = false)
     private boolean active = true;
 
@@ -59,6 +62,14 @@ public class ApplicationUser {
 
     public void setPasswordHash(String passwordHash) {
         this.passwordHash = passwordHash;
+    }
+
+    public long getPasswordVersion() {
+        return passwordVersion;
+    }
+
+    public void setPasswordVersion(long passwordVersion) {
+        this.passwordVersion = passwordVersion;
     }
 
     public boolean isActive() {

@@ -1,0 +1,56 @@
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:h="jakarta.faces.html"
+                xmlns:ui="jakarta.faces.facelets"
+                xmlns:p="primefaces"
+                template="/WEB-INF/templates/main.xhtml">
+    <ui:define name="title">Account settings - Shared calendar</ui:define>
+
+    <ui:define name="content">
+        <section class="narrow-section">
+            <div>
+                <p class="eyebrow">Signed in as <h:outputText value="#{accountSettingsView.username}"/></p>
+                <h1>Account settings</h1>
+            </div>
+
+            <p:panel header="Change password" styleClass="surface-panel form-panel">
+                <p class="field-help">Changing your password signs you out here and invalidates your other signed-in sessions.</p>
+                <h:form styleClass="stacked-form">
+                    <p:outputLabel for="currentPassword" value="Current password"/>
+                    <p:password id="currentPassword"
+                                value="#{accountSettingsView.currentPassword}"
+                                autocomplete="current-password"
+                                feedback="false"
+                                redisplay="false"
+                                maxlength="#{passwordService.maximumPasswordLength}"
+                                required="true"
+                                requiredMessage="Current password is required."/>
+
+                    <p:outputLabel for="newPassword" value="New password"/>
+                    <p:password id="newPassword"
+                                value="#{accountSettingsView.newPassword}"
+                                autocomplete="new-password"
+                                feedback="false"
+                                redisplay="false"
+                                maxlength="#{passwordService.maximumPasswordLength}"
+                                required="true"
+                                requiredMessage="New password is required."/>
+                    <p class="field-help">Use at least 8 characters with an uppercase letter and a digit.</p>
+
+                    <p:outputLabel for="newPasswordConfirmation" value="Confirm new password"/>
+                    <p:password id="newPasswordConfirmation"
+                                value="#{accountSettingsView.newPasswordConfirmation}"
+                                autocomplete="new-password"
+                                feedback="false"
+                                redisplay="false"
+                                maxlength="#{passwordService.maximumPasswordLength}"
+                                required="true"
+                                requiredMessage="New password confirmation is required."/>
+
+                    <p:commandButton value="Change password"
+                                     action="#{accountSettingsView.changePassword}"
+                                     ajax="false"/>
+                </h:form>
+            </p:panel>
+        </section>
+    </ui:define>
+</ui:composition>

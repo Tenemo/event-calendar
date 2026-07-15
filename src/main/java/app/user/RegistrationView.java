@@ -42,8 +42,13 @@ public class RegistrationView {
 
     public void register() throws IOException {
         try {
-            registrationService.register(invitationToken, username, displayName, password, calendarName);
-            authenticateAndRedirect();
+            ApplicationUser registeredUser = registrationService.register(
+                    invitationToken,
+                    username,
+                    displayName,
+                    password,
+                    calendarName);
+            authenticateAndRedirect(registeredUser);
         } catch (ValidationException exception) {
             FacesContext.getCurrentInstance().addMessage(
                     null,
@@ -111,7 +116,7 @@ public class RegistrationView {
         this.invitationToken = invitationToken;
     }
 
-    private void authenticateAndRedirect() throws IOException {
+    private void authenticateAndRedirect(ApplicationUser registeredUser) throws IOException {
         FacesContext facesContext = FacesContext.getCurrentInstance();
         HttpServletRequest request = (HttpServletRequest) facesContext.getExternalContext().getRequest();
         HttpServletResponse response = (HttpServletResponse) facesContext.getExternalContext().getResponse();
@@ -124,7 +129,7 @@ public class RegistrationView {
                         .newAuthentication(true));
 
         if (status == AuthenticationStatus.SUCCESS) {
-            AuthenticatedSessionSecurity.rotateSessionIdentifier(request);
+            AuthenticatedSessionSecurity.establishAuthenticatedSession(request, registeredUser);
             facesContext.getExternalContext().redirect(facesContext.getExternalContext().getRequestContextPath() + "/app/calendars");
             facesContext.responseComplete();
         } else if (status == AuthenticationStatus.SEND_CONTINUE) {

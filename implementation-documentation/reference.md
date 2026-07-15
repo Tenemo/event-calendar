@@ -1,6 +1,6 @@
-# Project reference
+# Project specification
 
-This file contains planning context and standards. Milestone files contain the executable implementation detail.
+This file is the authoritative specification for product behavior, architecture, security, user experience, testing, deployment, and operations. Milestone files contain dependency-ordered implementation and verification steps only. A milestone must not introduce requirements that are absent here.
 
 ## 1. Non-negotiable decisions
 
@@ -20,7 +20,7 @@ Use these decisions unless the repository owner explicitly changes them later.
 | Persistence                  | Jakarta Persistence / JPA, provider-neutral code, Liberty default EclipseLink provider                       |
 | Database                     | Dockerized PostgreSQL for local development, Railway PostgreSQL for production                               |
 | Migrations                   | Flyway                                                                                                       |
-| Auth                         | Username/password with invitation-only registration, source-aware login throttling, no OAuth/SSO             |
+| Auth                         | Username/password with invitation-only registration, signed-in password change, source-aware login throttling, no OAuth/SSO |
 | Calendar access              | Public read-only token links plus authenticated editor/admin roles                                           |
 | Calendar roles               | `EDITOR`, `ADMIN`, scoped to one calendar                                                                    |
 | Deployment                   | Dockerfile to Railway first                                                                                  |
@@ -72,15 +72,15 @@ Git clone
 
 Do not put downloaded JDKs, Maven distributions, PostgreSQL driver jars, PostgreSQL data volumes, `.env`, `target/`, or IDE state in source control.
 
-### 1.3 Milestone structure
+### 1.3 Implementation phases
 
-Each milestone must leave the repository runnable and verified.
+Each implementation phase must leave the repository runnable and verified. The phase files sequence work; the requirements themselves remain in this specification.
 
 | Milestone                         | Outcome                                                                                                                | Includes                                                                                                                                                             |
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | M0: project foundation            | A reproducible Jakarta EE web app that builds and starts locally                                                       | Repository skeleton, Maven wrapper, `mise`, Docker Compose PostgreSQL, Open Liberty config, health endpoint, placeholder JSF/PrimeFaces pages, flat responsive shell |
-| M1: persistence and security core | Database-backed registration, login, calendars, memberships, public tokens, invitations, and audit foundation          | Flyway migrations, JPA entities, Jakarta Security password hashing, registration, calendar-level authorization, focused tests                                          |
-| M2: calendar and member workflows | One canonical calendar view, event CRUD, calendar creation, invite links, and member management                       | PrimeFaces calendar UI, bearer-link reads, role-aware event actions, settings, invite acceptance, audit logging, manual role checks                                  |
+| M1: persistence and security core | Database-backed registration, login, password change, calendars, memberships, public tokens, invitations, and audit foundation | Flyway migrations, JPA entities, Jakarta Security password hashing, session revocation, registration, calendar-level authorization, focused tests |
+| M2: calendar and account workflows | One canonical calendar view, account settings, event CRUD, calendar creation, invite links, and member management     | PrimeFaces calendar and account UI, bearer-link reads, role-aware event actions, settings, invite acceptance, audit logging, manual role checks |
 | M3: production readiness          | The app is packaged, deployable, and recoverable                                                                       | Docker production image, local Docker runtime test, Railway deployment, custom domain, Dockerized backup/restore, README runbook                                     |
 
 ## 2. Product scope
@@ -92,28 +92,29 @@ The first deployed version must include:
 1. Invitation-only registration with username/password.
 2. Login and logout.
 3. Jakarta Security password hashes stored in PostgreSQL.
-4. Registered users can create calendars.
-5. Calendar creators become calendar admins.
-6. Calendar-level roles: `EDITOR` and `ADMIN`.
-7. One canonical calendar URL backed by a long random token and shared directly from the editor's browser.
-8. Canonical calendar pages marked `noindex` and not included in navigation indexes or generated sitemaps.
-9. Signed-in users can create app-only invitation links.
-10. Calendar editors and admins can create app invitation links that grant editor access to a calendar.
-11. There is no read-only membership role. Read-only sharing uses the calendar's bearer link.
-12. App invitation links can be accepted by existing users or newly registered users.
-13. Calendar list for signed-in users.
-14. Calendar page using PrimeFaces.
-15. View events on the same canonical calendar page, with member actions determined by server-enforced membership.
-16. Create, edit, and delete events as calendar editor/admin.
-17. Calendar settings and member management for calendar admins.
-18. Audit log for calendar, invite, member, and event changes.
-19. Flyway-managed schema.
-20. Database-aware health endpoint.
-21. Login throttling.
-22. Dockerized production build.
-23. Railway deployment with custom domain and HTTPS.
-24. Basic backup/restore procedure documented.
-25. Modern, flat, sleek UI suitable for a practical event calendar.
+4. Signed-in users can reset/change their own password after confirming their current password.
+5. Registered users can create calendars.
+6. Calendar creators become calendar admins.
+7. Calendar-level roles: `EDITOR` and `ADMIN`.
+8. One canonical calendar URL backed by a long random token and shared directly from the editor's browser.
+9. Canonical calendar pages marked `noindex` and not included in navigation indexes or generated sitemaps.
+10. Signed-in users can create app-only invitation links.
+11. Calendar editors and admins can create app invitation links that grant editor access to a calendar.
+12. There is no read-only membership role. Read-only sharing uses the calendar's bearer link.
+13. App invitation links can be accepted by existing users or newly registered users.
+14. Calendar list for signed-in users.
+15. Calendar page using PrimeFaces.
+16. View events on the same canonical calendar page, with member actions determined by server-enforced membership.
+17. Create, edit, and delete events as calendar editor/admin.
+18. Calendar settings and member management for calendar admins.
+19. Audit log for account password, calendar, invite, member, and event changes.
+20. Flyway-managed schema.
+21. Database-aware health endpoint.
+22. Login throttling.
+23. Dockerized production build.
+24. Railway deployment with custom domain and HTTPS.
+25. Basic backup/restore procedure documented.
+26. Modern, flat, sleek UI suitable for a practical event calendar.
 
 Final v1 invariants:
 
@@ -124,6 +125,7 @@ Final v1 invariants:
 5. All-day UI dates are inclusive while storage ends at the exclusive start of the following calendar-local day. Normalization uses the calendar's Java time-zone rules, including daylight-saving transitions and zones not known to PostgreSQL.
 6. Authenticated session cookies and inactivity timeouts roll for 30 days, while in-memory sessions require reauthentication after restart or redeploy.
 7. `/health` returns success only while PostgreSQL is usable.
+8. Password changes require the signed-in user's current password, matching new-password confirmation, the current password policy, and a genuinely different password. Success is audited without secrets, increments a database-backed password version, ends the changing session, invalidates every older session on its next request, and requires reauthentication with the new password.
 
 ### 2.2 Explicitly out of scope for v1
 
@@ -143,6 +145,8 @@ Do not build these in the first version:
 12. Kubernetes.
 13. Keycloak.
 14. Full observability stack.
+15. Forgotten-password recovery without a signed-in session or a verified recovery channel.
+16. Email-based password-reset delivery.
 
 ## 3. Architecture
 
@@ -195,6 +199,7 @@ src/main/webapp
   register.xhtml
   public-calendar.xhtml
   app
+    account-settings.xhtml
     calendars.xhtml
     calendar-members.xhtml
     calendar-settings.xhtml
@@ -208,9 +213,9 @@ src/main/webapp
       app.css
 ```
 
-The canonical `/calendar/{calendarToken}` route must be reachable without authentication. It renders read-only content to nonmembers while public access is enabled and member controls to active editors and admins. Authenticated app routes under `/app/*` require login. Calendar mutation and member management are enforced in services with calendar-specific authorization.
+The canonical `/calendar/{calendarToken}` route must be reachable without authentication. It renders read-only content to nonmembers while public access is enabled and member controls to active editors and admins. Authenticated app routes under `/app/*` require login. Account password changes are enforced in the user service, while calendar mutation and member management are enforced in services with calendar-specific authorization.
 
-Jakarta Faces extensionless routing is enabled. User-facing links should prefer clean paths such as `/login`, `/register`, `/app/calendars`, `/calendar/{calendarToken}`, `/app/calendar-members`, `/app/calendar-settings`, and `/app/invitations`; `.xhtml` remains an implementation file suffix, not the canonical browser route.
+Jakarta Faces extensionless routing is enabled. User-facing links should prefer clean paths such as `/login`, `/register`, `/app/calendars`, `/app/account-settings`, `/calendar/{calendarToken}`, `/app/calendar-members`, `/app/calendar-settings`, and `/app/invitations`; `.xhtml` remains an implementation file suffix, not the canonical browser route.
 
 ### 3.3 URL model
 
@@ -221,6 +226,54 @@ Use one canonical calendar URL shape that is easy to share and hard to guess:
 ```
 
 Do not expose sequential calendar ids in calendar read URLs. Do not use calendar names or slugs as access secrets. Active editors and admins use this same URL, so the address visible in their browser is exactly the address they share.
+
+### 3.4 Runtime and persistence requirements
+
+1. The repository must provide Maven Wrapper, repository-scoped Java configuration, portable `mise` tasks, Docker Compose PostgreSQL 17, and a thin portable Java orchestration helper.
+2. Open Liberty must bind to every container interface, use the injected `PORT`, deploy the WAR at `/`, disable URL-rewritten sessions, and configure HTTP-only SameSite `Lax` session cookies. `COOKIE_SECURE` controls the production `Secure` attribute.
+3. The PostgreSQL driver must be available to Liberty as a server resource. Downloaded drivers and generated Liberty state belong under ignored build output.
+4. Flyway owns every schema change and runs before the application accepts traffic. Jakarta Persistence schema generation remains disabled.
+5. Persistence code must remain provider-neutral and use the Jakarta Persistence XML schema supported by the runtime.
+6. The schema contains users, permanent registration-bootstrap state, calendars, calendar memberships, unified invitations, events, and audit records. The user record contains a monotonically increasing password version used to revoke older authenticated sessions.
+7. Calendars and events use optimistic versions for user-facing edit conflicts. Invitation admission, bootstrap admission, membership creation, and password replacement use database serialization where concurrent requests would otherwise violate a single-use or identity invariant.
+8. Timed values persist as offset-aware instants. All-day values persist as calendar-zone-derived start-inclusive and end-exclusive instants.
+9. Database migrations, entities, service rules, and restore tooling must agree on the same schema. Application startup must fail when migrations fail.
+
+### 3.5 Authentication and account lifecycle
+
+Application authentication creates the global `USER` identity only. Calendar `EDITOR` and `ADMIN` roles are loaded and enforced separately from calendar membership records.
+
+Registration requirements:
+
+1. Accept an invitation token, username, display name, password, and initial calendar name.
+2. Normalize usernames consistently and reject blank or schema-oversized account fields.
+3. Require an unused invitation or atomically claim the permanent first-account bootstrap row.
+4. Hash accepted passwords with Jakarta Security `Pbkdf2PasswordHash` using PBKDF2-HMAC-SHA256, 600,000 iterations, a 32-byte salt, and a 32-byte derived key.
+5. Require passwords from 8 through 512 characters with at least one uppercase letter and one digit, and reject a password equal to the username.
+6. Create the user's initial calendar, grant that user `ADMIN`, apply any calendar-editor invitation, consume the invitation, and record non-secret audit details in the same logical workflow.
+7. Authenticate the new account when possible, rotate the pre-authentication session identifier, and bind the current database password version to the authenticated session.
+
+Login and session requirements:
+
+1. Return the same sign-in failure for missing, inactive, and incorrectly authenticated accounts.
+2. Perform a real password-hash verification for existing accounts and a fixed dummy-hash verification for missing accounts.
+3. Track failures by normalized username and client source. Five failures for one username/source pair in 15 minutes block that pair for 15 minutes; 25 source-wide failures in the same window block that source for 15 minutes.
+4. Rotate the session identifier after authentication and bind the user's current password version to the session.
+5. Refresh authenticated application and canonical-calendar session cookies with a rolling 30-day lifetime and enforce a 30-day server-side inactivity timeout.
+6. Compare the session's password version with the active user record before protected application or canonical-calendar processing. A mismatch invalidates the session before the request reaches a backing bean or service.
+7. Redirect stale protected application sessions to sign-in. A stale canonical-calendar session is discarded and the same URL is re-evaluated as anonymous read-only access.
+8. Keep sessions in memory for one application instance. Restart or redeploy requires reauthentication and must not affect persisted account or calendar data.
+
+Signed-in password reset and change requirements:
+
+1. Expose the flow from `/app/account-settings`; anonymous callers are rejected by the authenticated route constraint and the service still requires an active user.
+2. Require the current password, a new password, and an exact new-password confirmation.
+3. Lock and reload the active account before verifying the current password so concurrent changes cannot both succeed against one old credential.
+4. Apply the same centralized password policy used for registration and reject reuse of the current password.
+5. Replace only the password hash, increment the password version, update the account timestamp, and write an audit entry that contains no password, hash, or session identifier.
+6. Invalidate the changing session immediately and require sign-in with the new password. Every other session becomes invalid when its next request observes the incremented password version.
+7. Use clear validation messages for the signed-in user without exposing passwords in URLs, logs, audit details, or rendered markup.
+8. The product UI calls this action "Change password" because it requires the current password. Do not present this authenticated reset/change flow as forgotten-password recovery. Recovery without a valid session remains unavailable until the application has a verified recovery channel.
 
 ## 4. Authorization model
 
@@ -268,13 +321,16 @@ Before first real use:
 21. Make `/health` fail when the database is unavailable and bound connection acquisition within the probe timeout.
 22. Make bootstrap consumption permanent after successful registration and transactional so a failed attempt releases the claim.
 23. Revalidate editor-invitation creator permission inside the serialized membership grant.
+24. Require the current password and matching confirmation before changing a password, and reject current-password reuse.
+25. Serialize password replacement for one account and increment its password version atomically with the new hash.
+26. Invalidate the changing session immediately and reject every older session before protected request processing.
+27. Keep passwords, password hashes, password versions, and session identifiers out of URLs, audit details, and logs.
 
 Optional v1.1 hardening:
 
 1. Registration throttling.
-2. Password change screen.
-3. Content Security Policy headers.
-4. Dependency vulnerability scan in CI.
+2. Content Security Policy headers.
+3. Dependency vulnerability scan in CI.
 
 ## 6. Maintainability rules
 
@@ -306,6 +362,19 @@ The app should feel modern, flat, sleek, and practical:
 6. Avoid oversized hero sections, decorative gradients, nested cards, and one-note color palettes.
 7. Make mobile web responsive, but do not build a mobile app.
 
+### 7.1 Page responsibilities
+
+1. The shared template provides the document title, stylesheet, messages, brand, primary navigation, sign-in state, sign-out action, skip link, and main content region without duplicating page chrome.
+2. Registration collects invitation token, username, display name, password, and initial calendar name, and shows generic user-readable admission failures.
+3. Login collects username and password, preserves an invitation continuation when present, and never identifies which credential was wrong.
+4. Account settings identifies the signed-in account, explains that success signs every session out, and collects current password, new password, and confirmation with correct browser autocomplete attributes.
+5. The calendar list shows every active membership, its role, a direct canonical-calendar link, and calendar creation.
+6. The canonical calendar page loads by bearer token, always includes `noindex, nofollow`, renders events in the calendar time zone, and adds event and link-regeneration controls only for active editors and admins.
+7. Calendar settings lets admins edit name, description, IANA time zone, and public-access enablement without creating a second sharing URL.
+8. Member management lets admins view active and inactive members, change roles, remove access, reactivate access, and inspect or revoke unused editor invitations for that calendar.
+9. Invitation management lets signed-in users create app invitations and authorized members create editor invitations, then displays copyable links, expiry, status, and allowed revocation controls without email delivery.
+10. Destructive event, member, invitation, and public-link actions require an appropriate confirmation or explicit submission and return focus and messages predictably.
+
 ## 8. Testing plan
 
 Minimum automated tests:
@@ -325,6 +394,8 @@ Minimum automated tests:
 13. Permanent atomic bootstrap consumption, including rollback and a real PostgreSQL race.
 14. Source-aware login throttling with generic missing-user behavior.
 15. Rolling authenticated cookies, 30-day inactivity, restart reauthentication, and database-aware health.
+16. Password-change validation for wrong current password, mismatched confirmation, policy failures, password reuse, successful hash replacement, password-version increment, audit safety, and database locking.
+17. Browser-level password change from two authenticated sessions, including immediate logout, old-password rejection, new-password acceptance, and stale-session invalidation.
 
 Manual acceptance checks before deployment and after deployment:
 
@@ -351,6 +422,9 @@ Manual acceptance checks before deployment and after deployment:
 | Calendar admin removes last admin role     | Rejected                                                  |
 | App redeploy                               | Existing users, calendars, memberships, and events remain |
 | App redeploy with authenticated browser    | Reauthentication is required; database records remain      |
+| Signed-in user submits a wrong current password | Password remains unchanged and a clear error is shown |
+| Signed-in user changes to a valid new password | Current session ends; old password fails and new password succeeds |
+| Another session remains open during password change | Its next protected request redirects to sign-in before rendering protected content |
 | `/health` with available database          | Returns 200 `ok`                                          |
 | `/health` with unavailable database        | Returns 503 without exposing connection details           |
 
@@ -370,15 +444,46 @@ HTTPS: Railway-managed certificate
 
 Do not scale to multiple instances until you have reviewed JSF view state, session stickiness, concurrent edits, and database connection pool sizing.
 
+Production packaging and deployment requirements:
+
+1. Build the WAR in a disposable Java 25 stage and run it in the pinned Open Liberty Java 25 image without Maven or application source in the runtime stage.
+2. Copy only Liberty configuration, declared server features, the Maven-managed PostgreSQL driver, and the WAR into the runtime image. Never bake environment secrets or private planning material into the image.
+3. Emit structured Liberty logs to standard output and standard error without passwords, database URLs containing credentials, calendar tokens, invitation tokens, or session identifiers.
+4. Keep Railway build, start, restart, and deployment-health configuration in repository-owned configuration-as-code where Railway supports it.
+5. Deploy production from pushes or merges to `master`; do not create preview deployments or deploy from pull-request workflows.
+6. Use Railway's injected `PORT`, private PostgreSQL service references, persistent PostgreSQL storage, managed HTTPS, and the `calendar.social` custom domain.
+7. Set `COOKIE_SECURE=true` and `APP_BASE_URL=https://calendar.social` in production.
+8. Keep the bootstrap invitation secret only until the first account is created, then clear it and redeploy. Permanent database bootstrap consumption remains authoritative.
+9. Gate a deployment on `/health`, then use an external HTTPS monitor for continuous outage detection because Railway deployment probes are not ongoing monitoring.
+10. Verify account, calendar, membership, invitation, event, audit, and password-version persistence after a redeploy; expect all in-memory sessions to require sign-in again.
+
+Backup and restore requirements:
+
+1. Use PostgreSQL 17 clients in Docker so host-installed PostgreSQL programs are unnecessary.
+2. Create a nonempty custom-format dump in a unique partial file and atomically publish it only after success.
+3. Require an explicit target database name before restore and validate the archive before running a single-transaction guarded restore.
+4. Stop the application before restoring a real database.
+5. Verify restore into a fresh tmpfs PostgreSQL service and compare row counts for every application table and Flyway history.
+6. Pass remote database passwords through the client container environment rather than command-line arguments or logs.
+
+CI requirements:
+
+1. Run the Maven wrapper build and PrimeFaces Jakarta-classifier check.
+2. Run deterministic PostgreSQL-backed migrations and browser workflows against Open Liberty.
+3. Run isolated real-PostgreSQL bootstrap rollback and concurrency coverage against the production image.
+4. Build and smoke-test the production container against PostgreSQL.
+5. Run Dependency Review for pull requests and CodeQL for pull requests, pushes to `master`, and the configured schedule.
+6. Use read-only workflow permissions where possible, do not require production secrets for pull requests, and never add retries to conceal flaky tests.
+
 ## 10. Future roadmap
 
 ### v1.1
 
-1. Password change screen.
-2. Registration throttling.
-3. Better event filtering.
-4. User timezone preference.
-5. Automated nightly backups.
+1. Registration throttling.
+2. Better event filtering.
+3. User timezone preference.
+4. Automated nightly backups.
+5. Account recovery after a verified recovery channel is designed.
 
 ### v1.2
 
@@ -405,24 +510,25 @@ The local agent is done only when all of these are true:
 4. `/health` returns `200 ok` locally.
 5. Users can register.
 6. Users can log in.
-7. Registered users can create calendars.
-8. Calendar creators become calendar admins.
-9. Public calendar links work read-only.
-10. Calendar invite links grant editor access only; read-only sharing uses public links.
-11. Calendar role behavior works.
-12. Event CRUD works for editor/admin and is rejected for anonymous readers and signed-in nonmembers.
-13. Calendar member management works for calendar admins.
-14. Docker image builds.
-15. Docker image runs locally.
-16. App deploys to Railway.
-17. Custom domain works over HTTPS.
-18. Backup script has been tested against the local Docker Compose database.
-19. README documents setup, deploy, backup, troubleshooting, roles, invitations, public links, and known limitations.
-20. There are no accidental `javax.*` enterprise imports.
-21. PrimeFaces dependency uses the `jakarta` classifier.
-22. JPA code is provider-neutral and does not depend on Hibernate.
-23. Flyway migrations 1 through 8 apply successfully.
-24. The focused suite, 18 primary browser scenarios, and isolated real-PostgreSQL bootstrap race pass without retries.
+7. Signed-in users can change their password and every older session is invalidated.
+8. Registered users can create calendars.
+9. Calendar creators become calendar admins.
+10. Public calendar links work read-only.
+11. Calendar invite links grant editor access only; read-only sharing uses public links.
+12. Calendar role behavior works.
+13. Event CRUD works for editor/admin and is rejected for anonymous readers and signed-in nonmembers.
+14. Calendar member management works for calendar admins.
+15. Docker image builds.
+16. Docker image runs locally.
+17. App deploys to Railway.
+18. Custom domain works over HTTPS.
+19. Backup script has been tested against the local Docker Compose database.
+20. README documents setup, deploy, backup, troubleshooting, roles, password changes, invitations, public links, and known limitations.
+21. There are no accidental `javax.*` enterprise imports.
+22. PrimeFaces dependency uses the `jakarta` classifier.
+23. JPA code is provider-neutral and does not depend on Hibernate.
+24. Flyway migrations through version 9 apply successfully.
+25. The focused unit suite, primary browser scenarios, and isolated real-PostgreSQL bootstrap race pass without retries.
 
 ## 12. Reference links
 

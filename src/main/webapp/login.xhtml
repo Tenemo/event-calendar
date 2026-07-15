@@ -6,12 +6,24 @@
                 template="/WEB-INF/templates/main.xhtml">
     <f:metadata>
         <f:viewParam name="invite" value="#{loginView.invitationToken}"/>
+        <f:viewParam name="passwordChanged" value="#{loginView.passwordChanged}"/>
+        <f:viewParam name="reauthenticationRequired" value="#{loginView.reauthenticationRequired}"/>
     </f:metadata>
     <ui:define name="title">Sign in - Shared calendar</ui:define>
 
     <ui:define name="content">
         <section class="narrow-section">
             <h1>Sign in</h1>
+            <h:panelGroup layout="block"
+                          styleClass="notice-message"
+                          rendered="#{loginView.passwordChanged}">
+                Your password was changed. Sign in with the new password.
+            </h:panelGroup>
+            <h:panelGroup layout="block"
+                          styleClass="notice-message"
+                          rendered="#{loginView.reauthenticationRequired}">
+                Your session is no longer valid. Sign in again.
+            </h:panelGroup>
             <p:panel styleClass="surface-panel form-panel">
                 <h:form styleClass="stacked-form">
                     <h:inputHidden value="#{loginView.invitationToken}"/>

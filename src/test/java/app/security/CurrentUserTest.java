@@ -12,6 +12,8 @@ import app.user.ApplicationUser;
 import app.user.UserService;
 import app.util.AuthorizationException;
 import jakarta.security.enterprise.SecurityContext;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import java.lang.reflect.Proxy;
 import java.security.Principal;
 import java.util.Optional;
@@ -54,11 +56,51 @@ final class CurrentUserTest {
                 () -> assertEquals(0, userService.lookupCount));
     }
 
+    @Test
+    void passwordVersionMismatchRejectsAnOtherwiseActiveAuthenticatedSession() {
+        ApplicationUser activeUser = activeUser("piotr");
+        activeUser.setPasswordVersion(4);
+        RecordingUserService userService = new RecordingUserService(Optional.of(activeUser));
+        CurrentUser currentUser = currentUser("piotr", userService, 3);
+
+        assertAll(
+                () -> assertFalse(currentUser.isSignedIn()),
+                () -> assertThrows(AuthorizationException.class, currentUser::require),
+                () -> assertEquals(1, userService.lookupCount));
+    }
+
     private static CurrentUser currentUser(String principalName, UserService userService) {
+        return currentUser(principalName, userService, 0);
+    }
+
+    private static CurrentUser currentUser(
+            String principalName,
+            UserService userService,
+            long sessionPasswordVersion) {
         CurrentUser currentUser = new CurrentUser();
         setField(currentUser, "securityContext", securityContext(principalName));
         setField(currentUser, "userService", userService);
+        setField(currentUser, "request", request(sessionPasswordVersion));
         return currentUser;
+    }
+
+    private static HttpServletRequest request(long sessionPasswordVersion) {
+        HttpSession session = (HttpSession) Proxy.newProxyInstance(
+                HttpSession.class.getClassLoader(),
+                new Class<?>[] {HttpSession.class},
+                (proxy, method, arguments) -> {
+                    if (method.getName().equals("getAttribute")
+                            && AuthenticatedSessionSecurity.PASSWORD_VERSION_SESSION_ATTRIBUTE.equals(arguments[0])) {
+                        return sessionPasswordVersion;
+                    }
+                    return defaultValue(method.getReturnType());
+                });
+        return (HttpServletRequest) Proxy.newProxyInstance(
+                HttpServletRequest.class.getClassLoader(),
+                new Class<?>[] {HttpServletRequest.class},
+                (proxy, method, arguments) -> method.getName().equals("getSession")
+                        ? session
+                        : defaultValue(method.getReturnType()));
     }
 
     private static SecurityContext securityContext(String principalName) {
@@ -89,6 +131,19 @@ final class CurrentUserTest {
         user.setDisplayName("Piotr");
         user.setActive(true);
         return user;
+    }
+
+    private static Object defaultValue(Class<?> returnType) {
+        if (!returnType.isPrimitive()) {
+            return null;
+        }
+        if (returnType == boolean.class) {
+            return false;
+        }
+        if (returnType == char.class) {
+            return '\0';
+        }
+        return 0;
     }
 
     private static final class RecordingUserService extends UserService {

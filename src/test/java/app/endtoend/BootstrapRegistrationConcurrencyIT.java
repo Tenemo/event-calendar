@@ -46,7 +46,7 @@ final class BootstrapRegistrationConcurrencyIT {
     private static final String DATABASE_NAME = "calendar_bootstrap_verification";
     private static final String DATABASE_USER = "calendar_bootstrap_verification";
     private static final String DATABASE_PASSWORD = "calendar_bootstrap_verification";
-    private static final String EXPECTED_LATEST_FLYWAY_VERSION = "8";
+    private static final String EXPECTED_LATEST_FLYWAY_VERSION = "9";
     private static final String VALID_PASSWORD = "Bootstrap password 2026";
     private static final Duration APPLICATION_READY_TIMEOUT = Duration.ofSeconds(120);
     private static final Duration BLOCKED_REQUEST_TIMEOUT = Duration.ofSeconds(20);

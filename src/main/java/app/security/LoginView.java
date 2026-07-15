@@ -1,5 +1,7 @@
 package app.security;
 
+import app.user.ApplicationUser;
+import app.user.UserService;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
@@ -11,6 +13,8 @@ import jakarta.security.enterprise.authentication.mechanism.http.AuthenticationP
 import jakarta.security.enterprise.credential.UsernamePasswordCredential;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
+import jakarta.servlet.ServletException;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -21,11 +25,16 @@ public class LoginView {
     @Inject
     private SecurityContext securityContext;
 
+    @Inject
+    private UserService userService;
+
     private String username;
     private String password;
     private String invitationToken;
+    private boolean passwordChanged;
+    private boolean reauthenticationRequired;
 
-    public void login() throws IOException {
+    public void login() throws IOException, ServletException {
         if (isBlank(username) || isBlank(password)) {
             addFailureMessage("Username and password are required.");
             return;
@@ -43,7 +52,18 @@ public class LoginView {
                         .newAuthentication(true));
 
         if (status == AuthenticationStatus.SUCCESS) {
-            AuthenticatedSessionSecurity.rotateSessionIdentifier(request);
+            ApplicationUser authenticatedUser = userService.findActiveByUsername(username).orElse(null);
+            if (authenticatedUser == null) {
+                request.logout();
+                HttpSession session = request.getSession(false);
+                if (session != null) {
+                    session.invalidate();
+                }
+                response.setStatus(HttpServletResponse.SC_OK);
+                addFailureMessage("Sign-in failed. Check your username and password.");
+                return;
+            }
+            AuthenticatedSessionSecurity.establishAuthenticatedSession(request, authenticatedUser);
             String route = isBlank(invitationToken)
                     ? "/app/calendars"
                     : "/register?token=" + URLEncoder.encode(invitationToken.trim(), StandardCharsets.UTF_8);
@@ -78,6 +98,22 @@ public class LoginView {
 
     public void setInvitationToken(String invitationToken) {
         this.invitationToken = invitationToken;
+    }
+
+    public boolean isPasswordChanged() {
+        return passwordChanged;
+    }
+
+    public void setPasswordChanged(boolean passwordChanged) {
+        this.passwordChanged = passwordChanged;
+    }
+
+    public boolean isReauthenticationRequired() {
+        return reauthenticationRequired;
+    }
+
+    public void setReauthenticationRequired(boolean reauthenticationRequired) {
+        this.reauthenticationRequired = reauthenticationRequired;
     }
 
     private void redirectToApplication(FacesContext facesContext, String route) throws IOException {

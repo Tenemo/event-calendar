@@ -12,6 +12,7 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpServletResponseWrapper;
+import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.security.Principal;
@@ -50,6 +51,9 @@ public class SessionCookieRefreshFilter implements Filter {
             throws IOException, ServletException {
         if (servletRequest instanceof HttpServletRequest request
                 && servletResponse instanceof HttpServletResponse response) {
+            if (invalidateStaleAuthenticatedSession(request, response)) {
+                return;
+            }
             SessionCookieRefreshResponse responseWrapper =
                     new SessionCookieRefreshResponse(request, response);
             filterChain.doFilter(servletRequest, responseWrapper);
@@ -59,6 +63,32 @@ public class SessionCookieRefreshFilter implements Filter {
             return;
         }
         filterChain.doFilter(servletRequest, servletResponse);
+    }
+
+    private boolean invalidateStaleAuthenticatedSession(
+            HttpServletRequest request,
+            HttpServletResponse response) throws IOException, ServletException {
+        if (request.getUserPrincipal() == null || currentUser.isSignedIn()) {
+            return false;
+        }
+
+        request.logout();
+        HttpSession session = request.getSession(false);
+        if (session != null) {
+            session.invalidate();
+        }
+
+        String contextPath = request.getContextPath();
+        String requestUri = request.getRequestURI();
+        if (requestUri.startsWith(contextPath + "/calendar/")) {
+            String queryString = request.getQueryString();
+            response.sendRedirect(queryString == null || queryString.isBlank()
+                    ? requestUri
+                    : requestUri + "?" + queryString);
+        } else {
+            response.sendRedirect(contextPath + "/login?reauthenticationRequired=true");
+        }
+        return true;
     }
 
     private void refreshAuthenticatedSessionCookie(

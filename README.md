@@ -20,6 +20,7 @@ Shared calendar is a server-rendered web application for event calendars shared 
 - A calendar creator receives that calendar's `ADMIN` role.
 - Calendar roles are scoped to one calendar: `EDITOR` and `ADMIN`.
 - Calendar invitations grant `EDITOR`; read-only access uses the calendar's bearer link rather than a membership role.
+- Signed-in users can change their own password from account settings; doing so invalidates every existing session.
 - Calendars are public by default through long, random, unguessable bearer links.
 - Public links are read-only and marked `noindex, nofollow`.
 - Events support titles, locations, descriptions, inclusive all-day date ranges, and timed date ranges. All-day dates are normalized in the calendar's IANA time zone instead of assuming every day is 24 hours.
@@ -38,7 +39,7 @@ mise run dev
 
 The application listens on `http://localhost:9080` by default. Its database-aware health endpoint is `http://localhost:9080/health`. It returns `200 ok` only when PostgreSQL is reachable and `503 unavailable` otherwise.
 
-Jakarta Faces extensionless routing is enabled. Browser-facing routes include `/login`, `/register`, `/app/calendars`, `/app/calendar-members`, `/app/calendar-settings`, and `/app/invitations`. Every calendar uses `/calendar/{calendarToken}` as its canonical URL for editors, admins, and anonymous readers. The `.xhtml` files are internal templates, not canonical browser URLs.
+Jakarta Faces extensionless routing is enabled. Browser-facing routes include `/login`, `/register`, `/app/calendars`, `/app/account-settings`, `/app/calendar-members`, `/app/calendar-settings`, and `/app/invitations`. Every calendar uses `/calendar/{calendarToken}` as its canonical URL for editors, admins, and anonymous readers. The `.xhtml` files are internal templates, not canonical browser URLs.
 
 ## Environment variables
 
@@ -66,7 +67,7 @@ Copy `.env.example` to `.env` for local development. Do not commit `.env`.
 
 ## Database migrations
 
-Flyway runs during application startup and owns the database schema. The application fails startup when a migration cannot be applied. The current schema is migration version 8. Migration 8 removes existing read-only memberships rather than promoting them to editor access, then restricts calendar memberships to `EDITOR` and `ADMIN`. Host-installed PostgreSQL client programs are not required.
+Flyway runs during application startup and owns the database schema. The application fails startup when a migration cannot be applied. The current schema is migration version 9. Migration 8 removes existing read-only memberships rather than promoting them to editor access and restricts calendar memberships to `EDITOR` and `ADMIN`. Migration 9 adds the password version used to invalidate older authenticated sessions after a password change. Host-installed PostgreSQL client programs are not required.
 
 Start and inspect the local database with:
 
@@ -91,7 +92,7 @@ mise run install-playwright
 mise run e2e
 ```
 
-The automated suite contains 122 unit tests and 18 primary browser scenarios covering registration, login, logout, calendar creation, event creation/editing/deletion, canonical calendar links, public-access disabling, link regeneration, invitation acceptance, editor removal, last-admin protection, validation, and anonymous read-only behavior. One additional isolated browser scenario builds the production image and verifies bootstrap-registration rollback and concurrency against a separate application container and tmpfs PostgreSQL database on non-default ports.
+The automated suite contains 129 unit tests and 19 primary browser scenarios covering registration, login, logout, password changes and session revocation, calendar creation, event creation/editing/deletion, canonical calendar links, public-access disabling, link regeneration, invitation acceptance, editor removal, last-admin protection, validation, and anonymous read-only behavior. One additional isolated browser scenario builds the production image and verifies bootstrap-registration rollback and concurrency against a separate application container and tmpfs PostgreSQL database on non-default ports.
 
 Run only the isolated bootstrap-registration verification with:
 
@@ -194,7 +195,7 @@ APP_BOOTSTRAP_INVITE_TOKEN=
 
 Set `APP_BOOTSTRAP_INVITE_TOKEN` temporarily to a generated high-entropy secret for the first registration only. After the first account is created, delete or clear the variable and redeploy; the database also records permanent bootstrap consumption.
 
-After deployment, verify `/health`, registration, login, public links, invitations, role changes, and event persistence. Redeploy, confirm that accounts and calendar data persist, then sign in again because HTTP sessions are intentionally in memory. Inspect logs to confirm that passwords, database credentials, public tokens, and invitation tokens are absent. Railway's deployment health check is not continuous monitoring, so configure an external HTTPS uptime check for `https://calendar.social/health` before relying on the service.
+After deployment, verify `/health`, registration, login, password change, public links, invitations, role changes, and event persistence. Redeploy, confirm that accounts and calendar data persist, then sign in again because HTTP sessions are intentionally in memory. Inspect logs to confirm that passwords, database credentials, public tokens, and invitation tokens are absent. Railway's deployment health check is not continuous monitoring, so configure an external HTTPS uptime check for `https://calendar.social/health` before relying on the service.
 
 ## Registration
 
@@ -211,6 +212,14 @@ Passwords must be between 8 and 512 characters, contain at least one uppercase l
 Five failed sign-in attempts for one normalized username from one client source within 15 minutes block that username/source pair for 15 minutes. Twenty-five failures from one source in the same window block further attempts from that source for 15 minutes, which limits username spraying without letting one remote client lock the account for other sources. Missing and existing usernames follow the same policy and return the same generic failure.
 
 Authenticated sessions use an HTTP-only, SameSite `Lax` cookie that is secure when `COOKIE_SECURE=true`. Authenticated application and calendar requests refresh the persistent cookie's rolling 30-day lifetime, and the server invalidates a session after 30 days of inactivity. A server restart or redeploy clears in-memory sessions and requires reauthentication, while accounts and calendar data remain in PostgreSQL.
+
+## Password changes
+
+Open `/app/account-settings` while signed in. Enter the current password, then enter and confirm a different new password that follows the registration password policy. A successful change writes a new salted password hash, records a secret-free audit entry, signs out the current browser, and requires the new password at the next sign-in.
+
+Each authenticated session records the account's database password version. Changing the password increments that version, so every other browser session is rejected before its next protected application request and must sign in with the new password. A stale session opening a canonical calendar URL is discarded and the same URL is re-evaluated with ordinary anonymous read-only permissions.
+
+This flow requires a valid signed-in session and the current password. Forgotten-password recovery is not implemented because the application does not yet have a verified email or other recovery channel.
 
 ## Calendar roles
 
@@ -311,5 +320,5 @@ Use a database endpoint reachable from Docker, not a provider-private hostname. 
 - Railway's deployment health check is not continuous monitoring; external uptime monitoring and alerting are not configured by this repository.
 - Backups are manual; there is no scheduled backup service or retention policy yet.
 - Run one application instance because HTTP sessions are in memory, even though active authenticated cookies and inactivity timeouts roll for 30 days.
-- Password change and account recovery are not implemented.
+- Forgotten-password account recovery is not implemented; signed-in password changes are available from account settings.
 - Recurring events, notifications, email delivery, ICS import/export, and native mobile apps are intentionally out of scope.
