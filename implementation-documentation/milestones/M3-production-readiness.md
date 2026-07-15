@@ -26,11 +26,11 @@ Local verification evidence:
 2. The production container ran on local port `9082` with `COOKIE_SECURE=false` and returned `200 ok` from `/health`.
 3. The runtime image contained the WAR and PostgreSQL driver but no Maven installation or build source directory.
 4. Liberty emitted JSON console logs without passwords, public tokens, or invitation tokens.
-5. Flyway migrations 1 through 7 were present and successful.
-6. Invalid public calendar routes returned `404` and included `noindex`.
+5. Flyway migrations 1 through 8 were present and successful.
+6. Invalid, regenerated, and disabled calendar links returned a clear link-unavailable `404` page and included `noindex`.
 7. The local authenticated session cookie was `HttpOnly`, `SameSite=Lax`, correctly omitted `Secure` for HTTP, refreshed with a rolling 30-day lifetime, and matched the 30-day inactivity timeout.
 8. `mise run verify-backup-restore` restored a custom-format dump into a fresh tmpfs PostgreSQL service and matched all application-table and Flyway-history row counts.
-9. `mise run package` passed 118 unit tests, and the primary Playwright suite passed all 18 browser scenarios.
+9. `mise run package` passed 122 unit tests, and the primary Playwright suite passed all 18 browser scenarios.
 10. `mise run verify-bootstrap-registration` passed one isolated real-PostgreSQL browser scenario proving failed-claim rollback and exactly-one-account behavior under concurrent bootstrap registration.
 11. Browser and focused tests verified seven-day invitation expiry, rejection after creator deactivation, editor-only scope, creator permission revalidation, administrator visibility/revocation, serialized acceptance, source-aware login throttling, database-aware health, rolling sessions, and inclusive all-day dates with exclusive normalized storage.
 
@@ -200,7 +200,7 @@ README must include:
 ## Registration
 ## Calendar roles
 ## Event times
-## Public calendar links
+## Calendar links and public access
 ## Invitations
 ## Backup and restore
 ## Troubleshooting
@@ -236,12 +236,12 @@ Likely causes:
 3. Domain/HTTPS mismatch.
 4. In-memory session lost after redeploy; sign in again even though the authenticated cookie and inactivity window normally roll for 30 days.
 
-### Public link does not work
+### Calendar link does not work
 
 Likely causes:
 
 1. Calendar public access disabled.
-2. Token was rotated.
+2. The link was regenerated.
 3. Wrong `APP_BASE_URL`.
 4. Route mapping mismatch.
 

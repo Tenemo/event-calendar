@@ -67,24 +67,16 @@ final class CalendarMembershipServiceTest {
     }
 
     @Test
-    void acceptedInvitationRejectsViewerAndAdminRoles() {
+    void acceptedInvitationRejectsAdminRole() {
         CalendarMembershipService membershipService = membershipService(entityManagerStub());
 
-        assertAll(
-                () -> assertThrows(
-                        ValidationException.class,
-                        () -> membershipService.grantMembershipFromAcceptedInvitation(
-                                activeCalendar(200L),
-                                activeUser(99L),
-                                activeUser(100L),
-                                CalendarRole.VIEWER)),
-                () -> assertThrows(
-                        ValidationException.class,
-                        () -> membershipService.grantMembershipFromAcceptedInvitation(
-                                activeCalendar(200L),
-                                activeUser(99L),
-                                activeUser(100L),
-                                CalendarRole.ADMIN)));
+        assertThrows(
+                ValidationException.class,
+                () -> membershipService.grantMembershipFromAcceptedInvitation(
+                        activeCalendar(200L),
+                        activeUser(99L),
+                        activeUser(100L),
+                        CalendarRole.ADMIN));
     }
 
     @Test

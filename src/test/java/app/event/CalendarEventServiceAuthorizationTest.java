@@ -66,8 +66,8 @@ final class CalendarEventServiceAuthorizationTest {
     private static ApplicationUser activeUser() {
         ApplicationUser user = new ApplicationUser();
         setEntityId(user, 20L);
-        user.setUsername("viewer");
-        user.setDisplayName("Viewer");
+        user.setUsername("unrelated-user");
+        user.setDisplayName("Unrelated user");
         user.setActive(true);
         return user;
     }

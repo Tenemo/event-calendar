@@ -16,7 +16,9 @@ import jakarta.faces.context.FacesContext;
 import jakarta.faces.view.ViewScoped;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -45,10 +47,13 @@ public class CalendarView implements Serializable {
     private CalendarTimeService calendarTimeService;
 
     private Long calendarId;
+    private String publicToken;
+    private Integer calendarVersion;
     private String calendarName;
     private String calendarDescription;
     private String timeZone;
     private CalendarRole role;
+    private boolean publicAccessEnabled;
     private boolean available;
     private List<CalendarEventRow> events = List.of();
 
@@ -65,18 +70,47 @@ public class CalendarView implements Serializable {
 
     public void load() {
         try {
-            ApplicationUser actingUser = currentUser.require();
-            role = calendarAccessService.findActiveRole(actingUser, calendarId)
-                    .orElseThrow(() -> new NotFoundException("Calendar was not found."));
-            Calendar calendar = calendarService.requireActiveCalendar(calendarId);
+            FacesContext facesContext = FacesContext.getCurrentInstance();
+            HttpServletRequest request = (HttpServletRequest) facesContext.getExternalContext().getRequest();
+            if (Boolean.TRUE.equals(request.getAttribute(CalendarRouteServlet.NOT_FOUND_REQUEST_ATTRIBUTE))) {
+                throw new NotFoundException("Calendar was not found.");
+            }
+
+            publicToken = (String) request.getAttribute(CalendarRouteServlet.CALENDAR_TOKEN_REQUEST_ATTRIBUTE);
+            ApplicationUser actingUser = currentUser.find().orElse(null);
+            Calendar calendar = (Calendar) request.getAttribute(CalendarRouteServlet.CALENDAR_REQUEST_ATTRIBUTE);
+            if (calendar == null) {
+                calendar = calendarAccessService.requireCalendarReadableByToken(actingUser, publicToken);
+            }
+            calendarId = calendar.getId();
+            calendarVersion = calendar.getVersion();
             calendarName = calendar.getName();
             calendarDescription = calendar.getDescription();
             timeZone = calendar.getTimeZone();
+            publicAccessEnabled = calendar.isPublicAccessEnabled();
+            role = actingUser == null
+                    ? null
+                    : calendarAccessService.findActiveRole(actingUser, calendarId).orElse(null);
             available = true;
             reloadEvents(actingUser);
             resetEventForm();
         } catch (AuthorizationException | NotFoundException exception) {
             markNotFound();
+        }
+    }
+
+    public void regenerateCalendarLink() throws IOException {
+        try {
+            Calendar calendar = calendarService.regeneratePublicToken(
+                    currentUser.require(), calendarId, calendarVersion);
+            publicToken = calendar.getPublicToken();
+            calendarVersion = calendar.getVersion();
+            FacesContext facesContext = FacesContext.getCurrentInstance();
+            facesContext.getExternalContext().redirect(
+                    facesContext.getExternalContext().getRequestContextPath() + "/calendar/" + publicToken);
+            facesContext.responseComplete();
+        } catch (AuthorizationException | ConflictException | NotFoundException exception) {
+            addMessage(FacesMessage.SEVERITY_ERROR, "Calendar link could not be regenerated.", exception.getMessage());
         }
     }
 
@@ -217,7 +251,10 @@ public class CalendarView implements Serializable {
     }
 
     private void reloadEvents(ApplicationUser actingUser) {
-        events = calendarEventService.findMemberEvents(actingUser, calendarId, null, null).stream()
+        List<CalendarEvent> loadedEvents = role == null
+                ? calendarEventService.findPublicEvents(publicToken, null, null)
+                : calendarEventService.findEditorEvents(actingUser, calendarId, null, null);
+        events = loadedEvents.stream()
                 .map(event -> CalendarEventRow.from(event, timeZone, calendarTimeService))
                 .toList();
     }
@@ -238,8 +275,9 @@ public class CalendarView implements Serializable {
     public String getCalendarDescription() { return calendarDescription; }
     public String getTimeZone() { return timeZone; }
     public CalendarRole getRole() { return role; }
+    public boolean isPublicAccessEnabled() { return publicAccessEnabled; }
     public boolean isAvailable() { return available; }
-    public boolean isEditable() { return role == CalendarRole.EDITOR || role == CalendarRole.ADMIN; }
+    public boolean isEditable() { return role != null; }
     public boolean isAdmin() { return role == CalendarRole.ADMIN; }
     public List<CalendarEventRow> getEvents() { return events; }
     public Long getSelectedEventId() { return selectedEventId; }

@@ -3,7 +3,9 @@ package app.security;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import jakarta.servlet.annotation.WebFilter;
 import java.nio.file.Path;
+import java.util.Set;
 import javax.xml.parsers.DocumentBuilderFactory;
 import org.junit.jupiter.api.Test;
 import org.w3c.dom.Element;
@@ -29,5 +31,14 @@ final class RuntimeSessionConfigurationTest {
                 () -> assertEquals("720h", httpSession.getAttribute("cookieMaxAge")),
                 () -> assertEquals("720h", httpSession.getAttribute("invalidationTimeout")),
                 () -> assertEquals("false", httpSession.getAttribute("urlRewritingEnabled")));
+    }
+
+    @Test
+    void rollingSessionRefreshCoversAuthenticatedApplicationAndCanonicalCalendarRequests() {
+        WebFilter webFilter = SessionCookieRefreshFilter.class.getAnnotation(WebFilter.class);
+
+        assertEquals(
+                Set.of("/app/*", "/calendar/*", "/public-calendar.xhtml"),
+                Set.of(webFilter.urlPatterns()));
     }
 }

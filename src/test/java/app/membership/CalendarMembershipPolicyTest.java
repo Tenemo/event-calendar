@@ -18,9 +18,6 @@ final class CalendarMembershipPolicyTest {
                         () -> calendarMembershipPolicy.requireSafeRoleChange(CalendarRole.ADMIN, CalendarRole.EDITOR, false)),
                 () -> assertThrows(
                         ValidationException.class,
-                        () -> calendarMembershipPolicy.requireSafeRoleChange(CalendarRole.ADMIN, CalendarRole.VIEWER, false)),
-                () -> assertThrows(
-                        ValidationException.class,
                         () -> calendarMembershipPolicy.requireSafeDisable(CalendarRole.ADMIN, false)));
     }
 
@@ -36,7 +33,7 @@ final class CalendarMembershipPolicyTest {
     void allowsNonAdminChangesWithoutRequiringAnotherAdminCount() {
         assertAll(
                 () -> assertDoesNotThrow(
-                        () -> calendarMembershipPolicy.requireSafeRoleChange(CalendarRole.EDITOR, CalendarRole.VIEWER, false)),
-                () -> assertDoesNotThrow(() -> calendarMembershipPolicy.requireSafeDisable(CalendarRole.VIEWER, false)));
+                        () -> calendarMembershipPolicy.requireSafeRoleChange(CalendarRole.EDITOR, CalendarRole.ADMIN, false)),
+                () -> assertDoesNotThrow(() -> calendarMembershipPolicy.requireSafeDisable(CalendarRole.EDITOR, false)));
     }
 }

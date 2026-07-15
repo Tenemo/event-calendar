@@ -25,7 +25,6 @@ final class InvitationPolicyTest {
         assertAll(
                 () -> assertDoesNotThrow(() -> invitationPolicy.requireValidScope(null, null)),
                 () -> assertDoesNotThrow(() -> invitationPolicy.requireValidScope(calendar, CalendarRole.EDITOR)),
-                () -> assertThrows(ValidationException.class, () -> invitationPolicy.requireValidScope(calendar, CalendarRole.VIEWER)),
                 () -> assertThrows(ValidationException.class, () -> invitationPolicy.requireValidScope(calendar, CalendarRole.ADMIN)),
                 () -> assertThrows(ValidationException.class, () -> invitationPolicy.requireValidScope(calendar, null)),
                 () -> assertThrows(ValidationException.class, () -> invitationPolicy.requireValidScope(null, CalendarRole.EDITOR)));

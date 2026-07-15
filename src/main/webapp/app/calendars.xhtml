@@ -34,22 +34,17 @@
                          emptyMessage="No calendars yet."
                          styleClass="surface-table">
                 <p:column headerText="Calendar">
-                    <h:outputLink value="#{request.contextPath}/app/calendar">
-                        #{calendar.calendarName}
-                        <f:param name="id" value="#{calendar.calendarId}"/>
-                    </h:outputLink>
+                    <h:outputLink value="#{request.contextPath}/calendar/#{calendar.publicToken}">#{calendar.calendarName}</h:outputLink>
                 </p:column>
                 <p:column headerText="Role">
                     <h:outputText value="#{calendar.role}"/>
                 </p:column>
-                <p:column headerText="Public link">
+                <p:column headerText="Public access">
                     <h:outputText value="#{calendar.publicAccessEnabled ? 'Enabled' : 'Disabled'}"/>
                 </p:column>
                 <p:column headerText="Action">
-                    <h:outputLink value="#{request.contextPath}/app/calendar" styleClass="button-link secondary-link">
-                        Open
-                        <f:param name="id" value="#{calendar.calendarId}"/>
-                    </h:outputLink>
+                    <h:outputLink value="#{request.contextPath}/calendar/#{calendar.publicToken}"
+                                  styleClass="button-link secondary-link">Open</h:outputLink>
                     <h:outputLink value="#{request.contextPath}/app/calendar-settings"
                                   styleClass="button-link secondary-link"
                                   rendered="#{calendar.admin}">

@@ -31,6 +31,7 @@ public class CalendarMembersView implements Serializable {
     private Long calendarId;
     private Long currentUserId;
     private String calendarName;
+    private String publicToken;
     private boolean available;
     private List<MemberRow> members = List.of();
 
@@ -40,6 +41,7 @@ public class CalendarMembersView implements Serializable {
             currentUserId = actingUser.getId();
             Calendar calendar = calendarService.requireAdminCalendar(actingUser, calendarId);
             calendarName = calendar.getName();
+            publicToken = calendar.getPublicToken();
             reloadMembers(actingUser);
             available = true;
         } catch (AuthorizationException | NotFoundException exception) {
@@ -66,7 +68,10 @@ public class CalendarMembersView implements Serializable {
             ApplicationUser actingUser = currentUser.require();
             calendarMembershipService.disableMember(actingUser, calendarId, userId);
             reloadMembers(actingUser);
-            addMessage(FacesMessage.SEVERITY_INFO, "Member access removed.", "The member can no longer open this calendar.");
+            addMessage(
+                    FacesMessage.SEVERITY_INFO,
+                    "Member access removed.",
+                    "The member can no longer edit this calendar. Public-link access is unchanged.");
         } catch (ValidationException exception) {
             reloadMembersAfterRejectedChange();
             addMessage(FacesMessage.SEVERITY_ERROR, "Member access could not be removed.", exception.getMessage());
@@ -107,6 +112,7 @@ public class CalendarMembersView implements Serializable {
     public Long getCalendarId() { return calendarId; }
     public void setCalendarId(Long calendarId) { this.calendarId = calendarId; }
     public String getCalendarName() { return calendarName; }
+    public String getPublicToken() { return publicToken; }
     public boolean isAvailable() { return available; }
     public List<MemberRow> getMembers() { return members; }
     public CalendarRole[] getRoles() { return CalendarRole.values(); }

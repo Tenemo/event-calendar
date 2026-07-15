@@ -34,12 +34,12 @@ The app is multi-calendar from v1.
 3. Anyone with an account can create calendars.
 4. The creator of a calendar receives the calendar-level `ADMIN` role.
 5. Calendar editors and admins can generate app invitation links that also grant `EDITOR` access to that calendar.
-6. Calendar roles are `VIEWER`, `EDITOR`, and `ADMIN`; they are scoped to one calendar, not global application roles.
-7. Calendar invitations never grant `VIEWER`; read-only sharing uses the public calendar link.
+6. Calendar roles are `EDITOR` and `ADMIN`; they are scoped to one calendar, not global application roles.
+7. There is no read-only membership role. Read-only access uses the calendar's bearer link and has the same permissions whether the reader is signed in or anonymous.
 8. Invitations expire after seven days and become unusable when their creator's account becomes inactive. Their creators can revoke them, calendar admins can list and revoke unused editor invitations, and editor invitations also become unusable when their creator loses edit permission.
 9. Invitation acceptance is serialized so a single link cannot be consumed by multiple accounts under concurrent requests.
-10. Calendars are public by default through long, random, unguessable links. Public access can be disabled or the token rotated without exposing mutation capabilities.
-11. Public links provide read-only access without authentication and must not expose private app routes, member management, invite management, or editing controls.
+10. Each calendar has one long, random, unguessable canonical URL used by its editors, admins, and anonymous readers. Public access can be disabled without changing that URL, or the URL can be regenerated to invalidate the previous one immediately.
+11. The canonical URL exposes mutation controls only to active editors and admins. Every other visitor receives read-only access while public access is enabled and must not see member management, invite management, or editing controls.
 12. Bootstrap registration is claimed atomically with the first account and remains permanently consumed after success.
 13. All-day form dates are inclusive and persist as calendar-zone-normalized, start-inclusive/end-exclusive ranges; timed values reject ambiguous or nonexistent daylight-saving times.
 14. Login throttling is source-aware, authenticated session cookies and inactivity roll for 30 days, redeploy requires reauthentication, and health checks require a usable database.

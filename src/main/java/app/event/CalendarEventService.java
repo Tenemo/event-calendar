@@ -45,8 +45,8 @@ public class CalendarEventService {
         return findEvents(calendar.getId(), rangeStartTime, rangeEndTime);
     }
 
-    public List<CalendarEvent> findMemberEvents(ApplicationUser user, Long calendarId, OffsetDateTime rangeStartTime, OffsetDateTime rangeEndTime) {
-        calendarAccessService.requireCanView(user, calendarId);
+    public List<CalendarEvent> findEditorEvents(ApplicationUser user, Long calendarId, OffsetDateTime rangeStartTime, OffsetDateTime rangeEndTime) {
+        calendarAccessService.requireCanEdit(user, calendarId);
         return findEvents(calendarId, rangeStartTime, rangeEndTime);
     }
 

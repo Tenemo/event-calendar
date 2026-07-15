@@ -77,7 +77,7 @@ final class CalendarServiceTest {
     }
 
     @Test
-    void updatesValidatedSettingsAndRotatesThePublicLinkWithAuditRecords() {
+    void updatesValidatedSettingsAndRegeneratesTheCalendarLinkWithAuditRecords() {
         ApplicationUser actingUser = activeUser(42L);
         Calendar calendar = activeCalendar(80L, actingUser);
         EntityManagerStub entityManagerStub = entityManagerStub()
@@ -87,7 +87,7 @@ final class CalendarServiceTest {
         RecordingAuditService auditService = new RecordingAuditService();
         CalendarService calendarService = new CalendarService();
         setField(calendarService, "entityManager", entityManagerStub.entityManager());
-        setField(calendarService, "tokenService", new FixedTokenService("rotated-token-123456789012345678901234567890"));
+        setField(calendarService, "tokenService", new FixedTokenService("regenerated-token-123456789012345678901234567890"));
         setField(calendarService, "auditService", auditService);
         setField(calendarService, "calendarAccessService", new AllowingAccessService());
         setField(calendarService, "calendarTimeService", new CalendarTimeService());
@@ -100,16 +100,19 @@ final class CalendarServiceTest {
                 "Europe/London",
                 false,
                 calendar.getVersion());
-        Calendar rotatedCalendar = calendarService.rotatePublicToken(actingUser, calendar.getId(), calendar.getVersion());
+        Calendar regeneratedCalendar = calendarService.regeneratePublicToken(
+                actingUser, calendar.getId(), calendar.getVersion());
 
         assertAll(
                 () -> assertEquals("River days", calendar.getName()),
                 () -> assertEquals("Summer plans", calendar.getDescription()),
                 () -> assertEquals("Europe/London", calendar.getTimeZone()),
                 () -> assertFalse(calendar.isPublicAccessEnabled()),
-                () -> assertEquals(calendar, rotatedCalendar),
-                () -> assertEquals("rotated-token-123456789012345678901234567890", rotatedCalendar.getPublicToken()),
-                () -> assertEquals(List.of("settings_updated", "public_token_rotated"), auditService.actions),
+                () -> assertEquals(calendar, regeneratedCalendar),
+                () -> assertEquals(
+                        "regenerated-token-123456789012345678901234567890",
+                        regeneratedCalendar.getPublicToken()),
+                () -> assertEquals(List.of("settings_updated", "public_token_regenerated"), auditService.actions),
                 () -> assertEquals(2, entityManagerStub.flushCount()));
     }
 
@@ -178,7 +181,7 @@ final class CalendarServiceTest {
     }
 
     @Test
-    void settingsAndTokenRotationRequireAdminAccessBeforeLoadingOrChangingTheCalendar() {
+    void settingsRequireAdminAndLinkRegenerationRequiresEditorAccessBeforeLoadingTheCalendar() {
         CalendarService calendarService = new CalendarService();
         setField(calendarService, "calendarAccessService", new RejectingAccessService());
 
@@ -189,11 +192,11 @@ final class CalendarServiceTest {
                                 activeUser(42L), 80L, "Changed", null, "Europe/Warsaw", true, 0)),
                 () -> assertThrows(
                         AuthorizationException.class,
-                        () -> calendarService.rotatePublicToken(activeUser(42L), 80L, 0)));
+                        () -> calendarService.regeneratePublicToken(activeUser(42L), 80L, 0)));
     }
 
     @Test
-    void staleCalendarVersionsRejectSettingsAndTokenChangesWithoutMutation() {
+    void staleCalendarVersionsRejectSettingsAndLinkRegenerationWithoutMutation() {
         ApplicationUser actingUser = activeUser(42L);
         Calendar calendar = activeCalendar(80L, actingUser);
         EntityManagerStub entityManagerStub = entityManagerStub().find(Calendar.class, calendar.getId(), calendar);
@@ -214,7 +217,7 @@ final class CalendarServiceTest {
                                 calendar.getVersion() + 1)),
                 () -> assertThrows(
                         ConflictException.class,
-                        () -> calendarService.rotatePublicToken(
+                        () -> calendarService.regeneratePublicToken(
                                 actingUser, calendar.getId(), calendar.getVersion() + 1)),
                 () -> assertEquals("Kayaking", calendar.getName()),
                 () -> assertTrue(calendar.isPublicAccessEnabled()),
@@ -293,11 +296,20 @@ final class CalendarServiceTest {
 
     private static final class AllowingAccessService extends CalendarAccessService {
         @Override
+        public void requireCanEdit(ApplicationUser user, Long calendarId) {
+        }
+
+        @Override
         public void requireCanAdminister(ApplicationUser user, Long calendarId) {
         }
     }
 
     private static final class RejectingAccessService extends CalendarAccessService {
+        @Override
+        public void requireCanEdit(ApplicationUser user, Long calendarId) {
+            throw new AuthorizationException("Editor access is required.");
+        }
+
         @Override
         public void requireCanAdminister(ApplicationUser user, Long calendarId) {
             throw new AuthorizationException("Admin access is required.");

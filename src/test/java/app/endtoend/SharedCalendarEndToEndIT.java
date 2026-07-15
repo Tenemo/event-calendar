@@ -4,6 +4,7 @@ import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertTha
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -110,8 +111,9 @@ final class SharedCalendarEndToEndIT {
             assertBodyContains(page, "ADMIN");
 
             openCalendar(page, firstCalendarName);
-            String calendarId = requiredQueryParameter(page.url(), "id");
-            assertRouteWithId(page, "/app/calendar", calendarId);
+            String calendarId = Long.toString(findCalendarId(firstCalendarName));
+            assertCanonicalCalendarRoute(page, calendarId);
+            assertRollingSessionCookie(page.reload());
             assertBodyContains(page, "Create event");
 
             signOut(page);
@@ -176,7 +178,7 @@ final class SharedCalendarEndToEndIT {
             assertEquals("Accept invitation", page.locator("h1").textContent().trim());
             assertBodyContains(page, "already signed in");
             page.locator("button:has-text('Accept invitation')").click();
-            page.waitForURL("**/app/calendar?id=*");
+            page.waitForURL("**/calendar/*");
             assertBodyContains(page, ownerCalendarName);
             signOut(page);
 
@@ -215,12 +217,12 @@ final class SharedCalendarEndToEndIT {
             signIn(page, ownerUsername, TEST_PASSWORD);
             createCalendar(page, calendarName);
             openCalendar(page, calendarName);
-            String calendarId = requiredQueryParameter(page.url(), "id");
+            String calendarId = Long.toString(findCalendarId(calendarName));
 
             page.locator("input[id$='eventTitle']").fill("");
             page.locator("button:has-text('Create event')").click();
             assertBodyContains(page, "Event title is required.");
-            assertRouteWithId(page, "/app/calendar", calendarId);
+            assertCanonicalCalendarRoute(page, calendarId);
 
             enterEvent(page, "Invalid event " + uniqueSuffix, null, "2026-07-20 12:00", "2026-07-20 10:00", false);
             assertBodyContains(page, "Event end time must be after the start time.");
@@ -251,7 +253,7 @@ final class SharedCalendarEndToEndIT {
             assertEquals(0, page.locator("article", new Page.LocatorOptions().setHasText(deletedEventTitle)).count());
 
             page.reload();
-            assertRouteWithId(page, "/app/calendar", calendarId);
+            assertCanonicalCalendarRoute(page, calendarId);
             assertBodyContains(page, eventTitle + " updated");
             assertBodyContains(page, allDayEventTitle);
 
@@ -276,7 +278,7 @@ final class SharedCalendarEndToEndIT {
     }
 
     @Test
-    void publicAccessTokenRotationAndReadOnlyBehaviorAreIsolated() throws SQLException {
+    void canonicalCalendarUrlIsSharedReadOnlyAndRegenerationInvalidatesTheOldLink() throws SQLException {
         String uniqueSuffix = uniqueSuffix();
         String ownerUsername = "public-owner-" + uniqueSuffix;
         String calendarName = "Public river " + uniqueSuffix;
@@ -290,19 +292,20 @@ final class SharedCalendarEndToEndIT {
             signIn(page, ownerUsername, TEST_PASSWORD);
             createCalendar(page, calendarName);
             openCalendar(page, calendarName);
+            String originalCalendarLink = page.url();
+            assertCanonicalCalendarRoute(page, Long.toString(findCalendarId(calendarName)));
             enterEvent(page, eventTitle, "River", "2026-08-20 10:00", "2026-08-20 12:00", false);
             page.locator("a:has-text('Settings')").click();
             page.locator("textarea[id$='calendarDescription']").fill(calendarDescription);
             page.locator("button:has-text('Save settings')").click();
             assertBodyContains(page, "Calendar settings saved.");
-            Locator publicLinkInput = page.getByLabel("Public calendar link");
-            String publicCalendarLink = publicLinkInput.inputValue();
-            assertTrue(URI.create(publicCalendarLink).getPath().startsWith("/calendar/"));
+            page.locator("a:has-text('Back to calendar')").click();
+            assertEquals(originalCalendarLink, page.url());
 
             try (BrowserContext publicBrowserContext = browser.newContext()) {
                 List<String> publicBrowserMessages = new ArrayList<>();
                 Page publicPage = newPage(publicBrowserContext, publicBrowserMessages);
-                com.microsoft.playwright.Response publicResponse = publicPage.navigate(publicCalendarLink);
+                com.microsoft.playwright.Response publicResponse = publicPage.navigate(originalCalendarLink);
                 assertEquals(200, publicResponse.status());
                 assertEquals("en", publicPage.locator("html").getAttribute("lang"));
                 assertEquals("noindex, nofollow", publicPage.locator("meta[name='robots']").getAttribute("content"));
@@ -317,23 +320,27 @@ final class SharedCalendarEndToEndIT {
                 assertNoBrowserMessages(publicBrowserMessages);
             }
 
-            page.locator("button:has-text('Rotate public link')").click();
+            page.locator("button:has-text('Regenerate link')").click();
             page.locator("button:has-text('Yes')").click();
-            assertBodyContains(page, "Public link rotated.");
-            String rotatedPublicCalendarLink = publicLinkInput.inputValue();
-            assertNotEquals(publicCalendarLink, rotatedPublicCalendarLink);
+            page.waitForFunction("previousUrl => location.href !== previousUrl", originalCalendarLink);
+            String regeneratedCalendarLink = page.url();
+            assertNotEquals(originalCalendarLink, regeneratedCalendarLink);
+            assertCanonicalCalendarRoute(page, Long.toString(findCalendarId(calendarName)));
 
-            try (BrowserContext rotatedLinkBrowserContext = browser.newContext()) {
-                List<String> rotatedLinkBrowserMessages = new ArrayList<>();
-                Page rotatedLinkPage = newPage(rotatedLinkBrowserContext, rotatedLinkBrowserMessages);
-                assertEquals(404, rotatedLinkPage.navigate(publicCalendarLink).status());
-                assertBodyContains(rotatedLinkPage, "Calendar not found");
-                assertOnlyExpectedNotFoundNavigationMessage(rotatedLinkBrowserMessages);
+            try (BrowserContext regeneratedLinkBrowserContext = browser.newContext()) {
+                List<String> oldLinkBrowserMessages = new ArrayList<>();
+                Page oldLinkPage = newPage(regeneratedLinkBrowserContext, oldLinkBrowserMessages);
+                assertEquals(404, oldLinkPage.navigate(originalCalendarLink).status());
+                assertBodyContains(oldLinkPage, "Calendar link unavailable");
+                assertBodyContains(oldLinkPage, "This calendar link no longer works.");
+                assertBodyContains(oldLinkPage, "Ask a calendar editor for the current link.");
+                assertOnlyExpectedNotFoundNavigationMessage(oldLinkBrowserMessages);
 
                 List<String> currentLinkBrowserMessages = new ArrayList<>();
-                Page currentLinkPage = newPage(rotatedLinkBrowserContext, currentLinkBrowserMessages);
-                assertEquals(200, currentLinkPage.navigate(rotatedPublicCalendarLink).status());
+                Page currentLinkPage = newPage(regeneratedLinkBrowserContext, currentLinkBrowserMessages);
+                assertEquals(200, currentLinkPage.navigate(regeneratedCalendarLink).status());
                 assertBodyContains(currentLinkPage, eventTitle);
+                assertBodyContains(currentLinkPage, "Read-only");
                 assertNoBrowserMessages(currentLinkBrowserMessages);
             }
             assertNoBrowserMessages(browserMessages);
@@ -341,10 +348,10 @@ final class SharedCalendarEndToEndIT {
     }
 
     @Test
-    void membershipChangesProtectTheLastAdminAndKeepViewersReadOnly() throws SQLException {
+    void membershipChangesProtectTheLastAdminAndRemovedEditorsFallBackToTheSharedLink() throws SQLException {
         String uniqueSuffix = uniqueSuffix();
         String ownerUsername = "member-owner-" + uniqueSuffix;
-        String firstMemberUsername = "member-viewer-" + uniqueSuffix;
+        String firstMemberUsername = "member-admin-" + uniqueSuffix;
         String secondMemberUsername = "member-editor-" + uniqueSuffix;
         String password = "long-enough-password-" + uniqueSuffix;
         String calendarName = "Members calendar " + uniqueSuffix;
@@ -357,6 +364,7 @@ final class SharedCalendarEndToEndIT {
             signIn(page, ownerUsername, TEST_PASSWORD);
             createCalendar(page, calendarName);
             openCalendar(page, calendarName);
+            String sharedCalendarLink = page.url();
             enterEvent(page, eventTitle, null, "2026-09-20 10:00", "2026-09-20 12:00", false);
             String firstInvitationLink = createEditorInvitation(page, calendarName);
             String secondInvitationLink = createEditorInvitation(page, calendarName);
@@ -381,7 +389,7 @@ final class SharedCalendarEndToEndIT {
 
             signIn(page, ownerUsername, TEST_PASSWORD);
             openCalendar(page, calendarName);
-            String calendarId = requiredQueryParameter(page.url(), "id");
+            String calendarId = Long.toString(findCalendarId(calendarName));
             page.locator("a:has-text('Members')").click();
             Locator firstMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(firstMemberUsername));
             Locator secondMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(secondMemberUsername));
@@ -400,13 +408,13 @@ final class SharedCalendarEndToEndIT {
             assertFalse(ownerMemberRow.locator("button:has-text('Remove access')").isEnabled());
             assertThat(ownerMemberRow).containsText("Your admin role cannot be changed here.");
 
-            firstMemberRow.locator("select").selectOption("VIEWER");
+            firstMemberRow.locator("select").selectOption("EDITOR");
             firstMemberRow.locator("button:has-text('Save role')").click();
             assertBodyContains(page, "Member role saved.");
             page.reload();
             firstMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(firstMemberUsername));
             secondMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(secondMemberUsername));
-            assertThat(firstMemberRow.locator("select")).hasValue("VIEWER");
+            assertThat(firstMemberRow.locator("select")).hasValue("EDITOR");
 
             secondMemberRow.locator("button:has-text('Remove access')").click();
             page.locator("button:has-text('Yes')").click();
@@ -421,6 +429,15 @@ final class SharedCalendarEndToEndIT {
             secondMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(secondMemberUsername));
             assertThat(secondMemberRow).containsText("Active");
 
+            firstMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(firstMemberUsername));
+            firstMemberRow.locator("button:has-text('Remove access')").click();
+            page.locator("button:has-text('Yes')").click();
+            assertBodyContains(page, "Member access removed.");
+            assertBodyContains(page, "Public-link access is unchanged.");
+            page.reload();
+            firstMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(firstMemberUsername));
+            assertThat(firstMemberRow).containsText("Inactive");
+
             List<String> missingIdentifierBrowserMessages = new ArrayList<>();
             Page missingIdentifierPage = newPage(browserContext, missingIdentifierBrowserMessages);
             assertEquals(404, missingIdentifierPage.navigate(route("/app/calendar-members")).status());
@@ -431,9 +448,11 @@ final class SharedCalendarEndToEndIT {
 
             signOut(page);
             signIn(page, firstMemberUsername, password);
-            openCalendar(page, calendarName);
-            assertRouteWithId(page, "/app/calendar", calendarId);
+            assertFalse(page.locator("body").innerText().contains(calendarName));
+            page.navigate(sharedCalendarLink);
+            assertCanonicalCalendarRoute(page, calendarId);
             assertBodyContains(page, eventTitle);
+            assertBodyContains(page, "Read-only");
             assertEquals(0, page.locator("button:has-text('Create event')").count());
             assertEquals(0, page.locator("button:has-text('Edit')").count());
             assertEquals(0, page.locator("button:has-text('Delete')").count());
@@ -443,11 +462,10 @@ final class SharedCalendarEndToEndIT {
     }
 
     @Test
-    void roleAuthorizationIsEnforcedAcrossIndependentSessionsAndDirectRoutes() throws SQLException {
+    void editorAndAnonymousAuthorizationIsEnforcedAcrossIndependentSessionsAndDirectRoutes() throws SQLException {
         String uniqueSuffix = uniqueSuffix();
         String ownerUsername = "role-owner-" + uniqueSuffix;
         String editorUsername = "role-editor-" + uniqueSuffix;
-        String viewerUsername = "role-viewer-" + uniqueSuffix;
         String unrelatedUsername = "role-unrelated-" + uniqueSuffix;
         String password = "role-password-" + uniqueSuffix;
         String calendarName = "Role matrix " + uniqueSuffix;
@@ -455,16 +473,17 @@ final class SharedCalendarEndToEndIT {
         seedUser(ownerUsername);
         seedUser(unrelatedUsername);
         String calendarId;
+        String calendarLink;
 
         try (BrowserContext setupContext = browser.newContext()) {
             Page setupPage = setupContext.newPage();
             signIn(setupPage, ownerUsername, TEST_PASSWORD);
             createCalendar(setupPage, calendarName);
             openCalendar(setupPage, calendarName);
-            calendarId = requiredQueryParameter(setupPage.url(), "id");
+            calendarId = Long.toString(findCalendarId(calendarName));
+            calendarLink = setupPage.url();
             enterEvent(setupPage, eventTitle, null, "2026-10-01 10:00", "2026-10-01 11:00", false);
             String editorInvitationLink = createEditorInvitation(setupPage, calendarName);
-            String secondEditorInvitationLink = createEditorInvitation(setupPage, calendarName);
             signOut(setupPage);
 
             registerNewUser(
@@ -475,21 +494,6 @@ final class SharedCalendarEndToEndIT {
                     "Editor calendar " + uniqueSuffix,
                     password);
             signOut(setupPage);
-            registerNewUser(
-                    setupPage,
-                    secondEditorInvitationLink,
-                    viewerUsername,
-                    "Role viewer " + uniqueSuffix,
-                    "Viewer calendar " + uniqueSuffix,
-                    password);
-            signOut(setupPage);
-
-            signIn(setupPage, ownerUsername, TEST_PASSWORD);
-            setupPage.navigate(route("/app/calendar-members?id=" + calendarId));
-            Locator viewerRow = setupPage.locator("tr", new Page.LocatorOptions().setHasText(viewerUsername));
-            viewerRow.locator("select").selectOption("VIEWER");
-            viewerRow.locator("button:has-text('Save role')").click();
-            assertBodyContains(setupPage, "Member role saved.");
         }
 
         try (BrowserContext unauthenticatedContext = browser.newContext()) {
@@ -497,13 +501,16 @@ final class SharedCalendarEndToEndIT {
             for (String protectedRoute : List.of(
                     "/app/calendars",
                     "/app/invitations",
-                    "/app/calendar?id=" + calendarId,
                     "/app/calendar-settings?id=" + calendarId,
                     "/app/calendar-members?id=" + calendarId)) {
                 unauthenticatedPage.navigate(route(protectedRoute));
                 assertEquals("/login", URI.create(unauthenticatedPage.url()).getPath());
                 assertBodyContains(unauthenticatedPage, "Sign in");
             }
+            assertEquals(200, unauthenticatedPage.navigate(calendarLink).status());
+            assertBodyContains(unauthenticatedPage, eventTitle);
+            assertBodyContains(unauthenticatedPage, "Read-only");
+            assertEquals(0, unauthenticatedPage.locator("button:has-text('Create event')").count());
         }
 
         try (BrowserContext editorContext = browser.newContext()) {
@@ -523,6 +530,12 @@ final class SharedCalendarEndToEndIT {
                     false);
             assertBodyContains(editorPage, "Editor event " + uniqueSuffix);
             assertTrue(createEditorInvitation(editorPage, calendarName).contains("/register?token="));
+            openCalendar(editorPage, calendarName);
+            String editorOriginalLink = editorPage.url();
+            editorPage.locator("button:has-text('Regenerate link')").click();
+            editorPage.locator("button:has-text('Yes')").click();
+            editorPage.waitForFunction("previousUrl => location.href !== previousUrl", editorOriginalLink);
+            calendarLink = editorPage.url();
             editorPage.navigate(route("/app/calendar-settings?id=" + calendarId));
             assertBodyContains(editorPage, "Calendar not found");
             editorPage.navigate(route("/app/calendar-members?id=" + calendarId));
@@ -530,38 +543,29 @@ final class SharedCalendarEndToEndIT {
             assertOnlyExpectedNotFoundNavigationMessages(browserMessages);
         }
 
-        try (BrowserContext viewerContext = browser.newContext()) {
-            List<String> browserMessages = new ArrayList<>();
-            Page viewerPage = newPage(viewerContext, browserMessages);
-            signIn(viewerPage, viewerUsername, password);
-            openCalendar(viewerPage, calendarName);
-            assertBodyContains(viewerPage, eventTitle);
-            assertBodyContains(viewerPage, "VIEWER");
-            assertEquals(0, viewerPage.locator("button:has-text('Create event')").count());
-            assertEquals(0, viewerPage.locator("button:has-text('Edit')").count());
-            assertEquals(0, viewerPage.locator("button:has-text('Delete')").count());
-            viewerPage.navigate(route("/app/calendar-settings?id=" + calendarId));
-            assertBodyContains(viewerPage, "Calendar not found");
-            viewerPage.navigate(route("/app/calendar-members?id=" + calendarId));
-            assertBodyContains(viewerPage, "Calendar not found");
-            viewerPage.navigate(route("/app/invitations"));
-            assertEquals(
-                    0,
-                    viewerPage.locator("select[id$='calendar'] option", new Page.LocatorOptions().setHasText(calendarName)).count());
-            assertOnlyExpectedNotFoundNavigationMessages(browserMessages);
-        }
-
         try (BrowserContext unrelatedContext = browser.newContext()) {
             List<String> browserMessages = new ArrayList<>();
             Page unrelatedPage = newPage(unrelatedContext, browserMessages);
             signIn(unrelatedPage, unrelatedUsername, TEST_PASSWORD);
+            assertFalse(unrelatedPage.locator("body").innerText().contains(calendarName));
+            unrelatedPage.navigate(calendarLink);
+            assertBodyContains(unrelatedPage, eventTitle);
+            assertBodyContains(unrelatedPage, "Read-only");
+            assertEquals(0, unrelatedPage.locator("button:has-text('Create event')").count());
+            assertEquals(0, unrelatedPage.locator("button:has-text('Edit')").count());
+            assertEquals(0, unrelatedPage.locator("button:has-text('Delete')").count());
             for (String inaccessibleRoute : List.of(
-                    "/app/calendar?id=" + calendarId,
                     "/app/calendar-settings?id=" + calendarId,
                     "/app/calendar-members?id=" + calendarId)) {
                 unrelatedPage.navigate(route(inaccessibleRoute));
                 assertBodyContains(unrelatedPage, "Calendar not found");
             }
+            unrelatedPage.navigate(route("/app/invitations"));
+            assertEquals(
+                    0,
+                    unrelatedPage.locator(
+                            "select[id$='calendar'] option",
+                            new Page.LocatorOptions().setHasText(calendarName)).count());
             assertOnlyExpectedNotFoundNavigationMessages(browserMessages);
         }
     }
@@ -658,7 +662,7 @@ final class SharedCalendarEndToEndIT {
             signIn(page, ownerUsername, TEST_PASSWORD);
             createCalendar(page, calendarName);
             openCalendar(page, calendarName);
-            calendarId = requiredQueryParameter(page.url(), "id");
+            calendarId = Long.toString(findCalendarId(calendarName));
             String initialInvitationLink = createEditorInvitation(page, calendarName);
             signOut(page);
             registerNewUser(
@@ -682,7 +686,7 @@ final class SharedCalendarEndToEndIT {
             signIn(page, memberUsername, password);
             page.navigate(strongerRoleInvitationLink);
             page.locator("button:has-text('Accept invitation')").click();
-            page.waitForURL("**/app/calendar?id=*");
+            page.waitForURL("**/calendar/*");
             assertBodyContains(page, "ADMIN");
             signOut(page);
 
@@ -698,7 +702,7 @@ final class SharedCalendarEndToEndIT {
             signIn(page, memberUsername, password);
             page.navigate(reactivationInvitationLink);
             page.locator("button:has-text('Accept invitation')").click();
-            page.waitForURL("**/app/calendar?id=*");
+            page.waitForURL("**/calendar/*");
             assertBodyContains(page, calendarName);
             assertBodyContains(page, "EDITOR");
         }
@@ -720,7 +724,7 @@ final class SharedCalendarEndToEndIT {
             signIn(ownerPage, ownerUsername, TEST_PASSWORD);
             createCalendar(ownerPage, calendarName);
             openCalendar(ownerPage, calendarName);
-            calendarId = requiredQueryParameter(ownerPage.url(), "id");
+            calendarId = Long.toString(findCalendarId(calendarName));
             membershipInvitationLink = createEditorInvitation(ownerPage, calendarName);
         }
 
@@ -730,7 +734,7 @@ final class SharedCalendarEndToEndIT {
             signIn(editorPage, editorUsername, TEST_PASSWORD);
             editorPage.navigate(membershipInvitationLink);
             editorPage.locator("button:has-text('Accept invitation')").click();
-            editorPage.waitForURL("**/app/calendar?id=*");
+            editorPage.waitForURL("**/calendar/*");
             String savedSelfInvitationLink = createEditorInvitation(editorPage, calendarName);
             String administratorRevocationLink = createEditorInvitation(editorPage, calendarName);
 
@@ -751,8 +755,10 @@ final class SharedCalendarEndToEndIT {
             editorPage.navigate(savedSelfInvitationLink);
             editorPage.locator("button:has-text('Accept invitation')").click();
             assertBodyContains(editorPage, "Invitation is invalid or no longer available.");
-            editorPage.navigate(route("/app/calendar?id=" + calendarId));
-            assertBodyContains(editorPage, "Calendar not found");
+            editorPage.navigate(calendarLink(calendarId));
+            assertBodyContains(editorPage, calendarName);
+            assertBodyContains(editorPage, "Read-only");
+            assertEquals(0, editorPage.locator("button:has-text('Create event')").count());
         }
     }
 
@@ -793,8 +799,8 @@ final class SharedCalendarEndToEndIT {
             waitForInvitationAcceptanceResult(firstPage);
             waitForInvitationAcceptanceResult(secondPage);
 
-            assertEquals("/app/calendar", URI.create(firstPage.url()).getPath());
-            assertEquals("/app/calendar", URI.create(secondPage.url()).getPath());
+            assertTrue(isCanonicalCalendarPath(firstPage.url()));
+            assertTrue(isCanonicalCalendarPath(secondPage.url()));
             assertBodyContains(firstPage, calendarName);
             assertBodyContains(secondPage, calendarName);
             assertBodyContains(firstPage, "EDITOR");
@@ -803,7 +809,7 @@ final class SharedCalendarEndToEndIT {
     }
 
     @Test
-    void concurrentInvitationAcceptanceAllowsExactlyOneUserAndRevokedAccessInvalidatesOpenSessions()
+    void concurrentInvitationAcceptanceAllowsExactlyOneUserAndRemovedEditorsLoseMutationAccess()
             throws SQLException {
         String uniqueSuffix = uniqueSuffix();
         String ownerUsername = "acceptance-owner-" + uniqueSuffix;
@@ -821,7 +827,7 @@ final class SharedCalendarEndToEndIT {
             signIn(setupPage, ownerUsername, TEST_PASSWORD);
             createCalendar(setupPage, calendarName);
             openCalendar(setupPage, calendarName);
-            calendarId = requiredQueryParameter(setupPage.url(), "id");
+            calendarId = Long.toString(findCalendarId(calendarName));
             invitationLink = createEditorInvitation(setupPage, calendarName);
         }
 
@@ -846,8 +852,8 @@ final class SharedCalendarEndToEndIT {
             waitForInvitationAcceptanceResult(firstPage);
             waitForInvitationAcceptanceResult(secondPage);
 
-            boolean firstCandidateAccepted = URI.create(firstPage.url()).getPath().equals("/app/calendar");
-            boolean secondCandidateAccepted = URI.create(secondPage.url()).getPath().equals("/app/calendar");
+            boolean firstCandidateAccepted = isCanonicalCalendarPath(firstPage.url());
+            boolean secondCandidateAccepted = isCanonicalCalendarPath(secondPage.url());
             assertNotEquals(
                     firstCandidateAccepted,
                     secondCandidateAccepted,
@@ -880,7 +886,9 @@ final class SharedCalendarEndToEndIT {
             assertBodyContains(ownerPage, "Member access removed.");
 
             acceptedPage.reload();
-            assertBodyContains(acceptedPage, "Calendar not found");
+            assertBodyContains(acceptedPage, calendarName);
+            assertBodyContains(acceptedPage, "Read-only");
+            assertEquals(0, acceptedPage.locator("button:has-text('Create event')").count());
         }
     }
 
@@ -899,7 +907,7 @@ final class SharedCalendarEndToEndIT {
             signIn(setupPage, ownerUsername, TEST_PASSWORD);
             createCalendar(setupPage, calendarName);
             openCalendar(setupPage, calendarName);
-            calendarId = requiredQueryParameter(setupPage.url(), "id");
+            calendarId = Long.toString(findCalendarId(calendarName));
             String invitationLink = createEditorInvitation(setupPage, calendarName);
             signOut(setupPage);
             registerNewUser(
@@ -930,8 +938,8 @@ final class SharedCalendarEndToEndIT {
                     "tr", new Page.LocatorOptions().setHasText(secondAdminUsername));
             Locator secondAdminTargetingOwner = secondAdminPage.locator(
                     "tr", new Page.LocatorOptions().setHasText(ownerUsername));
-            ownerTargetingSecondAdmin.locator("select").selectOption("VIEWER");
-            secondAdminTargetingOwner.locator("select").selectOption("VIEWER");
+            ownerTargetingSecondAdmin.locator("select").selectOption("EDITOR");
+            secondAdminTargetingOwner.locator("select").selectOption("EDITOR");
 
             long scheduledRoleChangeTime = System.currentTimeMillis() + 750;
             scheduleClickAt(
@@ -956,9 +964,10 @@ final class SharedCalendarEndToEndIT {
             assertBodyContains(survivingAdminPage, calendarName);
             demotedAdminPage.navigate(route("/app/calendar-members?id=" + calendarId));
             assertBodyContains(demotedAdminPage, "Calendar not found");
-            demotedAdminPage.navigate(route("/app/calendar?id=" + calendarId));
+            demotedAdminPage.navigate(calendarLink(calendarId));
             assertBodyContains(demotedAdminPage, calendarName);
-            assertEquals(0, demotedAdminPage.locator("button:has-text('Create event')").count());
+            assertBodyContains(demotedAdminPage, "EDITOR");
+            assertThat(demotedAdminPage.locator("button:has-text('Create event')")).isVisible();
         }
     }
 
@@ -976,34 +985,39 @@ final class SharedCalendarEndToEndIT {
             signIn(ownerPage, ownerUsername, TEST_PASSWORD);
             createCalendar(ownerPage, calendarName);
             openCalendar(ownerPage, calendarName);
-            String calendarId = requiredQueryParameter(ownerPage.url(), "id");
+            String sharedCalendarLink = ownerPage.url();
+            String calendarId = Long.toString(findCalendarId(calendarName));
             enterEvent(ownerPage, eventTitle, null, "2026-11-01 10:00", "2026-11-01 11:00", false);
             ownerPage.locator("a:has-text('Settings')").click();
-            String publicCalendarLink = ownerPage.getByLabel("Public calendar link").inputValue();
 
-            assertEquals(200, publicPage.navigate(publicCalendarLink).status());
+            assertEquals(200, publicPage.navigate(sharedCalendarLink).status());
             assertBodyContains(publicPage, eventTitle);
 
             setPublicAccess(ownerPage, false);
             assertBodyContains(ownerPage, "Public access disabled");
             ownerPage.reload();
             assertFalse(ownerPage.getByLabel("Enable public read-only access").isChecked());
-            assertEquals(publicCalendarLink, ownerPage.getByLabel("Public calendar link").inputValue());
-            assertEquals(404, publicPage.navigate(publicCalendarLink).status());
-            assertBodyContains(publicPage, "Calendar not found");
+            assertEquals(404, publicPage.navigate(sharedCalendarLink).status());
+            assertBodyContains(publicPage, "Calendar link unavailable");
+            assertBodyContains(publicPage, "public access may be disabled");
+
+            assertEquals(200, ownerPage.navigate(sharedCalendarLink).status());
+            assertBodyContains(ownerPage, eventTitle);
+            assertBodyContains(ownerPage, "Public access disabled");
+            assertThat(ownerPage.locator("button:has-text('Create event')")).isVisible();
+            ownerPage.locator("a:has-text('Settings')").click();
 
             setPublicAccess(ownerPage, true);
             assertBodyContains(ownerPage, "Public access enabled");
             ownerPage.reload();
             assertTrue(ownerPage.getByLabel("Enable public read-only access").isChecked());
-            assertEquals(publicCalendarLink, ownerPage.getByLabel("Public calendar link").inputValue());
-            assertEquals(200, publicPage.navigate(publicCalendarLink).status());
+            assertEquals(200, publicPage.navigate(sharedCalendarLink).status());
             assertBodyContains(publicPage, eventTitle);
 
             setCalendarActive(Long.parseLong(calendarId), false);
-            assertEquals(404, publicPage.navigate(publicCalendarLink).status());
-            ownerPage.navigate(route("/app/calendar?id=" + calendarId));
-            assertBodyContains(ownerPage, "Calendar not found");
+            assertEquals(404, publicPage.navigate(sharedCalendarLink).status());
+            assertEquals(404, ownerPage.navigate(sharedCalendarLink).status());
+            assertBodyContains(ownerPage, "Calendar link unavailable");
         }
     }
 
@@ -1120,7 +1134,7 @@ final class SharedCalendarEndToEndIT {
 
             createCalendar(page, calendarName);
             openCalendar(page, calendarName);
-            String calendarId = requiredQueryParameter(page.url(), "id");
+            String calendarId = Long.toString(findCalendarId(calendarName));
             assertEquals("200", page.locator("input[id$='eventTitle']").getAttribute("maxlength"));
             assertEquals("200", page.locator("input[id$='eventLocation']").getAttribute("maxlength"));
 
@@ -1189,7 +1203,7 @@ final class SharedCalendarEndToEndIT {
             assertThat(page.locator("article", new Page.LocatorOptions().setHasText(eventTitle)))
                     .containsText("Boundary location");
 
-            for (String routePath : List.of("/app/calendar", "/app/calendar-settings", "/app/calendar-members")) {
+            for (String routePath : List.of("/app/calendar-settings", "/app/calendar-members")) {
                 page.navigate(route(routePath));
                 assertBodyContains(page, "Calendar not found");
                 page.navigate(route(routePath + "?id=999999999"));
@@ -1197,7 +1211,7 @@ final class SharedCalendarEndToEndIT {
                 page.navigate(route(routePath + "?id=not-a-number"));
                 assertFalse(page.locator("body").innerText().contains("Exception thrown"));
             }
-            page.navigate(route("/app/calendar?id=" + calendarId));
+            page.navigate(calendarLink(calendarId));
             assertBodyContains(page, eventTitle);
         }
     }
@@ -1217,7 +1231,7 @@ final class SharedCalendarEndToEndIT {
             signIn(setupPage, ownerUsername, TEST_PASSWORD);
             createCalendar(setupPage, calendarName);
             openCalendar(setupPage, calendarName);
-            calendarId = requiredQueryParameter(setupPage.url(), "id");
+            calendarId = Long.toString(findCalendarId(calendarName));
             enterEvent(setupPage, eventTitle, null, "2026-12-10 10:00", "2026-12-10 11:00", false);
             assertBodyContains(setupPage, eventTitle);
             enterEvent(setupPage, deletionEventTitle, null, "2026-12-11 10:00", "2026-12-11 11:00", false);
@@ -1233,9 +1247,9 @@ final class SharedCalendarEndToEndIT {
             signIn(firstPage, ownerUsername, TEST_PASSWORD);
             signIn(secondPage, ownerUsername, TEST_PASSWORD);
             signIn(staleDeletePage, ownerUsername, TEST_PASSWORD);
-            firstPage.navigate(route("/app/calendar?id=" + calendarId));
-            secondPage.navigate(route("/app/calendar?id=" + calendarId));
-            staleDeletePage.navigate(route("/app/calendar?id=" + calendarId));
+            firstPage.navigate(calendarLink(calendarId));
+            secondPage.navigate(calendarLink(calendarId));
+            staleDeletePage.navigate(calendarLink(calendarId));
             firstPage.locator("article", new Page.LocatorOptions().setHasText(eventTitle))
                     .locator("button:has-text('Edit')")
                     .click();
@@ -1307,7 +1321,8 @@ final class SharedCalendarEndToEndIT {
             signIn(setupPage, ownerUsername, TEST_PASSWORD);
             createCalendar(setupPage, longCalendarName);
             openCalendar(setupPage, longCalendarName);
-            calendarId = requiredQueryParameter(setupPage.url(), "id");
+            publicCalendarLink = setupPage.url();
+            calendarId = Long.toString(findCalendarId(longCalendarName));
             enterEventWithDescription(
                     setupPage,
                     longEventTitle,
@@ -1317,7 +1332,7 @@ final class SharedCalendarEndToEndIT {
                     "2026-12-20 11:00");
             createRegistrationInvitation(setupPage);
             createEditorInvitation(setupPage, longCalendarName);
-            setupPage.navigate(route("/app/calendar?id=" + calendarId));
+            setupPage.navigate(calendarLink(calendarId));
             Locator longEventRow = setupPage.locator("article", new Page.LocatorOptions().setHasText(longEventTitle));
             longEventRow.locator("button:has-text('Delete')").click();
             assertVisibleFocus(setupPage.locator("button:has-text('No')"));
@@ -1328,7 +1343,6 @@ final class SharedCalendarEndToEndIT {
             Locator publicAccessCheckbox = setupPage.getByLabel("Enable public read-only access");
             publicAccessCheckbox.focus();
             assertVisibleOutline(setupPage.locator(".ui-chkbox-box"));
-            publicCalendarLink = setupPage.getByLabel("Public calendar link").inputValue();
         }
 
         try (BrowserContext semanticContext = browser.newContext()) {
@@ -1388,7 +1402,7 @@ final class SharedCalendarEndToEndIT {
                 assertHeaderPosition(page, viewportWidth);
                 assertResponsiveTableRegion(page, "Calendars table", viewportWidth);
 
-                page.navigate(route("/app/calendar?id=" + calendarId));
+                page.navigate(calendarLink(calendarId));
                 assertBodyContains(page, longEventTitle);
                 assertBodyContains(page, longEventLocation);
                 assertBodyContains(page, longEventDescription);
@@ -1420,16 +1434,17 @@ final class SharedCalendarEndToEndIT {
     }
 
     @Test
-    void invalidPublicCalendarLinkReturnsGenericNoindexNotFoundPage() {
+    void invalidCalendarLinkReturnsClearNoindexNotFoundPage() {
         List<String> browserMessages = new ArrayList<>();
         try (BrowserContext browserContext = browser.newContext()) {
             Page page = newPage(browserContext, browserMessages);
             com.microsoft.playwright.Response response = page.navigate(route("/calendar/not-a-valid-calendar-token"));
             assertEquals(404, response.status());
-            assertEquals("Calendar not found - Shared calendar", page.title());
-            assertEquals("Calendar not found", page.locator("h1").textContent().trim());
+            assertEquals("Calendar link unavailable - Shared calendar", page.title());
+            assertEquals("Calendar link unavailable", page.locator("h1").textContent().trim());
             assertEquals("noindex, nofollow", page.locator("meta[name='robots']").getAttribute("content"));
-            assertBodyContains(page, "invalid or no longer available");
+            assertBodyContains(page, "This calendar link no longer works.");
+            assertBodyContains(page, "Ask a calendar editor for the current link.");
             assertFalse(hasHorizontalOverflow(page));
             assertOnlyExpectedNotFoundNavigationMessage(browserMessages);
         }
@@ -1513,7 +1528,7 @@ final class SharedCalendarEndToEndIT {
             page.navigate(route("/app/calendars"));
         }
         page.locator("a", new Page.LocatorOptions().setHasText(calendarName)).first().click();
-        page.waitForURL("**/app/calendar?id=*");
+        page.waitForURL("**/calendar/*");
     }
 
     private void enterEvent(
@@ -1600,7 +1615,7 @@ final class SharedCalendarEndToEndIT {
 
     private void waitForInvitationAcceptanceResult(Page page) {
         page.waitForFunction(
-                "() => location.pathname === '/app/calendar' "
+                "() => location.pathname.startsWith('/calendar/') "
                         + "|| document.body.innerText.includes('Invitation is invalid or no longer available.')");
     }
 
@@ -1755,6 +1770,49 @@ final class SharedCalendarEndToEndIT {
         executeDatabaseUpdate("update app_user set active = ? where username = ?", active, username);
     }
 
+    private long findCalendarId(String calendarName) throws SQLException {
+        String jdbcUrl = "jdbc:postgresql://"
+                + firstNonBlank(System.getenv(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE), "localhost")
+                + ":"
+                + firstNonBlank(System.getenv(POSTGRESQL_PORT_ENVIRONMENT_VARIABLE), "5432")
+                + "/"
+                + firstNonBlank(System.getenv(POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE), "calendar");
+        try (Connection connection = DriverManager.getConnection(
+                        jdbcUrl,
+                        firstNonBlank(System.getenv(POSTGRESQL_USER_ENVIRONMENT_VARIABLE), "calendar"),
+                        firstNonBlank(System.getenv(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE), "calendar"));
+                PreparedStatement statement = connection.prepareStatement(
+                        "select id from calendar where name = ? order by id desc limit 1")) {
+            statement.setString(1, calendarName);
+            try (java.sql.ResultSet resultSet = statement.executeQuery()) {
+                assertTrue(resultSet.next(), () -> "Expected calendar '" + calendarName + "' to exist.");
+                return resultSet.getLong(1);
+            }
+        }
+    }
+
+    private String calendarLink(String calendarId) throws SQLException {
+        long numericCalendarId = Long.parseLong(calendarId);
+        String jdbcUrl = "jdbc:postgresql://"
+                + firstNonBlank(System.getenv(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE), "localhost")
+                + ":"
+                + firstNonBlank(System.getenv(POSTGRESQL_PORT_ENVIRONMENT_VARIABLE), "5432")
+                + "/"
+                + firstNonBlank(System.getenv(POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE), "calendar");
+        try (Connection connection = DriverManager.getConnection(
+                        jdbcUrl,
+                        firstNonBlank(System.getenv(POSTGRESQL_USER_ENVIRONMENT_VARIABLE), "calendar"),
+                        firstNonBlank(System.getenv(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE), "calendar"));
+                PreparedStatement statement = connection.prepareStatement(
+                        "select public_token from calendar where id = ?")) {
+            statement.setLong(1, numericCalendarId);
+            try (java.sql.ResultSet resultSet = statement.executeQuery()) {
+                assertTrue(resultSet.next(), () -> "Expected calendar " + calendarId + " to exist.");
+                return route("/calendar/" + resultSet.getString(1));
+            }
+        }
+    }
+
     private long countActiveAdmins(long calendarId) throws SQLException {
         String jdbcUrl = "jdbc:postgresql://"
                 + firstNonBlank(System.getenv(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE), "localhost")
@@ -1818,27 +1876,19 @@ final class SharedCalendarEndToEndIT {
         return removeTrailingSlashes(applicationBaseUri.toString()) + path;
     }
 
-    private void assertRouteWithId(Page page, String expectedPath, String expectedId) {
+    private void assertCanonicalCalendarRoute(Page page, String calendarId) throws SQLException {
         URI currentUri = URI.create(page.url());
-        assertEquals(expectedPath, currentUri.getPath(), () -> "Unexpected path in browser URL " + page.url() + ".");
-        assertEquals(
-                expectedId,
-                requiredQueryParameter(page.url(), "id"),
-                () -> "Unexpected calendar identifier in browser URL " + page.url() + ".");
+        URI expectedUri = URI.create(calendarLink(calendarId));
+        assertEquals(expectedUri.getPath(), currentUri.getPath(), () -> "Unexpected calendar URL " + page.url() + ".");
+        assertNull(currentUri.getRawQuery(), () -> "The canonical calendar URL must not contain a query string: " + page.url());
+        assertTrue(isCanonicalCalendarPath(page.url()), () -> "Expected a token-based calendar URL, but saw " + page.url() + ".");
     }
 
-    private String requiredQueryParameter(String url, String parameterName) {
-        String rawQuery = URI.create(url).getRawQuery();
-        if (rawQuery != null) {
-            for (String parameter : rawQuery.split("&")) {
-                String[] nameAndValue = parameter.split("=", 2);
-                if (nameAndValue[0].equals(parameterName) && nameAndValue.length == 2) {
-                    return nameAndValue[1];
-                }
-            }
-        }
-        fail("Expected URL " + url + " to contain query parameter '" + parameterName + "'.");
-        return "";
+    private boolean isCanonicalCalendarPath(String url) {
+        String path = URI.create(url).getPath();
+        return path.startsWith("/calendar/")
+                && path.length() > "/calendar/".length()
+                && path.indexOf('/', "/calendar/".length()) < 0;
     }
 
     private void assertBodyContains(Page page, String expectedText) {

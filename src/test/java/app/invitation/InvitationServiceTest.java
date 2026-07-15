@@ -87,7 +87,7 @@ final class InvitationServiceTest {
 
         assertThrows(
                 AuthorizationException.class,
-                () -> service.createCalendarEditorInvitation(activeUser(1L, "viewer"), 200L, null));
+                () -> service.createCalendarEditorInvitation(activeUser(1L, "unrelated-user"), 200L, null));
     }
 
     @Test

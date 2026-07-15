@@ -20,7 +20,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
-@WebFilter(urlPatterns = "/app/*")
+@WebFilter(urlPatterns = {"/app/*", "/calendar/*", "/public-calendar.xhtml"})
 public class SessionCookieRefreshFilter implements Filter {
     static final int SESSION_COOKIE_LIFETIME_SECONDS = Math.toIntExact(Duration.ofDays(30).toSeconds());
 

@@ -11,8 +11,8 @@
 - Build a real shared-calendar web app for events such as kayaking, birthdays, trips, and friend-group plans.
 - Support multiple calendars in v1. Registered users can create their own calendars.
 - The creator of a calendar is that calendar's `ADMIN`.
-- Calendar editors and admins can create invitations that grant `EDITOR` membership. There is no `VIEWER` invitation flow; share read-only access through the calendar's public bearer link.
-- Calendars are public by default through long, random, unguessable links. Public links are read-only and should be marked `noindex`.
+- Calendar editors and admins can create invitations that grant `EDITOR` membership. There is no read-only membership role; share read-only access through the calendar's bearer link.
+- Every calendar has one long, random, unguessable canonical URL used by members and anonymous readers. Public access is enabled by default, can be disabled without changing the URL, and can be regenerated to invalidate the previous URL. Anonymous access is read-only and should be marked `noindex`.
 - Treat all-day form dates as inclusive. Store them as a start-inclusive, end-exclusive range normalized to calendar-local day boundaries so daylight-saving transitions and time-zone changes preserve the intended civil dates.
 - Keep the app as one server-rendered Jakarta EE application: browser, Open Liberty, Jakarta Faces / JSF, PrimeFaces, CDI / EJB Lite services, JPA, PostgreSQL, and Flyway.
 - Use Java 25 as the runtime target, Maven as the build tool, WAR packaging, Docker for production packaging, and Railway as the first deployment target.
@@ -32,17 +32,17 @@
 - Never store or log plaintext passwords.
 - Do not log public calendar tokens or invite tokens. Treat them as bearer secrets.
 - UI controls may hide unavailable actions, but service methods must still enforce roles.
-- Preserve the calendar role model: `VIEWER`, `EDITOR`, and `ADMIN`.
-- Treat `VIEWER`, `EDITOR`, and `ADMIN` as calendar-scoped roles, not global application roles.
+- Preserve the calendar role model: `EDITOR` and `ADMIN`.
+- Treat `EDITOR` and `ADMIN` as calendar-scoped roles, not global application roles.
 - Protect the last active `ADMIN` membership on every active calendar from being disabled or demoted.
 - Keep production cookies secure and HTTP-only, and do not rely on client-side checks for authorization.
-- Public calendar access must be read-only, unguessable, and marked `noindex`.
+- Calendar bearer-link access must be read-only for nonmembers, unguessable, and marked `noindex`. Disabling public access must leave member access at the same canonical URL intact, while regenerating the URL must invalidate the previous bearer token for everyone.
 - Calendar invite links expire after seven days, must be revocable, may grant only `EDITOR`, and must become unusable when their creator loses permission to invite for that calendar. Calendar admins must be able to list and revoke unused editor invitations for calendars they administer.
 - Registration invite links must become unusable when their creator's account becomes inactive.
 - Serialize invitation acceptance so one invitation can be consumed by exactly one account, including under concurrent requests.
 - Treat bootstrap registration as a permanent database fact. Claim it atomically with account creation, roll the claim back when registration fails, and never re-enable it because accounts were deactivated.
 - Keep login throttling source-aware and username-aware without revealing whether an account exists.
-- Keep authenticated session cookies and inactivity timeouts rolling for 30 days. Sessions remain in memory, so application restart or redeploy requires reauthentication.
+- Keep authenticated session cookies and inactivity timeouts rolling for 30 days across both authenticated application pages and canonical calendar routes. Sessions remain in memory, so application restart or redeploy requires reauthentication.
 - Keep `/health` database-aware: return `200 ok` only when PostgreSQL is usable and `503 unavailable` otherwise.
 
 ## Implementation rules

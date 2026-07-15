@@ -21,10 +21,8 @@
                 </div>
                 <div class="action-row compact-actions">
                     <h:outputLink value="#{request.contextPath}/app/invitations" styleClass="button-link primary-link">Create editor invitation</h:outputLink>
-                    <h:outputLink value="#{request.contextPath}/app/calendar" styleClass="button-link secondary-link">
-                        Back to calendar
-                        <f:param name="id" value="#{calendarMembersView.calendarId}"/>
-                    </h:outputLink>
+                    <h:outputLink value="#{request.contextPath}/calendar/#{calendarMembersView.publicToken}"
+                                  styleClass="button-link secondary-link">Back to calendar</h:outputLink>
                 </div>
             </div>
 

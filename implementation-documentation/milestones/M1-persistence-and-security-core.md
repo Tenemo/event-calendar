@@ -4,7 +4,7 @@ Use this milestone to implement schema migrations, JPA persistence, invitation-o
 
 Do not build the full PrimeFaces calendar workflow in M1. M1 should establish the data model and service rules that M2 can safely expose.
 
-Status: implemented. The final schema is Flyway version 7 and includes editor-only invitation scope, normalized all-day boundaries, seven-day invitation expiry, permanent bootstrap state, and Java-time-zone normalization for existing all-day events.
+Status: implemented. The final schema is Flyway version 8 and includes editor-only invitation scope, normalized all-day boundaries, seven-day invitation expiry, permanent bootstrap state, Java-time-zone normalization for existing all-day events, and removal of the legacy read-only membership role.
 
 ## Milestone checklist
 
@@ -136,7 +136,7 @@ create table calendar_member (
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
     primary key (calendar_id, user_id),
-    check (role_name in ('VIEWER', 'EDITOR', 'ADMIN'))
+    check (role_name in ('EDITOR', 'ADMIN'))
 );
 
 create index idx_calendar_member_user_id
@@ -217,7 +217,7 @@ create index idx_audit_log_entity
     on audit_log(entity_type, entity_id);
 ```
 
-This SQL block records the original consolidated schema sketch, not the final migration ledger. The committed Flyway migrations 1 through 7 are authoritative; later migrations make invitation expiry mandatory, add permanent bootstrap state, and normalize all-day event boundaries.
+This SQL block records the consolidated schema, not the migration ledger. The committed Flyway migrations 1 through 8 are authoritative; the later migrations make invitation expiry mandatory, add permanent bootstrap state, normalize all-day event boundaries, remove legacy read-only memberships, and constrain membership roles to `EDITOR` and `ADMIN`.
 
 Do not add recurring-event tables in v1.
 
@@ -245,7 +245,7 @@ Use custom JSF login backed by Jakarta Security. Do not post to `j_security_chec
 
 Security configuration should declare the authenticated application role `USER`, while calendar roles are enforced by application services from `calendar_member`.
 
-The database identity store can return a constant `USER` group for active registered users. Calendar `VIEWER`, `EDITOR`, and `ADMIN` roles must not be treated as global app roles.
+The database identity store can return a constant `USER` group for active registered users. Calendar `EDITOR` and `ADMIN` roles must not be treated as global app roles.
 
 Registration responsibilities:
 
@@ -334,7 +334,7 @@ Responsibilities:
 3. Find calendar by public token.
 4. Find calendars for signed-in user.
 5. Update calendar settings.
-6. Rotate public token.
+6. Regenerate the canonical calendar token.
 7. Write audit logs.
 
 Rules:
@@ -348,9 +348,9 @@ Rules:
 
 Responsibilities:
 
-1. Check whether a user can view, edit, or administer a calendar.
-2. Distinguish public-token read access from authenticated member access.
-3. Reject mutations for public visitors and viewers.
+1. Check whether a user can edit or administer a calendar.
+2. Resolve the canonical token for anonymous read access and authenticated member access.
+3. Reject mutations for anonymous readers and signed-in nonmembers.
 4. Enforce last-admin protection.
 
 ### InvitationService
@@ -383,10 +383,9 @@ Responsibilities:
 
 Rules:
 
-1. Public token users may read only.
-2. `VIEWER` members may read only.
-3. `EDITOR` members may create, edit, and delete events.
-4. `ADMIN` members may create, edit, and delete events.
+1. Token users without an active membership may read only while public access is enabled.
+2. `EDITOR` members may create, edit, and delete events.
+3. `ADMIN` members may create, edit, and delete events.
 
 ### CalendarMembershipService
 
@@ -409,20 +408,20 @@ Add JUnit 5 tests for:
 5. Calendar creation grants creator `ADMIN`.
 6. Token generation returns unique non-sequential values.
 7. Public read access cannot mutate.
-8. Viewer cannot mutate.
-9. Editor can mutate events but cannot manage members.
-10. Admin can manage members.
+8. Anonymous readers and signed-in nonmembers cannot mutate.
+9. Editor can mutate events and regenerate the canonical URL but cannot manage members.
+10. Admin can manage members and public access.
 11. Last-admin protection rejects demotion and removal.
 12. Editor invitation acceptance assigns the intended calendar role.
 13. Revoked, expired, and reused app invitations are rejected.
 14. Event blank title and end-before-start are rejected.
-15. Calendar invitations cannot grant `VIEWER`.
+15. Calendar invitations grant only `EDITOR`.
 16. Calendar administrators can see and revoke another creator's unused editor invitations.
 17. Removing an invitation creator's edit access invalidates their saved editor invitations.
 18. Concurrent invitation claims serialize and create at most one acceptance.
 19. Failed bootstrap registration rolls back its claim, while concurrent successful claims create exactly one first account in real PostgreSQL.
 20. Source-aware login throttling does not disclose account existence or let one source block correct authentication from another source.
-21. Session cookies roll for 30 days of authenticated activity, inactivity expires sessions, restart requires reauthentication, and health fails when PostgreSQL is unavailable.
+21. Session cookies roll for 30 days of authenticated app and calendar activity, inactivity expires sessions, restart requires reauthentication, and health fails when PostgreSQL is unavailable.
 
 ## GitHub PR checks after M1
 

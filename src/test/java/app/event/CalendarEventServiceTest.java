@@ -167,7 +167,7 @@ final class CalendarEventServiceTest {
     }
 
     @Test
-    void memberRangeQueriesUseStrictOverlapBoundariesForExclusiveStoredEnds() {
+    void editorRangeQueriesUseStrictOverlapBoundariesForExclusiveStoredEnds() {
         EntityManagerStub entityManagerStub = entityManagerStub().resultList(
                 "calendarEvent.endTime > :rangeStartTime "
                         + "and calendarEvent.startTime < :rangeEndTime",
@@ -177,7 +177,7 @@ final class CalendarEventServiceTest {
         setField(eventService, "calendarAccessService", new AllowingAccessService());
         OffsetDateTime exclusiveEventEnd = OffsetDateTime.parse("2026-07-25T00:00:00+02:00");
 
-        List<CalendarEvent> events = eventService.findMemberEvents(
+        List<CalendarEvent> events = eventService.findEditorEvents(
                 activeUser(100L),
                 200L,
                 exclusiveEventEnd,
@@ -347,10 +347,6 @@ final class CalendarEventServiceTest {
     }
 
     private static final class AllowingAccessService extends CalendarAccessService {
-        @Override
-        public void requireCanView(ApplicationUser user, Long calendarId) {
-        }
-
         @Override
         public void requireCanEdit(ApplicationUser user, Long calendarId) {
         }

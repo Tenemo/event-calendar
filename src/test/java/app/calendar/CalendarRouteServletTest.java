@@ -1,13 +1,17 @@
 package app.calendar;
 
+import static app.testsupport.ServiceTestSupport.setEntityId;
 import static app.testsupport.ServiceTestSupport.setField;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.membership.CalendarAccessService;
+import app.security.CurrentUser;
+import app.user.ApplicationUser;
 import app.util.NotFoundException;
 import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.ServletRequest;
@@ -17,19 +21,47 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.lang.reflect.Proxy;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
-final class PublicCalendarRouteServletTest {
+final class CalendarRouteServletTest {
     @Test
     void extractsExactlyOneNonblankPathSegmentAsTheBearerToken() {
         assertAll(
-                () -> assertEquals("token-123", PublicCalendarRouteServlet.tokenFromPath("/token-123")),
-                () -> assertNull(PublicCalendarRouteServlet.tokenFromPath(null)),
-                () -> assertNull(PublicCalendarRouteServlet.tokenFromPath("")),
-                () -> assertNull(PublicCalendarRouteServlet.tokenFromPath("/")),
-                () -> assertNull(PublicCalendarRouteServlet.tokenFromPath("/first/second")),
-                () -> assertNull(PublicCalendarRouteServlet.tokenFromPath("/   ")));
+                () -> assertEquals("token-123", CalendarRouteServlet.tokenFromPath("/token-123")),
+                () -> assertNull(CalendarRouteServlet.tokenFromPath(null)),
+                () -> assertNull(CalendarRouteServlet.tokenFromPath("")),
+                () -> assertNull(CalendarRouteServlet.tokenFromPath("/")),
+                () -> assertNull(CalendarRouteServlet.tokenFromPath("/first/second")),
+                () -> assertNull(CalendarRouteServlet.tokenFromPath("/   ")));
+    }
+
+    @Test
+    void passesTheCurrentUserToCanonicalCalendarAccess() throws Exception {
+        ApplicationUser user = activeUser();
+        Calendar calendar = new Calendar();
+        AtomicReference<ApplicationUser> receivedUser = new AtomicReference<>();
+        AtomicReference<String> receivedToken = new AtomicReference<>();
+        CalendarRouteServlet servlet = servlet(new CalendarAccessService() {
+            @Override
+            public Calendar requireCalendarReadableByToken(ApplicationUser candidate, String calendarToken) {
+                receivedUser.set(candidate);
+                receivedToken.set(calendarToken);
+                return calendar;
+            }
+        }, user);
+        Map<String, Object> requestAttributes = new HashMap<>();
+
+        servlet.doGet(
+                request("/token-123", forwardingDispatcher(new AtomicInteger()), requestAttributes),
+                response(new AtomicInteger()));
+
+        assertAll(
+                () -> assertSame(user, receivedUser.get()),
+                () -> assertEquals("token-123", receivedToken.get()),
+                () -> assertSame(calendar, requestAttributes.get(CalendarRouteServlet.CALENDAR_REQUEST_ATTRIBUTE)));
     }
 
     @Test
@@ -46,22 +78,23 @@ final class PublicCalendarRouteServletTest {
             public void include(ServletRequest request, ServletResponse response) {
             }
         };
-        PublicCalendarRouteServlet servlet = servletWithAccessService(new CalendarAccessService() {
+        CalendarRouteServlet servlet = servlet(new CalendarAccessService() {
             @Override
-            public Calendar requirePublicReadableCalendar(String publicToken) {
+            public Calendar requireCalendarReadableByToken(ApplicationUser user, String calendarToken) {
                 return new Calendar();
             }
-        });
+        }, null);
 
         assertThrows(
                 NotFoundException.class,
                 () -> servlet.doGet(
-                        request("/token-123", requestDispatcher, new HashMap<>()), response(new AtomicInteger())));
+                        request("/token-123", requestDispatcher, new HashMap<>()),
+                        response(new AtomicInteger())));
         assertEquals(1, forwardCount.get(), "A forwarded-view exception must not trigger a second forward.");
     }
 
     @Test
-    void forwardsARejectedPublicTokenExactlyOnceWithAFixedNotFoundStatus() throws Exception {
+    void forwardsARejectedCalendarTokenExactlyOnceWithAFixedNotFoundStatus() throws Exception {
         AtomicInteger forwardCount = new AtomicInteger();
         AtomicInteger responseStatus = new AtomicInteger(HttpServletResponse.SC_OK);
         Map<String, Object> requestAttributes = new HashMap<>();
@@ -78,12 +111,12 @@ final class PublicCalendarRouteServletTest {
             public void include(ServletRequest request, ServletResponse response) {
             }
         };
-        PublicCalendarRouteServlet servlet = servletWithAccessService(new CalendarAccessService() {
+        CalendarRouteServlet servlet = servlet(new CalendarAccessService() {
             @Override
-            public Calendar requirePublicReadableCalendar(String publicToken) {
+            public Calendar requireCalendarReadableByToken(ApplicationUser user, String calendarToken) {
                 throw new NotFoundException("Calendar was not found.");
             }
-        });
+        }, null);
 
         servlet.doGet(request("/missing-token", requestDispatcher, requestAttributes), response(responseStatus));
 
@@ -91,23 +124,37 @@ final class PublicCalendarRouteServletTest {
                 () -> assertEquals(1, forwardCount.get()),
                 () -> assertEquals(
                         "missing-token",
-                        requestAttributes.get(PublicCalendarRouteServlet.PUBLIC_TOKEN_REQUEST_ATTRIBUTE)),
+                        requestAttributes.get(CalendarRouteServlet.CALENDAR_TOKEN_REQUEST_ATTRIBUTE)),
                 () -> assertTrue(Boolean.TRUE.equals(
-                        requestAttributes.get(PublicCalendarRouteServlet.NOT_FOUND_REQUEST_ATTRIBUTE))),
-                () -> assertNull(requestAttributes.get(PublicCalendarRouteServlet.CALENDAR_REQUEST_ATTRIBUTE)),
+                        requestAttributes.get(CalendarRouteServlet.NOT_FOUND_REQUEST_ATTRIBUTE))),
+                () -> assertNull(requestAttributes.get(CalendarRouteServlet.CALENDAR_REQUEST_ATTRIBUTE)),
                 () -> assertEquals(HttpServletResponse.SC_NOT_FOUND, responseStatus.get()));
     }
 
-    private static PublicCalendarRouteServlet servletWithAccessService(CalendarAccessService calendarAccessService) {
-        PublicCalendarRouteServlet servlet = new PublicCalendarRouteServlet();
+    private static CalendarRouteServlet servlet(CalendarAccessService calendarAccessService, ApplicationUser user) {
+        CalendarRouteServlet servlet = new CalendarRouteServlet();
         setField(servlet, "calendarAccessService", calendarAccessService);
+        setField(servlet, "currentUser", new FixedCurrentUser(user));
         return servlet;
+    }
+
+    private static RequestDispatcher forwardingDispatcher(AtomicInteger forwardCount) {
+        return new RequestDispatcher() {
+            @Override
+            public void forward(ServletRequest request, ServletResponse response) {
+                forwardCount.incrementAndGet();
+            }
+
+            @Override
+            public void include(ServletRequest request, ServletResponse response) {
+            }
+        };
     }
 
     private static HttpServletRequest request(
             String pathInfo, RequestDispatcher requestDispatcher, Map<String, Object> requestAttributes) {
         return (HttpServletRequest) Proxy.newProxyInstance(
-                PublicCalendarRouteServletTest.class.getClassLoader(),
+                CalendarRouteServletTest.class.getClassLoader(),
                 new Class<?>[] {HttpServletRequest.class},
                 (proxy, method, arguments) -> switch (method.getName()) {
                     case "getPathInfo" -> pathInfo;
@@ -123,7 +170,7 @@ final class PublicCalendarRouteServletTest {
 
     private static HttpServletResponse response(AtomicInteger responseStatus) {
         return (HttpServletResponse) Proxy.newProxyInstance(
-                PublicCalendarRouteServletTest.class.getClassLoader(),
+                CalendarRouteServletTest.class.getClassLoader(),
                 new Class<?>[] {HttpServletResponse.class},
                 (proxy, method, arguments) -> switch (method.getName()) {
                     case "getStatus" -> responseStatus.get();
@@ -137,6 +184,15 @@ final class PublicCalendarRouteServletTest {
                     }
                     default -> defaultValue(method.getReturnType());
                 });
+    }
+
+    private static ApplicationUser activeUser() {
+        ApplicationUser user = new ApplicationUser();
+        setEntityId(user, 20L);
+        user.setUsername("editor");
+        user.setDisplayName("Editor");
+        user.setActive(true);
+        return user;
     }
 
     private static Object defaultValue(Class<?> returnType) {
@@ -168,5 +224,18 @@ final class PublicCalendarRouteServletTest {
             return (char) 0;
         }
         return null;
+    }
+
+    private static final class FixedCurrentUser extends CurrentUser {
+        private final ApplicationUser user;
+
+        private FixedCurrentUser(ApplicationUser user) {
+            this.user = user;
+        }
+
+        @Override
+        public Optional<ApplicationUser> find() {
+            return Optional.ofNullable(user);
+        }
     }
 }

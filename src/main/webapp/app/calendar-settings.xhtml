@@ -19,10 +19,8 @@
                     <p class="eyebrow">Calendar administration</p>
                     <h1>Settings</h1>
                 </div>
-                <h:outputLink value="#{request.contextPath}/app/calendar" styleClass="button-link secondary-link">
-                    Back to calendar
-                    <f:param name="id" value="#{calendarSettingsView.calendarId}"/>
-                </h:outputLink>
+                <h:outputLink value="#{calendarSettingsView.calendarLink}"
+                              styleClass="button-link secondary-link">Back to calendar</h:outputLink>
             </div>
 
             <div class="settings-grid">
@@ -61,40 +59,17 @@
                     </h:form>
                 </p:panel>
 
-                <p:panel header="Public link" styleClass="surface-panel">
+                <p:panel header="Public access" styleClass="surface-panel">
                     <div class="stacked-form">
                         <p class="status-line">
                             <span class="status-dot #{calendarSettingsView.publicAccessEnabled ? 'enabled' : 'disabled'}"></span>
                             #{calendarSettingsView.publicAccessEnabled ? 'Public access enabled' : 'Public access disabled'}
                         </p>
-                        <p:outputLabel for="publicLink" value="Public calendar link"/>
-                        <p:inputText id="publicLink"
-                                     value="#{calendarSettingsView.publicLink}"
-                                     readonly="true"
-                                     styleClass="table-copy-field"/>
-                        <p>Rotating the link immediately invalidates the previous address.</p>
-                        <h:form>
-                            <p:commandButton value="Rotate public link"
-                                             action="#{calendarSettingsView.rotatePublicLink}"
-                                             ajax="true"
-                                             process="@this"
-                                             update=":messages :settingsContent"
-                                             styleClass="ui-button-danger ui-button-outlined">
-                                <p:confirm header="Rotate public link"
-                                           message="Anyone using the current link will lose access. Continue?"/>
-                            </p:commandButton>
-                        </h:form>
+                        <p>When enabled, anyone with the calendar URL can read its events without signing in.</p>
+                        <p>The URL shown in the browser on the calendar page is the link to share. Editors can regenerate it there to invalidate the previous URL.</p>
                     </div>
                 </p:panel>
             </div>
-            <p:confirmDialog global="true" showEffect="fade" hideEffect="fade" closeOnEscape="true">
-                <p:commandButton value="No"
-                                 type="button"
-                                 styleClass="ui-confirmdialog-no ui-button-secondary ui-button-outlined"/>
-                <p:commandButton value="Yes"
-                                 type="button"
-                                 styleClass="ui-confirmdialog-yes ui-button-danger"/>
-            </p:confirmDialog>
         </h:panelGroup>
 
         <h:panelGroup layout="block" styleClass="narrow-section not-found-state" rendered="#{not calendarSettingsView.available}">

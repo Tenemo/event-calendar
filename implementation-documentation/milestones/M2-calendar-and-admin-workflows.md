@@ -6,14 +6,14 @@ Use this milestone to build the real user-facing workflows on top of the M1 serv
 
 ## Delivered implementation
 
-1. Public calendars use `/calendar/{publicToken}`, return generic 404 pages for invalid or disabled tokens, and include `noindex, nofollow`.
-2. Authenticated calendar pages render persisted events in the calendar timezone and expose create, edit, and delete actions only to editors and admins.
+1. Every calendar uses `/calendar/{calendarToken}` as its one canonical member and sharing URL, returns a clear link-unavailable `404` page for invalid, previous, or disabled nonmember access, and includes `noindex, nofollow`.
+2. The canonical page renders persisted events in the calendar timezone and exposes create, edit, delete, and link-regeneration actions only to active editors and admins.
 3. Calendar-local timed input is converted to offset-aware storage, with invalid and ambiguous daylight-saving times rejected. Inclusive all-day form dates use calendar-local start boundaries and an exclusive stored end on the following day, including across daylight-saving transitions and Java-only time zones.
 4. Event and calendar writes compare entity versions and translate optimistic-lock failures into user-readable reload messages.
-5. Calendar settings cover name, description, IANA timezone, public access, and audited public-token rotation.
+5. Calendar settings cover name, description, IANA timezone, and public access; the canonical calendar page gives every editor and admin an audited link-regeneration action.
 6. Member administration covers role changes, reactivation, access removal, audit logging, and service-level last-admin protection.
 7. App-only and calendar-editor invitations expire after seven days and can be accepted by either new or existing users. Creators can revoke unused links; calendar admins can list and revoke unused editor links; creator permission is revalidated during serialized acceptance.
-8. Public access can be disabled and re-enabled without losing its bearer token, while rotation immediately invalidates the previous URL; every public state remains read-only.
+8. Public access can be disabled and re-enabled without changing the canonical URL, while regeneration immediately invalidates the previous URL for everyone; every nonmember access path remains read-only.
 9. The Playwright suite exercises the stable routes and complete invitation, calendar, event, public-link, role, session, concurrency, and accessibility workflows against PostgreSQL and Liberty.
 
 ## Milestone checklist
@@ -25,15 +25,15 @@ Tasks:
 1. Implement invitation-only registration and login pages against the M1 services.
 2. Implement `CalendarListView` for signed-in users.
 3. Implement calendar creation flow.
-4. Implement public calendar view by public token.
-5. Implement authenticated calendar detail view.
+4. Implement the canonical calendar view by bearer token.
+5. Make that same view role-aware for active editors and admins without creating a second member URL.
 6. Render events in the PrimeFaces schedule or a PrimeFaces-backed calendar layout.
 7. Add create, edit, and delete event flows with confirmation where needed.
 8. Add server-side validation and user-readable optimistic-locking conflict messages.
 9. Add audit logging for event create, update, and delete.
 10. Implement calendar member page with member table, role changes, access removal, and last-admin protection.
 11. Implement invite acceptance for signed-in users and newly registered users.
-12. Implement calendar settings page with name, description, timezone, public-link enable/disable, and public-link rotation.
+12. Implement calendar settings with name, description, timezone, and public-access enable/disable, plus canonical-link regeneration on the calendar page for every editor and admin.
 13. Style the UI as a modern flat app, not a marketing page.
 14. Add or prepare a deterministic CI app-smoke check for the real HTTP routes.
 
@@ -46,30 +46,29 @@ mise run dev
 curl -i http://localhost:9080/health
 ```
 
-Manual role checks:
+Manual access checks:
 
-1. Public visitor with valid link can see the calendar read-only.
-2. Public visitor cannot create, edit, delete, or manage members.
-3. Invalid public token shows a generic not-found page.
-4. Registered user can create a calendar.
-5. Calendar creator becomes calendar admin.
-6. Public visitors can see public calendars without sign-in.
-7. Public visitors cannot create, edit, delete, or manage members.
-8. `EDITOR` member can create, edit, and delete events.
-9. `EDITOR` member can create editor invitation links for calendars they can edit.
-10. `EDITOR` member cannot manage members.
-11. `ADMIN` member can change member roles.
-12. Last calendar admin cannot be disabled or demoted.
+1. An anonymous visitor with the current link can see the calendar read-only while public access is enabled.
+2. A signed-in nonmember has exactly the same read-only access and controls as an anonymous visitor.
+3. Invalid, regenerated, and disabled links show the clear link-unavailable `404` page to nonmembers.
+4. A registered user can create a calendar and becomes its admin.
+5. An editor and an anonymous reader use exactly the same canonical URL.
+6. `EDITOR` members can create, edit, and delete events and regenerate the canonical URL.
+7. Regeneration redirects the editor to a new URL and invalidates the previous URL immediately for everyone.
+8. `EDITOR` members can create editor invitation links for calendars they can edit but cannot manage members or settings.
+9. `ADMIN` members can change member roles and enable or disable public access.
+10. Active editors and admins retain their member access at the same URL while public access is disabled.
+11. A removed editor loses mutation access and the calendar disappears from their list, but a retained current URL still grants ordinary read-only access while public access is enabled.
+12. The last calendar admin cannot be disabled or demoted.
 13. Service methods reject unauthorized mutations even if UI controls are manually triggered.
-14. Calendar admin can see and revoke another creator's unused editor invitation.
+14. A calendar admin can see and revoke another creator's unused editor invitation.
 15. Removing an editor's access invalidates editor invitations they previously created.
-16. Disabling or rotating public access makes the affected public URL return a generic not-found response without affecting authenticated access.
 
 Acceptance criteria:
 
 1. Users, calendars, memberships, invitations, and events persist after restart.
-2. Public calendar links work without login.
-3. Public calendar pages include `noindex`.
+2. The canonical calendar URL works without login while public access is enabled and is the same URL members use.
+3. Canonical calendar pages include `noindex`.
 4. Event time displays correctly in the configured calendar timezone.
 5. Invalid end-before-start is rejected.
 6. Blank title is rejected.
@@ -123,17 +122,19 @@ Create `login.xhtml` with:
 
 Never reveal whether username or password was wrong.
 
-### Public calendar page
+### Canonical calendar page
 
 Use `public-calendar.xhtml` behind the servlet-backed `/calendar/{publicToken}` route.
 
 Responsibilities:
 
-1. Load calendar by public token.
-2. Return a generic not-found state for invalid, disabled, or inactive public links.
+1. Load the calendar by its bearer token and keep that token URL visible in the browser.
+2. Return the clear link-unavailable `404` state for invalid, previous, inactive, or disabled nonmember access.
 3. Render calendar name, description, timezone, and events.
-4. Hide all mutation and member controls.
-5. Include a `noindex` meta tag.
+4. Give active editors and admins their member controls at that same URL, including link regeneration.
+5. Hide all mutation and member controls from anonymous readers and signed-in nonmembers.
+6. Let active members continue at the same URL while public access is disabled.
+7. Include a `noindex` meta tag in every access state.
 
 ### Calendar list page
 
@@ -143,22 +144,11 @@ Responsibilities:
 
 1. List calendars where the signed-in user has active membership.
 2. Show each calendar role.
-3. Link to authenticated calendar detail.
+3. Link directly to each token-addressed canonical calendar URL.
 4. Provide create-calendar flow.
-5. Show public-link copy affordance for admins.
+5. Make the visible calendar URL itself the sharing affordance rather than maintaining a second public-link field.
 
-### Calendar detail page
-
-Create `app/calendar.xhtml` and `calendar/CalendarView.java`.
-
-Responsibilities:
-
-1. Show month/week/day calendar or a clear event list if PrimeFaces schedule integration needs incremental delivery.
-2. Let public visitors read event details through public links.
-3. Let editors/admins create/edit/delete events.
-4. Hide edit controls for public visitors.
-5. Still rely on service-layer security for enforcement.
-6. Show inclusive first and last date inputs for all-day events while services store exclusive calendar-local end boundaries.
+The canonical calendar page uses `calendar/CalendarView.java` to show the event list, let editors and admins create, edit, and delete events, hide edit controls from nonmembers, and show inclusive first and last date inputs for all-day events while services store exclusive calendar-local end boundaries. Service-layer security remains authoritative.
 
 The exact PrimeFaces schedule model API can change across versions. Check the PrimeFaces 15 showcase/API and adapt the Java code accordingly.
 
@@ -199,7 +189,7 @@ Signed-in users can:
 3. Revoke their own unused invitation links.
 4. See seven-day expiry and current invitation status.
 
-Calendar admins also see unused editor invitations for calendars they administer and can revoke them. Every invitation stops working when its creator's account becomes inactive. Calendar editor invitations never grant `VIEWER`, also stop working when their creator loses edit permission, and serialize acceptance so only one account can consume a link.
+Calendar admins also see unused editor invitations for calendars they administer and can revoke them. Every invitation stops working when its creator's account becomes inactive. Calendar invitations grant only `EDITOR`, also stop working when their creator loses edit permission, and serialize acceptance so only one account can consume a link.
 
 Do not build email delivery. Invitation links are copied manually.
 
@@ -213,9 +203,8 @@ Calendar admins can:
 2. Edit description.
 3. Set timezone.
 4. Enable or disable public link access.
-5. Rotate the public link.
 
-Disabling public access preserves the token for safe re-enablement while returning a generic not-found response publicly. Rotating the public link invalidates the previous public URL immediately. Both changes must be audited and cannot expose mutation controls.
+Disabling public access preserves the canonical URL for safe re-enablement while returning the clear link-unavailable `404` response to nonmembers. Any active editor or admin can regenerate the link from the calendar page, which redirects them to the new canonical URL and invalidates the previous URL immediately for everyone. Both changes must be audited and cannot expose mutation controls to nonmembers.
 
 ## GitHub PR checks after M2
 
@@ -226,7 +215,7 @@ The app-smoke lane should:
 1. Start PostgreSQL with the same test environment values used by the database lane.
 2. Start Open Liberty from the Maven wrapper or the same committed project task used locally.
 3. Wait for `/health` with a bounded readiness loop.
-4. Check stable HTTP behavior for public calendar, registration, login, authenticated workspace, and invalid public-token routes.
+4. Check stable HTTP behavior for the canonical calendar route in member and nonmember states, registration, login, the authenticated workspace, and invalid tokens.
 5. Keep assertions route-level at first; do not require full browser end-to-end tests until the UI flows are deterministic.
 
 Do not add retries to mask route or startup flakiness. If the app-smoke lane flakes, fix startup readiness, test isolation, database state, or session handling before making it required.

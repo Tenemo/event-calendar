@@ -1,6 +1,7 @@
 package app.calendar;
 
 import app.membership.CalendarAccessService;
+import app.security.CurrentUser;
 import app.util.NotFoundException;
 import jakarta.inject.Inject;
 import jakarta.servlet.RequestDispatcher;
@@ -13,22 +14,26 @@ import jakarta.servlet.http.HttpServletResponseWrapper;
 import java.io.IOException;
 
 @WebServlet("/calendar/*")
-public class PublicCalendarRouteServlet extends HttpServlet {
-    public static final String PUBLIC_TOKEN_REQUEST_ATTRIBUTE = "publicCalendarToken";
-    public static final String NOT_FOUND_REQUEST_ATTRIBUTE = "publicCalendarNotFound";
-    public static final String CALENDAR_REQUEST_ATTRIBUTE = "publicCalendar";
+public class CalendarRouteServlet extends HttpServlet {
+    public static final String CALENDAR_TOKEN_REQUEST_ATTRIBUTE = "calendarToken";
+    public static final String NOT_FOUND_REQUEST_ATTRIBUTE = "calendarNotFound";
+    public static final String CALENDAR_REQUEST_ATTRIBUTE = "calendar";
 
     @Inject
     private CalendarAccessService calendarAccessService;
 
+    @Inject
+    private CurrentUser currentUser;
+
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
-        String publicToken = tokenFromPath(request.getPathInfo());
-        request.setAttribute(PUBLIC_TOKEN_REQUEST_ATTRIBUTE, publicToken);
+        String calendarToken = tokenFromPath(request.getPathInfo());
+        request.setAttribute(CALENDAR_TOKEN_REQUEST_ATTRIBUTE, calendarToken);
         RequestDispatcher requestDispatcher = request.getRequestDispatcher("/public-calendar.xhtml");
         Calendar calendar;
         try {
-            calendar = calendarAccessService.requirePublicReadableCalendar(publicToken);
+            calendar = calendarAccessService.requireCalendarReadableByToken(
+                    currentUser.find().orElse(null), calendarToken);
         } catch (NotFoundException exception) {
             request.setAttribute(NOT_FOUND_REQUEST_ATTRIBUTE, true);
             requestDispatcher.forward(request, new FixedStatusResponse(response, HttpServletResponse.SC_NOT_FOUND));

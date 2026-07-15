@@ -113,7 +113,8 @@ public class CalendarService {
                 .createQuery(
                         "select new app.calendar.CalendarMembershipSummary("
                                 + "calendarMember.calendar.id, calendarMember.calendar.name, "
-                                + "calendarMember.role, calendarMember.calendar.publicAccessEnabled) "
+                                + "calendarMember.calendar.publicToken, calendarMember.role, "
+                                + "calendarMember.calendar.publicAccessEnabled) "
                                 + "from CalendarMember calendarMember "
                                 + "where calendarMember.user.id = :userId "
                                 + "and calendarMember.active = true "
@@ -124,13 +125,19 @@ public class CalendarService {
                 .getResultList();
     }
 
-    public Calendar rotatePublicToken(ApplicationUser actingUser, Long calendarId, Integer expectedVersion) {
-        calendarAccessService.requireCanAdminister(actingUser, calendarId);
+    public Calendar regeneratePublicToken(ApplicationUser actingUser, Long calendarId, Integer expectedVersion) {
+        calendarAccessService.requireCanEdit(actingUser, calendarId);
         Calendar calendar = requireActiveCalendar(calendarId);
         requireExpectedVersion(calendar, expectedVersion);
         calendar.setPublicToken(generateUniquePublicToken());
         calendar.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
-        auditService.record(actingUser, calendar, "calendar", calendar.getId(), "public_token_rotated", "Public token rotated.");
+        auditService.record(
+                actingUser,
+                calendar,
+                "calendar",
+                calendar.getId(),
+                "public_token_regenerated",
+                "Calendar link token regenerated.");
         flushWithConflictMessage();
         return calendar;
     }
