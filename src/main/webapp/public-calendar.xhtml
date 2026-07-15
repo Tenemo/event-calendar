@@ -128,9 +128,9 @@
                         <p:inputText id="eventLocation" value="#{calendarView.eventLocation}" pt:maxlength="200"/>
 
                         <div class="checkbox-field">
-                            <p:selectBooleanCheckbox id="allDay" value="#{calendarView.eventAllDay}">
+                            <p:selectBooleanCheckbox id="allDay" value="#{calendarView.eventAllDaySelection}">
                                 <p:ajax listener="#{calendarView.changeEventAllDayMode}"
-                                        process="@this"
+                                        process="eventScheduleFields @this"
                                         update=":messages eventScheduleFields"/>
                             </p:selectBooleanCheckbox>
                             <p:outputLabel for="allDay" value="All-day event"/>

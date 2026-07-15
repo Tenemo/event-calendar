@@ -601,6 +601,13 @@ button,
     margin-bottom: 0;
 }
 
+.field-help {
+    margin-top: -0.35rem;
+    color: var(--muted-text);
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
 .table-scroll-region {
     width: 100%;
     min-width: 0;

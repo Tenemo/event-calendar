@@ -265,12 +265,14 @@ Registration responsibilities:
 Minimum password policy:
 
 ```text
-length >= 14
+length >= 8
+at least one uppercase letter
+at least one digit
 not blank
 not equal to username
 ```
 
-Do not implement complex composition rules.
+Do not add composition rules beyond the uppercase-letter and digit requirements.
 
 Hash passwords with Jakarta Security's built-in `Pbkdf2PasswordHash` using PBKDF2-HMAC-SHA256, 600,000 iterations, a 32-byte salt, and a 32-byte derived key. Do not use app-owned hash formatting.
 

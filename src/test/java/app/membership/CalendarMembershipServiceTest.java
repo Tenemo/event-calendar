@@ -147,6 +147,33 @@ final class CalendarMembershipServiceTest {
                 () -> assertEquals(originalUpdatedAt, actorMembership.getUpdatedAt()));
     }
 
+    @Test
+    void memberIsNotDisabledWhenAdministrationIsRevokedWhileWaitingForTheCalendarLock() {
+        Calendar calendar = activeCalendar(200L);
+        ApplicationUser actingUser = activeUser(100L);
+        CalendarMember actorMembership = membership(calendar, actingUser, CalendarRole.ADMIN, true);
+        CalendarMember targetMembership = membership(calendar, activeUser(101L), CalendarRole.EDITOR, true);
+        EntityManagerStub entityManagerStub = entityManagerStub()
+                .singleResult("from Calendar calendarEntity", calendar)
+                .resultList("from CalendarMember calendarMember", List.of(actorMembership, targetMembership));
+        CalendarMembershipService membershipService = membershipService(entityManagerStub);
+        setField(membershipService, "calendarAccessService", new AdministrationRevokedAfterInitialCheckAccessService());
+
+        AuthorizationException exception = assertThrows(
+                AuthorizationException.class,
+                () -> membershipService.disableMember(
+                        actingUser,
+                        calendar.getId(),
+                        targetMembership.getUser().getId()));
+
+        assertAll(
+                () -> assertEquals("Admin access is required.", exception.getMessage()),
+                () -> assertTrue(targetMembership.isActive()),
+                () -> assertEquals(
+                        OffsetDateTime.parse("2026-07-08T12:00:00Z"),
+                        targetMembership.getUpdatedAt()));
+    }
+
     private static CalendarMembershipService membershipService(EntityManagerStub entityManagerStub) {
         CalendarMembershipService membershipService = new CalendarMembershipService();
         setField(membershipService, "entityManager", entityManagerStub.entityManager());
@@ -199,6 +226,18 @@ final class CalendarMembershipServiceTest {
         @Override
         public void requireCanEdit(ApplicationUser user, Long calendarId) {
             throw new AuthorizationException("Editor access is required.");
+        }
+    }
+
+    private static final class AdministrationRevokedAfterInitialCheckAccessService extends CalendarAccessService {
+        private int administrationChecks;
+
+        @Override
+        public void requireCanAdminister(ApplicationUser user, Long calendarId) {
+            administrationChecks++;
+            if (administrationChecks > 1) {
+                throw new AuthorizationException("Admin access is required.");
+            }
         }
     }
 

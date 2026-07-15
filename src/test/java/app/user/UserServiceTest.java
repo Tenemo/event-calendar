@@ -18,6 +18,8 @@ import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
 
 final class UserServiceTest {
+    private static final String VALID_PASSWORD = "Correct horse battery staple 1";
+
     @Test
     void rejectsBlankUsernameAndDisplayNameBeforePersisting() {
         UserService userService = new UserService();
@@ -25,10 +27,10 @@ final class UserServiceTest {
         assertAll(
                 () -> assertThrows(
                         ValidationException.class,
-                        () -> userService.createUser("   ", "Display name", "correct horse battery staple")),
+                        () -> userService.createUser("   ", "Display name", VALID_PASSWORD)),
                 () -> assertThrows(
                         ValidationException.class,
-                        () -> userService.createUser("piotr", "   ", "correct horse battery staple")));
+                        () -> userService.createUser("piotr", "   ", VALID_PASSWORD)));
     }
 
     @Test
@@ -38,10 +40,10 @@ final class UserServiceTest {
         assertAll(
                 () -> assertThrows(
                         ValidationException.class,
-                        () -> userService.createUser("u".repeat(81), "Display name", "correct horse battery staple")),
+                        () -> userService.createUser("u".repeat(81), "Display name", VALID_PASSWORD)),
                 () -> assertThrows(
                         ValidationException.class,
-                        () -> userService.createUser("piotr", "D".repeat(161), "correct horse battery staple")));
+                        () -> userService.createUser("piotr", "D".repeat(161), VALID_PASSWORD)));
     }
 
     @Test
@@ -58,7 +60,7 @@ final class UserServiceTest {
 
         assertThrows(
                 ValidationException.class,
-                () -> userService.createUser(" Piotr ", "Piotr", "correct horse battery staple"));
+                () -> userService.createUser(" Piotr ", "Piotr", VALID_PASSWORD));
     }
 
     @Test
@@ -71,14 +73,14 @@ final class UserServiceTest {
         setField(userService, "entityManager", entityManagerStub.entityManager());
         setField(userService, "passwordService", passwordService);
 
-        ApplicationUser createdUser = userService.createUser(" Piotr ", " Piotr Tenemo ", "correct horse battery staple");
+        ApplicationUser createdUser = userService.createUser(" Piotr ", " Piotr Tenemo ", VALID_PASSWORD);
 
         assertAll(
                 () -> assertEquals("piotr", createdUser.getUsername()),
                 () -> assertEquals("Piotr Tenemo", createdUser.getDisplayName()),
                 () -> assertEquals(ZoneOffset.UTC, createdUser.getCreatedAt().getOffset()),
                 () -> assertEquals(ZoneOffset.UTC, createdUser.getUpdatedAt().getOffset()),
-                () -> assertTrue(passwordService.verifyPassword("correct horse battery staple", createdUser.getPasswordHash())),
+                () -> assertTrue(passwordService.verifyPassword(VALID_PASSWORD, createdUser.getPasswordHash())),
                 () -> assertEquals(1, entityManagerStub.persistedObjects().size()),
                 () -> assertEquals(1, entityManagerStub.flushCount()));
     }
@@ -95,7 +97,7 @@ final class UserServiceTest {
 
         ValidationException exception = assertThrows(
                 ValidationException.class,
-                () -> userService.createUser("piotr", "Piotr", "correct horse battery staple"));
+                () -> userService.createUser("piotr", "Piotr", VALID_PASSWORD));
 
         assertAll(
                 () -> assertEquals("Username is already registered.", exception.getMessage()),

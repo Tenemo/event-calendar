@@ -64,6 +64,7 @@
                                 maxlength="#{passwordService.maximumPasswordLength}"
                                 required="true"
                                 requiredMessage="Password is required."/>
+                    <small class="field-help">Use at least 8 characters, including one uppercase letter and one digit.</small>
 
                     <p:commandButton value="Register" action="#{registrationView.register}" ajax="false"/>
                 </h:form>

@@ -89,6 +89,7 @@ public class CalendarMembershipService {
 
         requireLockedCalendarForMembershipChange(calendarId);
         List<CalendarMember> lockedMembers = lockMembershipsForCalendar(calendarId);
+        // Administration can be revoked while this transaction waits for the calendar lock.
         calendarAccessService.requireCanAdminister(actingUser, calendarId);
         CalendarMember member = requireMembership(lockedMembers, targetUserId);
         requireAdminNotChangingOwnRole(actingUser, member, newRole);
@@ -108,6 +109,7 @@ public class CalendarMembershipService {
         calendarAccessService.requireCanAdminister(actingUser, calendarId);
         requireLockedCalendarForMembershipChange(calendarId);
         List<CalendarMember> lockedMembers = lockMembershipsForCalendar(calendarId);
+        // Administration can be revoked while this transaction waits for the calendar lock.
         calendarAccessService.requireCanAdminister(actingUser, calendarId);
         CalendarMember member = requireMembership(lockedMembers, targetUserId);
         requireAdminNotRemovingOwnAccess(actingUser, member);

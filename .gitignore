@@ -34,6 +34,7 @@ target/
 # Local tool and runtime output
 .mise.local.toml
 .liberty/
+.railway/
 
 # IDE state
 .idea/

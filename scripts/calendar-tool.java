@@ -172,6 +172,7 @@ final class CalendarTool {
     }
 
     private static void prepareLibertyDev() throws IOException, InterruptedException {
+        runCommand("Stale development output cleanup", "mvn", "-q", "clean");
         Files.createDirectories(LIBERTY_SHARED_POSTGRESQL_DIRECTORY);
         runCommand("Liberty resource preparation", "mvn", "-q", "generate-resources");
     }
@@ -187,7 +188,7 @@ final class CalendarTool {
     }
 
     private static void packageApplication() throws IOException, InterruptedException {
-        runCommand("Application package build", "mvn", "package");
+        runCommand("Clean application package build", "mvn", "clean", "package");
     }
 
     private static void buildDockerImage() throws IOException, InterruptedException {
@@ -667,7 +668,7 @@ final class CalendarTool {
     }
 
     private static void verifyLocal() throws IOException, InterruptedException {
-        packageApplication();
+        runCommand("Running application package build", "mvn", "package");
         startDatabase();
         verifyRunningApplication();
     }

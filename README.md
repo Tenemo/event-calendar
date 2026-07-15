@@ -153,31 +153,48 @@ curl --fail http://localhost:9080/health
 
 ## Deploying to Railway
 
-Railway deployment is a manual production operation. Use one project with a PostgreSQL service named `Postgres` and a web service named `shared-calendar-web`.
+Use one Railway project with a PostgreSQL service named `Postgres` and a web service named `shared-calendar-web`. The committed `railway.json` owns the repeatable web build and deployment settings: the root Dockerfile, source watch paths, EU West placement, the single web replica, `/health` deployment gate, bounded restart policy, and graceful draining. Railway resource creation, database references, secrets, volumes, and domains remain environment state and are managed through Railway's API, MCP integration, CLI, or dashboard.
 
-1. Connect `shared-calendar-web` to this repository and use the root `Dockerfile`.
-2. Keep one web replica. Authenticated cookies and inactivity timeouts roll for 30 days, but the underlying HTTP sessions remain in memory.
-3. Set the health-check path to `/health`.
+1. Provision a PostgreSQL 17 service named `Postgres`, attach a persistent volume at `/var/lib/postgresql/data`, and create `shared-calendar-web` in the same project and environment.
+2. Deploy this repository root. Railway detects `railway.json` and the root `Dockerfile`.
+3. Keep the `numReplicas` value in `railway.json` at one. Authenticated cookies and inactivity timeouts roll for 30 days, but the underlying HTTP sessions remain in memory.
 4. Let Railway inject `PORT`; the container binds it on all interfaces.
 5. Add the PostgreSQL references and application variables below.
-6. Generate a Railway service domain and set `APP_BASE_URL` to its HTTPS URL for initial verification.
-7. Add the custom domain, create Railway's required DNS records, wait for certificate issuance, then change `APP_BASE_URL` to the custom HTTPS URL.
+6. Generate a Railway service domain and verify `/health` before configuring DNS.
+7. Add `calendar.social` to the web service. In Namecheap Advanced DNS, create the ownership-verification `TXT` record exactly as Railway reports it and an `ALIAS` record with host `@` pointing to Railway's domain target. Remove conflicting `A`, `AAAA`, `CNAME`, `ALIAS`, or redirect records for `@` first.
+8. Wait for Railway to report the domain and certificate as active, then perform the production checks below.
+
+Connect the production web service to `Tenemo/event-calendar` with `master` as its deployment branch. Railway automatically deploys every new commit pushed or merged to `master`. Keep PR environments disabled until isolated preview deployments are intentionally introduced. The protected branch and its GitHub Actions checks gate merges; Railway's optional **Wait for CI** setting can additionally delay each post-merge deployment until the workflows triggered by that `master` push finish.
+
+PostgreSQL service variables:
+
+```text
+PGDATA=/var/lib/postgresql/data/pgdata
+POSTGRES_DB=railway
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=<generated high-entropy secret>
+DATABASE_URL=postgresql://${{Postgres.POSTGRES_USER}}:${{Postgres.POSTGRES_PASSWORD}}@${{Postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/${{Postgres.POSTGRES_DB}}
+```
+
+Keep the resolved database password only in Railway. The `DATABASE_URL` reference supports Railway's database connection tooling without copying the credential into project files.
 
 Web service variables:
 
 ```text
 COOKIE_SECURE=true
-PGHOST=${{ Postgres.PGHOST }}
-PGPORT=${{ Postgres.PGPORT }}
-PGDATABASE=${{ Postgres.PGDATABASE }}
-PGUSER=${{ Postgres.PGUSER }}
-PGPASSWORD=${{ Postgres.PGPASSWORD }}
+PGHOST=${{Postgres.RAILWAY_PRIVATE_DOMAIN}}
+PGPORT=5432
+PGDATABASE=${{Postgres.POSTGRES_DB}}
+PGUSER=${{Postgres.POSTGRES_USER}}
+PGPASSWORD=${{Postgres.POSTGRES_PASSWORD}}
 APP_TIMEZONE=Europe/Warsaw
-APP_BASE_URL=https://calendar.example.com
+APP_BASE_URL=https://calendar.social
 APP_BOOTSTRAP_INVITE_TOKEN=
 ```
 
-After deployment, verify `/health`, registration, login, public links, invitations, role changes, and event persistence. Redeploy, confirm that accounts and calendar data persist, then sign in again because HTTP sessions are intentionally in memory. Inspect logs to confirm that passwords, database credentials, public tokens, and invitation tokens are absent.
+Set `APP_BOOTSTRAP_INVITE_TOKEN` temporarily to a generated high-entropy secret for the first registration only. After the first account is created, delete or clear the variable and redeploy; the database also records permanent bootstrap consumption.
+
+After deployment, verify `/health`, registration, login, public links, invitations, role changes, and event persistence. Redeploy, confirm that accounts and calendar data persist, then sign in again because HTTP sessions are intentionally in memory. Inspect logs to confirm that passwords, database credentials, public tokens, and invitation tokens are absent. Railway's deployment health check is not continuous monitoring, so configure an external HTTPS uptime check for `https://calendar.social/health` before relying on the service.
 
 ## Registration
 
@@ -189,7 +206,7 @@ Registration requires an unused, unrevoked invitation token. On a brand-new empt
 
 After the first account is created, clear `APP_BOOTSTRAP_INVITE_TOKEN` and restart or redeploy the application. Bootstrap admission is claimed in the same database transaction as registration: a failed registration rolls the claim back, while the first successful registration consumes it atomically and permanently. Concurrent attempts cannot create more than one first account, and deactivating every account does not enable bootstrap again. The normal registration path uses single-use links created from `/app/invitations`.
 
-Passwords must be between 14 and 512 characters, nonblank, and different from the username. They are stored as PBKDF2-HMAC-SHA256 hashes with 600,000 iterations, a 32-byte salt, and a 32-byte derived key. Plaintext passwords are never stored.
+Passwords must be between 8 and 512 characters, contain at least one uppercase letter and one digit, be nonblank, and differ from the username. They are stored as PBKDF2-HMAC-SHA256 hashes with 600,000 iterations, a 32-byte salt, and a 32-byte derived key. Plaintext passwords are never stored.
 
 Five failed sign-in attempts for one normalized username from one client source within 15 minutes block that username/source pair for 15 minutes. Twenty-five failures from one source in the same window block further attempts from that source for 15 minutes, which limits username spraying without letting one remote client lock the account for other sources. Missing and existing usernames follow the same policy and return the same generic failure.
 
@@ -291,7 +308,7 @@ Use a database endpoint reachable from Docker, not a provider-private hostname. 
 
 ## Known limitations
 
-- Railway deployment, generated-domain checks, custom-domain DNS, and production redeploy persistence must be completed as a separate operational step.
+- Railway's deployment health check is not continuous monitoring; external uptime monitoring and alerting are not configured by this repository.
 - Backups are manual; there is no scheduled backup service or retention policy yet.
 - Run one application instance because HTTP sessions are in memory, even though active authenticated cookies and inactivity timeouts roll for 30 days.
 - Password change and account recovery are not implemented.

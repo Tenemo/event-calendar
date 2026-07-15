@@ -47,7 +47,7 @@ final class BootstrapRegistrationConcurrencyIT {
     private static final String DATABASE_USER = "calendar_bootstrap_verification";
     private static final String DATABASE_PASSWORD = "calendar_bootstrap_verification";
     private static final String EXPECTED_LATEST_FLYWAY_VERSION = "8";
-    private static final String VALID_PASSWORD = "bootstrap password 2026";
+    private static final String VALID_PASSWORD = "Bootstrap password 2026";
     private static final Duration APPLICATION_READY_TIMEOUT = Duration.ofSeconds(120);
     private static final Duration BLOCKED_REQUEST_TIMEOUT = Duration.ofSeconds(20);
     private static final Duration POLL_INTERVAL = Duration.ofMillis(50);
@@ -144,9 +144,9 @@ final class BootstrapRegistrationConcurrencyIT {
             page.locator("input[id$='username']").fill("bootstrap-failed");
             page.locator("input[id$='displayName']").fill("Failed bootstrap user");
             page.locator("input[id$='calendarName']").fill("Failed bootstrap calendar");
-            page.locator("input[id$='password']").fill("too short");
+            page.locator("input[id$='password']").fill("Short1");
             page.locator("button:has-text('Register')").click();
-            assertThat(page.locator("body")).containsText("Password must be at least 14 characters.");
+            assertThat(page.locator("body")).containsText("Password must be at least 8 characters.");
         }
     }
 

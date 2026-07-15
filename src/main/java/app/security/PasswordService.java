@@ -16,7 +16,7 @@ public class PasswordService {
     static final int PASSWORD_HASH_ITERATIONS = 600_000;
     private static final int PASSWORD_HASH_SALT_BYTES = 32;
     private static final int PASSWORD_HASH_KEY_BYTES = 32;
-    public static final int MINIMUM_PASSWORD_LENGTH = 14;
+    public static final int MINIMUM_PASSWORD_LENGTH = 8;
     public static final int MAXIMUM_PASSWORD_LENGTH = 512;
 
     @Inject
@@ -57,6 +57,12 @@ public class PasswordService {
         }
         if (username != null && password.equalsIgnoreCase(username.trim())) {
             throw new ValidationException("Password must not match the username.");
+        }
+        if (password.codePoints().noneMatch(Character::isUpperCase)) {
+            throw new ValidationException("Password must contain at least one uppercase letter.");
+        }
+        if (password.codePoints().noneMatch(Character::isDigit)) {
+            throw new ValidationException("Password must contain at least one digit.");
         }
     }
 

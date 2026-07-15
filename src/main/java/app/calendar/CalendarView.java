@@ -67,6 +67,7 @@ public class CalendarView implements Serializable {
     private LocalDate eventStartDate;
     private LocalDate eventEndDate;
     private boolean eventAllDay;
+    private boolean eventAllDaySelection;
 
     public void load() {
         try {
@@ -116,6 +117,7 @@ public class CalendarView implements Serializable {
 
     public void createEvent() {
         try {
+            applyEventAllDaySelection();
             ApplicationUser actingUser = currentUser.require();
             calendarEventService.createEvent(
                     actingUser,
@@ -148,7 +150,7 @@ public class CalendarView implements Serializable {
         eventEndTime = event.getEndTime();
         eventStartDate = event.getStartTime().toLocalDate();
         eventEndDate = event.getInclusiveEndDate();
-        eventAllDay = event.isAllDay();
+        setEventAllDay(event.isAllDay());
     }
 
     public void updateEvent() {
@@ -156,6 +158,7 @@ public class CalendarView implements Serializable {
             if (selectedEventId == null || selectedEventVersion == null) {
                 throw new ValidationException("Select an event to edit.");
             }
+            applyEventAllDaySelection();
             ApplicationUser actingUser = currentUser.require();
             calendarEventService.updateEvent(
                     actingUser,
@@ -202,10 +205,11 @@ public class CalendarView implements Serializable {
         eventEndTime = nextHour.plusHours(1);
         eventStartDate = nextHour.toLocalDate();
         eventEndDate = nextHour.toLocalDate();
-        eventAllDay = false;
+        setEventAllDay(false);
     }
 
     public void changeEventAllDayMode() {
+        eventAllDay = eventAllDaySelection;
         if (eventAllDay) {
             LocalDate firstDay = eventStartTime == null ? null : eventStartTime.toLocalDate();
             LocalDate lastDay = inclusiveEndDateForTimedRange(firstDay);
@@ -223,6 +227,12 @@ public class CalendarView implements Serializable {
         }
         if (eventEndDate != null) {
             eventEndTime = eventEndDate.plusDays(1).atStartOfDay();
+        }
+    }
+
+    private void applyEventAllDaySelection() {
+        if (eventAllDay != eventAllDaySelection) {
+            changeEventAllDayMode();
         }
     }
 
@@ -297,5 +307,12 @@ public class CalendarView implements Serializable {
     public LocalDate getEventEndDate() { return eventEndDate; }
     public void setEventEndDate(LocalDate eventEndDate) { this.eventEndDate = eventEndDate; }
     public boolean isEventAllDay() { return eventAllDay; }
-    public void setEventAllDay(boolean eventAllDay) { this.eventAllDay = eventAllDay; }
+    public void setEventAllDay(boolean eventAllDay) {
+        this.eventAllDay = eventAllDay;
+        this.eventAllDaySelection = eventAllDay;
+    }
+    public boolean isEventAllDaySelection() { return eventAllDaySelection; }
+    public void setEventAllDaySelection(boolean eventAllDaySelection) {
+        this.eventAllDaySelection = eventAllDaySelection;
+    }
 }

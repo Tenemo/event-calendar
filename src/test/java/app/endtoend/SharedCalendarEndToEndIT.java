@@ -131,7 +131,7 @@ final class SharedCalendarEndToEndIT {
         String ownerUsername = "invite-owner-" + uniqueSuffix;
         String registrationUsername = "registration-user-" + uniqueSuffix;
         String editorUsername = "invited-editor-" + uniqueSuffix;
-        String password = "long-enough-password-" + uniqueSuffix;
+        String password = "Registration-password-1-" + uniqueSuffix;
         String ownerCalendarName = "Owner plans " + uniqueSuffix;
         String registrationCalendarName = "Birthday " + uniqueSuffix;
         String editorCalendarName = "Trip " + uniqueSuffix;
@@ -239,9 +239,27 @@ final class SharedCalendarEndToEndIT {
             page.locator("button:has-text('Save changes')").click();
             assertBodyContains(page, eventTitle + " updated");
 
-            enterEvent(page, allDayEventTitle, null, "2026-07-22 00:00", "2026-07-24 00:00", true);
+            page.locator("input[id$='eventTitle']").fill(allDayEventTitle);
+            page.locator("input[id$='eventStart_input']").fill("2026-07-22 13:30");
+            page.locator("input[id$='eventEnd_input']").fill("2026-07-25 00:00");
+            Locator allDayCheckbox = page.getByLabel("All-day event");
+            page.locator(".checkbox-field .ui-chkbox-box").click();
+            assertThat(allDayCheckbox).isChecked();
+            Locator firstDayInput = page.locator("input[id$='eventStartDate_input']");
+            Locator lastDayInput = page.locator("input[id$='eventEndDate_input']");
+            assertThat(firstDayInput).hasValue("2026-07-22");
+            assertThat(lastDayInput).hasValue("2026-07-24");
+            firstDayInput.fill("2026-07-23");
+            lastDayInput.fill("2026-07-25");
+            page.locator(".checkbox-field .ui-chkbox-box").click();
+            assertThat(allDayCheckbox).not().isChecked();
+            assertThat(page.locator("input[id$='eventStart_input']")).hasValue("2026-07-23 00:00");
+            assertThat(page.locator("input[id$='eventEnd_input']")).hasValue("2026-07-26 00:00");
+            page.locator(".checkbox-field .ui-chkbox-box").click();
+            assertThat(allDayCheckbox).isChecked();
+            page.locator("button:has-text('Create event')").click();
             assertThat(page.locator("article", new Page.LocatorOptions().setHasText(allDayEventTitle)))
-                    .containsText("All day from Wed, Jul 22, 2026 to Fri, Jul 24, 2026");
+                    .containsText("All day from Thu, Jul 23, 2026 to Sat, Jul 25, 2026");
 
             enterEvent(page, deletedEventTitle, null, "2026-07-21 14:00", "2026-07-21 15:00", false);
             Locator deletedEventRow = page.locator("article", new Page.LocatorOptions().setHasText(deletedEventTitle));
@@ -268,7 +286,7 @@ final class SharedCalendarEndToEndIT {
             assertBodyContains(page, "Calendar settings saved.");
             page.locator("a:has-text('Back to calendar')").click();
             assertThat(page.locator("article", new Page.LocatorOptions().setHasText(allDayEventTitle)))
-                    .containsText("All day from Wed, Jul 22, 2026 to Fri, Jul 24, 2026");
+                    .containsText("All day from Thu, Jul 23, 2026 to Sat, Jul 25, 2026");
             assertThat(page.locator("article", new Page.LocatorOptions().setHasText(eventTitle + " updated")))
                     .containsText("Mon, Jul 20, 2026 at 04:00 to Mon, Jul 20, 2026 at 06:00");
             page.reload();
@@ -353,7 +371,7 @@ final class SharedCalendarEndToEndIT {
         String ownerUsername = "member-owner-" + uniqueSuffix;
         String firstMemberUsername = "member-admin-" + uniqueSuffix;
         String secondMemberUsername = "member-editor-" + uniqueSuffix;
-        String password = "long-enough-password-" + uniqueSuffix;
+        String password = "Concurrent-password-1-" + uniqueSuffix;
         String calendarName = "Members calendar " + uniqueSuffix;
         String eventTitle = "Members event " + uniqueSuffix;
         seedUser(ownerUsername);
@@ -467,7 +485,7 @@ final class SharedCalendarEndToEndIT {
         String ownerUsername = "role-owner-" + uniqueSuffix;
         String editorUsername = "role-editor-" + uniqueSuffix;
         String unrelatedUsername = "role-unrelated-" + uniqueSuffix;
-        String password = "role-password-" + uniqueSuffix;
+        String password = "Role-password-1-" + uniqueSuffix;
         String calendarName = "Role matrix " + uniqueSuffix;
         String eventTitle = "Owner event " + uniqueSuffix;
         seedUser(ownerUsername);
@@ -574,7 +592,7 @@ final class SharedCalendarEndToEndIT {
     void invitationStatusesRevocationExpirationInactiveCreatorsAndMalformedLinksAreEnforcedInTheBrowser() throws SQLException {
         String uniqueSuffix = uniqueSuffix();
         String ownerUsername = "status-owner-" + uniqueSuffix;
-        String password = "status-password-" + uniqueSuffix;
+        String password = "Status-password-1-" + uniqueSuffix;
         seedUser(ownerUsername);
         String availableInvitationLink;
         String revokedInvitationLink;
@@ -652,7 +670,7 @@ final class SharedCalendarEndToEndIT {
         String uniqueSuffix = uniqueSuffix();
         String ownerUsername = "membership-owner-" + uniqueSuffix;
         String memberUsername = "membership-invitee-" + uniqueSuffix;
-        String password = "membership-password-" + uniqueSuffix;
+        String password = "Membership-password-1-" + uniqueSuffix;
         String calendarName = "Invitation membership " + uniqueSuffix;
         seedUser(ownerUsername);
         String calendarId;
@@ -897,7 +915,7 @@ final class SharedCalendarEndToEndIT {
         String uniqueSuffix = uniqueSuffix();
         String ownerUsername = "admin-race-owner-" + uniqueSuffix;
         String secondAdminUsername = "admin-race-second-" + uniqueSuffix;
-        String password = "admin-race-password-" + uniqueSuffix;
+        String password = "Admin-race-password-1-" + uniqueSuffix;
         String calendarName = "Admin race " + uniqueSuffix;
         seedUser(ownerUsername);
         String calendarId;
@@ -1043,14 +1061,26 @@ final class SharedCalendarEndToEndIT {
         try (BrowserContext registrationContext = browser.newContext()) {
             Page registrationPage = registrationContext.newPage();
             registrationPage.navigate(invitationLinks.get(0));
+            assertBodyContains(
+                    registrationPage,
+                    "Use at least 8 characters, including one uppercase letter and one digit.");
             fillRegistrationForm(
                     registrationPage,
                     "weak-user-" + uniqueSuffix,
                     "Weak password user",
                     "Weak password calendar",
-                    "too-short");
+                    "Short1");
             registrationPage.locator("button:has-text('Register')").click();
-            assertBodyContains(registrationPage, "Password must be at least 14 characters.");
+            assertBodyContains(registrationPage, "Password must be at least 8 characters.");
+
+            Locator passwordInput = registrationPage.locator("input[id$='password']");
+            passwordInput.fill("lowercase9");
+            registrationPage.locator("button:has-text('Register')").click();
+            assertBodyContains(registrationPage, "Password must contain at least one uppercase letter.");
+
+            passwordInput.fill("NoDigitsHere");
+            registrationPage.locator("button:has-text('Register')").click();
+            assertBodyContains(registrationPage, "Password must contain at least one digit.");
 
             String matchingUsername = "matching-password-" + uniqueSuffix;
             registrationPage.navigate(invitationLinks.get(1));
@@ -1069,12 +1099,12 @@ final class SharedCalendarEndToEndIT {
                     duplicateUsername.toUpperCase(Locale.ROOT),
                     "Duplicate user",
                     "Duplicate calendar",
-                    "valid-duplicate-password-" + uniqueSuffix);
+                    "Valid-duplicate-password-1-" + uniqueSuffix);
             registrationPage.locator("button:has-text('Register')").click();
             assertBodyContains(registrationPage, "Username is already registered.");
 
             registrationPage.navigate(invitationLinks.get(3));
-            Locator passwordInput = registrationPage.locator("input[id$='password']");
+            passwordInput = registrationPage.locator("input[id$='password']");
             assertEquals("512", passwordInput.getAttribute("maxlength"));
             passwordInput.fill("p".repeat(513));
             assertEquals(512, passwordInput.inputValue().length());
@@ -1083,7 +1113,7 @@ final class SharedCalendarEndToEndIT {
                     "oversized-password-" + uniqueSuffix,
                     "Oversized password user",
                     "Oversized password calendar",
-                    "valid-placeholder-password");
+                    "Valid-placeholder-password-1");
             setRawInputValue(passwordInput, "p".repeat(513));
             registrationPage.locator("button:has-text('Register')").click();
             assertBodyContains(registrationPage, "Password must be 512 characters or fewer.");
