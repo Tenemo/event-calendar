@@ -12,6 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.audit.AuditService;
 import app.config.CalendarConfiguration;
+import app.event.CalendarEvent;
 import app.membership.CalendarAccessService;
 import app.membership.CalendarMember;
 import app.membership.CalendarRole;
@@ -21,6 +22,7 @@ import app.user.ApplicationUser;
 import app.util.AuthorizationException;
 import app.util.ConflictException;
 import app.util.ValidationException;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -80,6 +82,7 @@ final class CalendarServiceTest {
         Calendar calendar = activeCalendar(80L, actingUser);
         EntityManagerStub entityManagerStub = entityManagerStub()
                 .find(Calendar.class, calendar.getId(), calendar)
+                .resultList("calendarEvent.allDay = true", List.of())
                 .singleResult("count(calendarEntity)", 0L);
         RecordingAuditService auditService = new RecordingAuditService();
         CalendarService calendarService = new CalendarService();
@@ -108,6 +111,49 @@ final class CalendarServiceTest {
                 () -> assertEquals("rotated-token-123456789012345678901234567890", rotatedCalendar.getPublicToken()),
                 () -> assertEquals(List.of("settings_updated", "public_token_rotated"), auditService.actions),
                 () -> assertEquals(2, entityManagerStub.flushCount()));
+    }
+
+    @Test
+    void changingTimeZonePreservesAllDayCivilDatesWithoutChangingTimedInstants() {
+        ApplicationUser actingUser = activeUser(42L);
+        Calendar calendar = activeCalendar(80L, actingUser);
+        CalendarEvent allDayEvent = calendarEvent(
+                calendar,
+                true,
+                "2026-07-22T00:00:00+02:00",
+                "2026-07-25T00:00:00+02:00");
+        CalendarEvent timedEvent = calendarEvent(
+                calendar,
+                false,
+                "2026-07-20T10:00:00+02:00",
+                "2026-07-20T12:00:00+02:00");
+        OffsetDateTime originalTimedStart = timedEvent.getStartTime();
+        OffsetDateTime originalTimedEnd = timedEvent.getEndTime();
+        EntityManagerStub entityManagerStub = entityManagerStub()
+                .find(Calendar.class, calendar.getId(), calendar)
+                .resultList("calendarEvent.allDay = true", List.of(allDayEvent));
+        CalendarService calendarService = configuredSettingsService(entityManagerStub);
+
+        calendarService.updateCalendarSettings(
+                actingUser,
+                calendar.getId(),
+                calendar.getName(),
+                calendar.getDescription(),
+                "America/New_York",
+                calendar.isPublicAccessEnabled(),
+                calendar.getVersion());
+
+        assertAll(
+                () -> assertEquals("America/New_York", calendar.getTimeZone()),
+                () -> assertEquals(
+                        OffsetDateTime.parse("2026-07-22T00:00:00-04:00"),
+                        allDayEvent.getStartTime()),
+                () -> assertEquals(
+                        OffsetDateTime.parse("2026-07-25T00:00:00-04:00"),
+                        allDayEvent.getEndTime()),
+                () -> assertEquals(originalTimedStart, timedEvent.getStartTime()),
+                () -> assertEquals(originalTimedEnd, timedEvent.getEndTime()),
+                () -> assertEquals(1, entityManagerStub.flushCount()));
     }
 
     @Test
@@ -186,6 +232,29 @@ final class CalendarServiceTest {
         calendar.setActive(true);
         calendar.setCreatedByUser(creator);
         return calendar;
+    }
+
+    private static CalendarEvent calendarEvent(
+            Calendar calendar,
+            boolean allDay,
+            String startTime,
+            String endTime) {
+        CalendarEvent event = new CalendarEvent();
+        event.setCalendar(calendar);
+        event.setTitle(allDay ? "River weekend" : "River launch");
+        event.setStartTime(OffsetDateTime.parse(startTime));
+        event.setEndTime(OffsetDateTime.parse(endTime));
+        event.setAllDay(allDay);
+        return event;
+    }
+
+    private static CalendarService configuredSettingsService(EntityManagerStub entityManagerStub) {
+        CalendarService calendarService = new CalendarService();
+        setField(calendarService, "entityManager", entityManagerStub.entityManager());
+        setField(calendarService, "auditService", new NoopAuditService());
+        setField(calendarService, "calendarAccessService", new AllowingAccessService());
+        setField(calendarService, "calendarTimeService", new CalendarTimeService());
+        return calendarService;
     }
 
     private static CalendarConfiguration calendarConfiguration(String defaultTimeZone) {

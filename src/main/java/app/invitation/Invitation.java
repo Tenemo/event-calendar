@@ -48,7 +48,7 @@ public class Invitation {
     @Column(name = "accepted_at")
     private OffsetDateTime acceptedAt;
 
-    @Column(name = "expires_at")
+    @Column(name = "expires_at", nullable = false)
     private OffsetDateTime expiresAt;
 
     @Column(name = "created_at", nullable = false)

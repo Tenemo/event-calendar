@@ -3,6 +3,7 @@ package app.security;
 import static app.testsupport.ServiceTestSupport.setField;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.user.ApplicationUser;
@@ -65,10 +66,152 @@ final class DatabaseIdentityStoreTest {
                 () -> assertEquals(Set.of("USER"), identityStore.getCallerGroups(result)));
     }
 
+    @Test
+    void normalizedUsernameFailuresStopFurtherPasswordVerification() {
+        ApplicationUser user = new ApplicationUser();
+        user.setUsername("piotr");
+        user.setPasswordHash("stored-user-hash");
+        user.setActive(true);
+        RecordingPasswordService passwordService = new RecordingPasswordService(false);
+        DatabaseIdentityStore identityStore = identityStore(new FixedUserService(Optional.of(user)), passwordService);
+
+        for (int failedAttemptIndex = 0;
+                failedAttemptIndex < LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE;
+                failedAttemptIndex++) {
+            String username = failedAttemptIndex % 2 == 0 ? " Piotr " : "PIOTR";
+            CredentialValidationResult result = identityStore.validate(
+                    new UsernamePasswordCredential(username, "wrong-password"));
+            assertEquals(CredentialValidationResult.Status.INVALID, result.getStatus());
+        }
+
+        CredentialValidationResult blockedResult = identityStore.validate(
+                new UsernamePasswordCredential("piotr", "correct-password"));
+
+        assertAll(
+                () -> assertEquals(CredentialValidationResult.Status.INVALID, blockedResult.getStatus()),
+                () -> assertEquals(
+                        LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE,
+                        passwordService.verificationCount));
+    }
+
+    @Test
+    void hostileSourceCannotLockTheUsernameForALegitimateSource() {
+        ApplicationUser user = new ApplicationUser();
+        user.setUsername("piotr");
+        user.setPasswordHash("stored-user-hash");
+        user.setActive(true);
+        RecordingPasswordService passwordService = new RecordingPasswordService(false);
+        MutableLoginRequestSource loginRequestSource = new MutableLoginRequestSource("198.51.100.10");
+        DatabaseIdentityStore identityStore = identityStore(
+                new FixedUserService(Optional.of(user)),
+                passwordService,
+                new LoginAttemptThrottle(),
+                loginRequestSource);
+
+        for (int failedAttemptIndex = 0;
+                failedAttemptIndex < LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE;
+                failedAttemptIndex++) {
+            identityStore.validate(new UsernamePasswordCredential("piotr", "wrong-password"));
+        }
+
+        passwordService.verificationResult = true;
+        loginRequestSource.sourceIdentifier = "203.0.113.20";
+        CredentialValidationResult legitimateResult = identityStore.validate(
+                new UsernamePasswordCredential("piotr", "correct-password"));
+
+        loginRequestSource.sourceIdentifier = "198.51.100.10";
+        CredentialValidationResult hostileSourceResult = identityStore.validate(
+                new UsernamePasswordCredential("piotr", "correct-password"));
+
+        assertAll(
+                () -> assertEquals(CredentialValidationResult.Status.VALID, legitimateResult.getStatus()),
+                () -> assertEquals(CredentialValidationResult.Status.INVALID, hostileSourceResult.getStatus()),
+                () -> assertEquals(
+                        LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE + 1,
+                        passwordService.verificationCount));
+    }
+
+    @Test
+    void missingAndExistingUsersUseTheSameThrottlePolicy() {
+        ApplicationUser user = new ApplicationUser();
+        user.setUsername("existing");
+        user.setPasswordHash("stored-user-hash");
+        user.setActive(true);
+        RecordingPasswordService existingUserPasswordService = new RecordingPasswordService(false);
+        RecordingPasswordService missingUserPasswordService = new RecordingPasswordService(false);
+        DatabaseIdentityStore existingUserIdentityStore = identityStore(
+                new FixedUserService(Optional.of(user)), existingUserPasswordService);
+        DatabaseIdentityStore missingUserIdentityStore = identityStore(
+                new FixedUserService(Optional.empty()), missingUserPasswordService);
+
+        for (int failedAttemptIndex = 0;
+                failedAttemptIndex <= LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE;
+                failedAttemptIndex++) {
+            existingUserIdentityStore.validate(new UsernamePasswordCredential("existing", "wrong-password"));
+            missingUserIdentityStore.validate(new UsernamePasswordCredential("missing", "wrong-password"));
+        }
+
+        assertAll(
+                () -> assertEquals(
+                        LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE,
+                        existingUserPasswordService.verificationCount),
+                () -> assertEquals(
+                        LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE,
+                        missingUserPasswordService.verificationCount),
+                () -> assertFalse(existingUserPasswordService.lastStoredHash.startsWith("PBKDF2WithHmacSHA256:")),
+                () -> assertTrue(missingUserPasswordService.lastStoredHash.startsWith("PBKDF2WithHmacSHA256:")));
+    }
+
+    @Test
+    void successfulAuthenticationClearsPriorFailures() {
+        ApplicationUser user = new ApplicationUser();
+        user.setUsername("piotr");
+        user.setPasswordHash("stored-user-hash");
+        user.setActive(true);
+        RecordingPasswordService passwordService = new RecordingPasswordService(false);
+        DatabaseIdentityStore identityStore = identityStore(new FixedUserService(Optional.of(user)), passwordService);
+
+        for (int failedAttemptIndex = 0;
+                failedAttemptIndex < LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE - 1;
+                failedAttemptIndex++) {
+            identityStore.validate(new UsernamePasswordCredential("piotr", "wrong-password"));
+        }
+        passwordService.verificationResult = true;
+        CredentialValidationResult successfulResult = identityStore.validate(
+                new UsernamePasswordCredential("piotr", "correct-password"));
+        passwordService.verificationResult = false;
+        for (int failedAttemptIndex = 0;
+                failedAttemptIndex < LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE;
+                failedAttemptIndex++) {
+            identityStore.validate(new UsernamePasswordCredential("piotr", "wrong-password"));
+        }
+        identityStore.validate(new UsernamePasswordCredential("piotr", "wrong-password"));
+
+        assertAll(
+                () -> assertEquals(CredentialValidationResult.Status.VALID, successfulResult.getStatus()),
+                () -> assertEquals(
+                        LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE * 2,
+                        passwordService.verificationCount));
+    }
+
     private static DatabaseIdentityStore identityStore(UserService userService, PasswordService passwordService) {
+        return identityStore(
+                userService,
+                passwordService,
+                new LoginAttemptThrottle(),
+                new MutableLoginRequestSource("192.0.2.1"));
+    }
+
+    private static DatabaseIdentityStore identityStore(
+            UserService userService,
+            PasswordService passwordService,
+            LoginAttemptThrottle loginAttemptThrottle,
+            LoginRequestSource loginRequestSource) {
         DatabaseIdentityStore identityStore = new DatabaseIdentityStore();
         setField(identityStore, "userService", userService);
         setField(identityStore, "passwordService", passwordService);
+        setField(identityStore, "loginAttemptThrottle", loginAttemptThrottle);
+        setField(identityStore, "loginRequestSource", loginRequestSource);
         return identityStore;
     }
 
@@ -86,7 +229,7 @@ final class DatabaseIdentityStoreTest {
     }
 
     private static final class RecordingPasswordService extends PasswordService {
-        private final boolean verificationResult;
+        private boolean verificationResult;
         private int verificationCount;
         private String lastPassword;
         private String lastStoredHash;
@@ -101,6 +244,19 @@ final class DatabaseIdentityStoreTest {
             lastPassword = password;
             lastStoredHash = storedHash;
             return verificationResult;
+        }
+    }
+
+    private static final class MutableLoginRequestSource extends LoginRequestSource {
+        private String sourceIdentifier;
+
+        private MutableLoginRequestSource(String sourceIdentifier) {
+            this.sourceIdentifier = sourceIdentifier;
+        }
+
+        @Override
+        public String getSourceIdentifier() {
+            return sourceIdentifier;
         }
     }
 }

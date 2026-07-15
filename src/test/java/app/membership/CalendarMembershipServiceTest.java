@@ -13,6 +13,7 @@ import app.audit.AuditService;
 import app.calendar.Calendar;
 import app.testsupport.ServiceTestSupport.EntityManagerStub;
 import app.user.ApplicationUser;
+import app.util.AuthorizationException;
 import app.util.ValidationException;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -23,30 +24,40 @@ final class CalendarMembershipServiceTest {
     void acceptedInvitationReactivatesInactiveMembershipAtInvitationRole() {
         Calendar calendar = activeCalendar(200L);
         ApplicationUser user = activeUser(100L);
+        ApplicationUser invitationCreator = activeUser(99L);
         CalendarMember inactiveAdminMembership = membership(calendar, user, CalendarRole.ADMIN, false);
         EntityManagerStub entityManagerStub = entityManagerStub()
+                .singleResult("from Calendar calendarEntity", calendar)
                 .singleResult("where calendarMember.calendar.id", inactiveAdminMembership);
         CalendarMembershipService membershipService = membershipService(entityManagerStub);
 
-        CalendarMember member = membershipService.grantMembershipFromAcceptedInvitation(calendar, user, CalendarRole.VIEWER);
+        CalendarMember member = membershipService
+                .grantMembershipFromAcceptedInvitation(calendar, invitationCreator, user, CalendarRole.EDITOR)
+                .orElseThrow();
 
         assertAll(
                 () -> assertEquals(inactiveAdminMembership, member),
-                () -> assertEquals(CalendarRole.VIEWER, member.getRole()),
+                () -> assertEquals(CalendarRole.EDITOR, member.getRole()),
                 () -> assertTrue(member.isActive()),
-                () -> assertNotNull(member.getUpdatedAt()));
+                () -> assertNotNull(member.getUpdatedAt()),
+                () -> assertTrue(entityManagerStub.lockedQueryTexts().stream()
+                        .anyMatch(queryText -> queryText.contains("from Calendar calendarEntity"))));
     }
 
     @Test
     void acceptedInvitationPreservesActiveStrongerMembership() {
         Calendar calendar = activeCalendar(200L);
         ApplicationUser user = activeUser(100L);
+        ApplicationUser invitationCreator = activeUser(99L);
         CalendarMember activeAdminMembership = membership(calendar, user, CalendarRole.ADMIN, true);
         EntityManagerStub entityManagerStub = entityManagerStub()
+                .singleResult("from Calendar calendarEntity", calendar)
                 .singleResult("where calendarMember.calendar.id", activeAdminMembership);
         CalendarMembershipService membershipService = membershipService(entityManagerStub);
 
-        CalendarMember member = membershipService.grantMembershipFromAcceptedInvitation(calendar, user, CalendarRole.VIEWER);
+        CalendarMember member = membershipService
+                .grantMembershipFromAcceptedInvitation(calendar, invitationCreator, user, CalendarRole.EDITOR)
+                .orElseThrow();
 
         assertAll(
                 () -> assertEquals(activeAdminMembership, member),
@@ -56,15 +67,41 @@ final class CalendarMembershipServiceTest {
     }
 
     @Test
-    void acceptedInvitationRejectsAdminRole() {
+    void acceptedInvitationRejectsViewerAndAdminRoles() {
         CalendarMembershipService membershipService = membershipService(entityManagerStub());
 
-        assertThrows(
-                ValidationException.class,
-                () -> membershipService.grantMembershipFromAcceptedInvitation(
-                        activeCalendar(200L),
-                        activeUser(100L),
-                        CalendarRole.ADMIN));
+        assertAll(
+                () -> assertThrows(
+                        ValidationException.class,
+                        () -> membershipService.grantMembershipFromAcceptedInvitation(
+                                activeCalendar(200L),
+                                activeUser(99L),
+                                activeUser(100L),
+                                CalendarRole.VIEWER)),
+                () -> assertThrows(
+                        ValidationException.class,
+                        () -> membershipService.grantMembershipFromAcceptedInvitation(
+                                activeCalendar(200L),
+                                activeUser(99L),
+                                activeUser(100L),
+                                CalendarRole.ADMIN)));
+    }
+
+    @Test
+    void acceptedInvitationDoesNotReactivateItsCreatorAfterEditAccessWasRemoved() {
+        Calendar calendar = activeCalendar(200L);
+        ApplicationUser removedEditor = activeUser(100L);
+        CalendarMembershipService membershipService = membershipService(
+                entityManagerStub().singleResult("from Calendar calendarEntity", calendar));
+        setField(membershipService, "calendarAccessService", new DenyingEditAccessService());
+
+        assertTrue(membershipService
+                .grantMembershipFromAcceptedInvitation(
+                        calendar,
+                        removedEditor,
+                        removedEditor,
+                        CalendarRole.EDITOR)
+                .isEmpty());
     }
 
     @Test
@@ -74,6 +111,7 @@ final class CalendarMembershipServiceTest {
         CalendarMember actorMembership = membership(calendar, actingUser, CalendarRole.ADMIN, true);
         CalendarMember targetMembership = membership(calendar, activeUser(101L), CalendarRole.ADMIN, true);
         EntityManagerStub entityManagerStub = entityManagerStub()
+                .singleResult("from Calendar calendarEntity", calendar)
                 .resultList("from CalendarMember calendarMember", List.of(actorMembership, targetMembership));
         CalendarMembershipService membershipService = membershipService(entityManagerStub);
         setField(membershipService, "calendarAccessService", new AllowingAccessService());
@@ -98,6 +136,7 @@ final class CalendarMembershipServiceTest {
         CalendarMember otherAdminMembership = membership(calendar, activeUser(101L), CalendarRole.ADMIN, true);
         OffsetDateTime originalUpdatedAt = actorMembership.getUpdatedAt();
         EntityManagerStub entityManagerStub = entityManagerStub()
+                .singleResult("from Calendar calendarEntity", calendar)
                 .resultList("from CalendarMember calendarMember", List.of(actorMembership, otherAdminMembership));
         CalendarMembershipService membershipService = membershipService(entityManagerStub);
         setField(membershipService, "calendarAccessService", new AllowingAccessService());
@@ -119,6 +158,7 @@ final class CalendarMembershipServiceTest {
     private static CalendarMembershipService membershipService(EntityManagerStub entityManagerStub) {
         CalendarMembershipService membershipService = new CalendarMembershipService();
         setField(membershipService, "entityManager", entityManagerStub.entityManager());
+        setField(membershipService, "calendarAccessService", new AllowingAccessService());
         setField(membershipService, "calendarMembershipPolicy", new CalendarMembershipPolicy());
         return membershipService;
     }
@@ -155,7 +195,18 @@ final class CalendarMembershipServiceTest {
 
     private static final class AllowingAccessService extends CalendarAccessService {
         @Override
+        public void requireCanEdit(ApplicationUser user, Long calendarId) {
+        }
+
+        @Override
         public void requireCanAdminister(ApplicationUser user, Long calendarId) {
+        }
+    }
+
+    private static final class DenyingEditAccessService extends CalendarAccessService {
+        @Override
+        public void requireCanEdit(ApplicationUser user, Long calendarId) {
+            throw new AuthorizationException("Editor access is required.");
         }
     }
 

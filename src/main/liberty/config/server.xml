@@ -17,11 +17,15 @@
     <httpEndpoint id="defaultHttpEndpoint"
                   host="*"
                   httpPort="${PORT}"
-                  httpsPort="${HTTPS_PORT}"/>
+                  httpsPort="${HTTPS_PORT}">
+        <remoteIp/>
+    </httpEndpoint>
 
     <httpSession cookieHttpOnly="true"
                  cookieSecure="${COOKIE_SECURE}"
                  cookieSameSite="Lax"
+                 cookieMaxAge="720h"
+                 invalidationTimeout="720h"
                  urlRewritingEnabled="false"/>
 
     <library id="postgresqlDriver">
@@ -29,12 +33,15 @@
     </library>
 
     <dataSource id="CalendarDS" jndiName="jdbc/CalendarDS">
+        <connectionManager connectionTimeout="2s"/>
         <jdbcDriver libraryRef="postgresqlDriver"/>
         <properties.postgresql serverName="${PGHOST}"
                                portNumber="${PGPORT}"
                                databaseName="${PGDATABASE}"
                                user="${PGUSER}"
-                               password="${PGPASSWORD}"/>
+                               password="${PGPASSWORD}"
+                               connectTimeout="2s"
+                               loginTimeout="2s"/>
     </dataSource>
 
     <webApplication location="shared-calendar.war"

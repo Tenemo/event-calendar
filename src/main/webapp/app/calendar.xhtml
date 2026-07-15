@@ -109,33 +109,62 @@
                         <p:outputLabel for="eventLocation" value="Location"/>
                         <p:inputText id="eventLocation" value="#{calendarView.eventLocation}" pt:maxlength="200"/>
 
-                        <div class="two-column-fields">
-                            <div class="field-stack">
-                                <p:outputLabel for="eventStart" value="Starts"/>
-                                <p:datePicker id="eventStart"
-                                              value="#{calendarView.eventStartTime}"
-                                              pattern="yyyy-MM-dd HH:mm"
-                                              showTime="true"
-                                              hourFormat="24"
-                                              required="true"
-                                              requiredMessage="Event start time is required."/>
-                            </div>
-                            <div class="field-stack">
-                                <p:outputLabel for="eventEnd" value="Ends"/>
-                                <p:datePicker id="eventEnd"
-                                              value="#{calendarView.eventEndTime}"
-                                              pattern="yyyy-MM-dd HH:mm"
-                                              showTime="true"
-                                              hourFormat="24"
-                                              required="true"
-                                              requiredMessage="Event end time is required."/>
-                            </div>
-                        </div>
-
                         <div class="checkbox-field">
-                            <p:selectBooleanCheckbox id="allDay" value="#{calendarView.eventAllDay}"/>
+                            <p:selectBooleanCheckbox id="allDay" value="#{calendarView.eventAllDay}">
+                                <p:ajax listener="#{calendarView.changeEventAllDayMode}"
+                                        process="@this"
+                                        update=":messages eventScheduleFields"/>
+                            </p:selectBooleanCheckbox>
                             <p:outputLabel for="allDay" value="All-day event"/>
                         </div>
+
+                        <h:panelGroup id="eventScheduleFields" layout="block">
+                            <h:panelGroup layout="block"
+                                          styleClass="two-column-fields"
+                                          rendered="#{not calendarView.eventAllDay}">
+                                <div class="field-stack">
+                                    <p:outputLabel for="eventStart" value="Starts"/>
+                                    <p:datePicker id="eventStart"
+                                                  value="#{calendarView.eventStartTime}"
+                                                  pattern="yyyy-MM-dd HH:mm"
+                                                  showTime="true"
+                                                  hourFormat="24"
+                                                  required="true"
+                                                  requiredMessage="Event start time is required."/>
+                                </div>
+                                <div class="field-stack">
+                                    <p:outputLabel for="eventEnd" value="Ends"/>
+                                    <p:datePicker id="eventEnd"
+                                                  value="#{calendarView.eventEndTime}"
+                                                  pattern="yyyy-MM-dd HH:mm"
+                                                  showTime="true"
+                                                  hourFormat="24"
+                                                  required="true"
+                                                  requiredMessage="Event end time is required."/>
+                                </div>
+                            </h:panelGroup>
+
+                            <h:panelGroup layout="block"
+                                          styleClass="two-column-fields"
+                                          rendered="#{calendarView.eventAllDay}">
+                                <div class="field-stack">
+                                    <p:outputLabel for="eventStartDate" value="First day"/>
+                                    <p:datePicker id="eventStartDate"
+                                                  value="#{calendarView.eventStartDate}"
+                                                  pattern="yyyy-MM-dd"
+                                                  required="true"
+                                                  requiredMessage="Event first day is required."/>
+                                </div>
+                                <div class="field-stack">
+                                    <p:outputLabel for="eventEndDate" value="Last day (inclusive)"/>
+                                    <p:datePicker id="eventEndDate"
+                                                  value="#{calendarView.eventEndDate}"
+                                                  pattern="yyyy-MM-dd"
+                                                  required="true"
+                                                  requiredMessage="Event last day is required."/>
+                                </div>
+                            </h:panelGroup>
+                        </h:panelGroup>
 
                         <p:outputLabel for="eventDescription" value="Description"/>
                         <p:inputTextarea id="eventDescription"

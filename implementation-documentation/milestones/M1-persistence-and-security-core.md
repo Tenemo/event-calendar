@@ -4,6 +4,8 @@ Use this milestone to implement schema migrations, JPA persistence, invitation-o
 
 Do not build the full PrimeFaces calendar workflow in M1. M1 should establish the data model and service rules that M2 can safely expose.
 
+Status: implemented. The final schema is Flyway version 7 and includes editor-only invitation scope, normalized all-day boundaries, seven-day invitation expiry, permanent bootstrap state, and Java-time-zone normalization for existing all-day events.
+
 ## Milestone checklist
 
 Outcome: invited users can register, log in, create calendars, receive calendar `ADMIN` membership, and rely on tested service-layer authorization for public viewing, member roles, invite acceptance, and event validation.
@@ -54,6 +56,9 @@ Acceptance criteria:
 10. Roles load from `calendar_member`.
 11. Service methods enforce calendar membership and role checks, not only UI controls.
 12. PostgreSQL-backed CI fails on migration, persistence, or service authorization regressions without using repository secrets.
+13. Invitation acceptance is serialized, revalidates the editor-invitation creator's permission, and permits exactly one account to consume a link.
+14. Bootstrap admission is claimed atomically with registration, rolls back on failure, and remains permanently consumed after the first successful account.
+15. Login throttling, rolling authenticated cookies, session inactivity, and database-aware health follow the final security policy.
 
 ## Persistence configuration
 
@@ -212,6 +217,8 @@ create index idx_audit_log_entity
     on audit_log(entity_type, entity_id);
 ```
 
+This SQL block records the original consolidated schema sketch, not the final migration ledger. The committed Flyway migrations 1 through 7 are authoritative; later migrations make invitation expiry mandatory, add permanent bootstrap state, and normalize all-day event boundaries.
+
 Do not add recurring-event tables in v1.
 
 ## Startup sequence
@@ -244,7 +251,7 @@ Registration responsibilities:
 
 1. Accept an app invitation token, username, display name, password, and initial calendar name.
 2. Validate username and display name are not blank.
-3. Require a valid unused app invitation, unless a configured bootstrap token is creating the first user.
+3. Require a valid unused app invitation, unless a configured bootstrap token is atomically claiming the permanent first-user admission record.
 4. Validate password policy before generating a Jakarta Security password hash.
 5. Create the user.
 6. Create the first calendar unless the user explicitly chooses to do that later.
@@ -267,7 +274,13 @@ Do not implement complex composition rules.
 
 Hash passwords with Jakarta Security's built-in `Pbkdf2PasswordHash` using PBKDF2-HMAC-SHA256, 600,000 iterations, a 32-byte salt, and a 32-byte derived key. Do not use app-owned hash formatting.
 
-On an empty database, use a long random `APP_BOOTSTRAP_INVITE_TOKEN` once to create the first user, then remove it and restart the app. Normal account registration links must be generated from the app invitation UI.
+On a database that has never contained an account, use a long random `APP_BOOTSTRAP_INVITE_TOKEN` once to create the first user, then remove it and restart the app. Claim the singleton bootstrap row in the registration transaction so failure rolls back the claim, concurrent attempts serialize, and the first successful account consumes bootstrap permanently. Deactivating every account must never re-enable it. Normal account registration links must be generated from the app invitation UI.
+
+Login failures are tracked by normalized username and client source. Five failures for one username/source pair within 15 minutes block that pair for 15 minutes; 25 failures from one source in the same window block that source for 15 minutes. Missing and existing usernames use the same generic result.
+
+Authenticated app requests refresh an HTTP-only, SameSite `Lax` session cookie with a rolling 30-day lifetime. The server also invalidates sessions after 30 days of inactivity. Sessions remain in memory, so restart or redeploy requires reauthentication.
+
+The health endpoint must acquire and validate a database connection within the probe budget, return `200 ok` only while PostgreSQL is usable, and return `503 unavailable` without connection details otherwise.
 
 ## Domain model
 
@@ -277,7 +290,7 @@ Create these JPA entities:
 audit/AuditLog.java
 calendar/Calendar.java
 event/CalendarEvent.java
-invitation/AppInvitation.java
+invitation/Invitation.java
 membership/CalendarMember.java
 user/AppUser.java
 ```
@@ -303,7 +316,7 @@ Create:
 audit/AuditService.java
 calendar/CalendarService.java
 event/CalendarEventService.java
-invitation/AppInvitationService.java
+invitation/InvitationService.java
 membership/CalendarAccessService.java
 membership/CalendarMembershipService.java
 security/PasswordService.java
@@ -340,17 +353,19 @@ Responsibilities:
 3. Reject mutations for public visitors and viewers.
 4. Enforce last-admin protection.
 
-### AppInvitationService
+### InvitationService
 
 Responsibilities:
 
 1. Create app-only invite links for signed-in users.
 2. Create calendar editor invite links for calendar editors and admins.
-3. Revoke invite links for their creators.
-4. Accept invite links for signed-in users.
-5. Accept invite links after registration.
-6. Reject expired, revoked, already accepted, or invalid invites.
-7. Write audit logs.
+3. Apply a seven-day default expiry to every invitation.
+4. Let creators revoke their unused invite links and calendar admins list and revoke unused editor links for calendars they administer.
+5. Accept invite links for signed-in users or after registration while holding the invitation's write lock.
+6. Revalidate every invitation creator against current database account state, and revalidate that an editor-invitation creator still has edit access while granting membership under the calendar membership lock.
+7. Reject expired, revoked, already accepted, invalid, or no-longer-authorized invites with one generic public failure.
+8. Ensure concurrent acceptance can consume one invitation only once.
+9. Write audit logs.
 
 Do not send email in v1. The UI should show copyable invite links.
 
@@ -401,6 +416,13 @@ Add JUnit 5 tests for:
 12. Editor invitation acceptance assigns the intended calendar role.
 13. Revoked, expired, and reused app invitations are rejected.
 14. Event blank title and end-before-start are rejected.
+15. Calendar invitations cannot grant `VIEWER`.
+16. Calendar administrators can see and revoke another creator's unused editor invitations.
+17. Removing an invitation creator's edit access invalidates their saved editor invitations.
+18. Concurrent invitation claims serialize and create at most one acceptance.
+19. Failed bootstrap registration rolls back its claim, while concurrent successful claims create exactly one first account in real PostgreSQL.
+20. Source-aware login throttling does not disclose account existence or let one source block correct authentication from another source.
+21. Session cookies roll for 30 days of authenticated activity, inactivity expires sessions, restart requires reauthentication, and health fails when PostgreSQL is unavailable.
 
 ## GitHub PR checks after M1
 

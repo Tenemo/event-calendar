@@ -21,12 +21,13 @@ import app.security.TokenService;
 import app.testsupport.ServiceTestSupport.EntityManagerStub;
 import app.user.ApplicationUser;
 import app.user.RegistrationAdmission;
-import app.user.UserService;
+import app.user.RegistrationBootstrapState;
 import app.util.AuthorizationException;
 import app.util.ValidationException;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 final class InvitationServiceTest {
@@ -46,6 +47,7 @@ final class InvitationServiceTest {
                 () -> assertNull(invitation.getRole()),
                 () -> assertSame(actingUser, invitation.getCreatedByUser()),
                 () -> assertEquals(ZoneOffset.UTC, invitation.getCreatedAt().getOffset()),
+                () -> assertEquals(invitation.getCreatedAt().plusDays(7), invitation.getExpiresAt()),
                 () -> assertEquals("app_invitation", auditService.entityType),
                 () -> assertEquals("created", auditService.action),
                 () -> assertNull(auditService.calendar),
@@ -92,7 +94,8 @@ final class InvitationServiceTest {
     void registrationInvitationRegistersWithoutGrantingCalendarMembership() {
         Invitation invitation = registrationInvitation(activeUser(1L, "creator"));
         EntityManagerStub entityManagerStub = entityManagerStub()
-                .singleResult("where invitation.invitationToken", invitation);
+                .singleResult("where invitation.invitationToken", invitation)
+                .singleResult("where applicationUser.id = :invitationCreatorId", invitation.getCreatedByUser());
         RecordingMembershipService membershipService = new RecordingMembershipService();
         InvitationService service = service(entityManagerStub, new FixedTokenService("unused"), new RecordingAuditService());
         setField(service, "calendarMembershipService", membershipService);
@@ -112,11 +115,26 @@ final class InvitationServiceTest {
     }
 
     @Test
+    void registrationInvitationIsGenericInvalidWhenItsCreatorIsInactive() {
+        ApplicationUser inactiveCreator = activeUser(1L, "inactive-creator");
+        inactiveCreator.setActive(false);
+        Invitation invitation = registrationInvitation(inactiveCreator);
+        InvitationService service = serviceForInvitation(invitation);
+
+        ValidationException exception = assertThrows(
+                ValidationException.class,
+                () -> service.requireRegistrationAdmission(invitation.getInvitationToken()));
+
+        assertEquals("Invitation is invalid or no longer available.", exception.getMessage());
+    }
+
+    @Test
     void editorInvitationRegistersAndGrantsEditorMembership() {
         Calendar calendar = activeCalendar(200L);
         Invitation invitation = editorInvitation(activeUser(1L, "creator"), calendar);
         EntityManagerStub entityManagerStub = entityManagerStub()
-                .singleResult("where invitation.invitationToken", invitation);
+                .singleResult("where invitation.invitationToken", invitation)
+                .singleResult("where applicationUser.id = :invitationCreatorId", invitation.getCreatedByUser());
         RecordingMembershipService membershipService = new RecordingMembershipService();
         InvitationService service = service(entityManagerStub, new FixedTokenService("unused"), new RecordingAuditService());
         setField(service, "calendarMembershipService", membershipService);
@@ -127,6 +145,7 @@ final class InvitationServiceTest {
 
         assertAll(
                 () -> assertSame(calendar, membershipService.grantedCalendar),
+                () -> assertSame(invitation.getCreatedByUser(), membershipService.grantedCreator),
                 () -> assertSame(newUser, membershipService.grantedUser),
                 () -> assertEquals(CalendarRole.EDITOR, membershipService.grantedRole),
                 () -> assertSame(newUser, invitation.getAcceptedByUser()),
@@ -154,17 +173,65 @@ final class InvitationServiceTest {
     }
 
     @Test
-    void bootstrapTokenCreatesOnlyTheFirstUser() {
-        InvitationService serviceWithoutUsers = serviceForMissingInvitation(false, "bootstrap-token");
-        InvitationService serviceWithUsers = serviceForMissingInvitation(true, "bootstrap-token");
+    void bootstrapAdmissionIsClaimedOnceAndRejectsDatabasesWhereAnyUserHasEverExisted() {
+        RegistrationBootstrapState availableBootstrapState = availableBootstrapState();
+        InvitationService serviceWithoutUsers = serviceForMissingInvitation(false, "bootstrap-token", availableBootstrapState);
+        InvitationService serviceWithUsers = serviceForMissingInvitation(true, "bootstrap-token", availableBootstrapState());
 
-        RegistrationAdmission admission = serviceWithoutUsers.requireAdmission(" bootstrap-token ");
+        RegistrationAdmission admission = serviceWithoutUsers.requireRegistrationAdmission(" bootstrap-token ");
 
         assertAll(
                 () -> assertTrue(admission.bootstrap()),
                 () -> assertNull(admission.invitation()),
+                () -> assertEquals(ZoneOffset.UTC, availableBootstrapState.getConsumedAt().getOffset()),
+                () -> assertThrows(
+                        ValidationException.class,
+                        () -> serviceWithoutUsers.requireRegistrationAdmission("bootstrap-token")),
                 () -> assertThrows(ValidationException.class, () -> serviceWithUsers.requireAdmission("bootstrap-token")),
                 () -> assertThrows(ValidationException.class, () -> serviceWithoutUsers.requireAdmission("wrong-token")));
+    }
+
+    @Test
+    void calendarInvitationIsGenericInvalidWhenItsCreatorIsInactiveOrNoLongerAnEditor() {
+        Calendar calendar = activeCalendar(200L);
+        ApplicationUser inactiveCreator = activeUser(1L, "inactive-creator");
+        inactiveCreator.setActive(false);
+        Invitation inactiveCreatorInvitation = editorInvitation(inactiveCreator, calendar);
+        Invitation removedEditorInvitation = editorInvitation(activeUser(2L, "removed-editor"), calendar);
+
+        InvitationService inactiveCreatorService = serviceForInvitation(inactiveCreatorInvitation);
+        InvitationService removedEditorService = serviceForInvitation(removedEditorInvitation);
+        setField(removedEditorService, "calendarAccessService", new DenyingAccessService());
+
+        ValidationException inactiveCreatorException = assertThrows(
+                ValidationException.class,
+                () -> inactiveCreatorService.requireAdmission(inactiveCreatorInvitation.getInvitationToken()));
+        ValidationException removedEditorException = assertThrows(
+                ValidationException.class,
+                () -> removedEditorService.requireAdmission(removedEditorInvitation.getInvitationToken()));
+
+        assertAll(
+                () -> assertEquals("Invitation is invalid or no longer available.", inactiveCreatorException.getMessage()),
+                () -> assertEquals("Invitation is invalid or no longer available.", removedEditorException.getMessage()));
+    }
+
+    @Test
+    void creatorPermissionIsRevalidatedAfterAdmissionBeforeMembershipIsGranted() {
+        Calendar calendar = activeCalendar(200L);
+        Invitation invitation = editorInvitation(activeUser(1L, "creator"), calendar);
+        InvitationService service = serviceForInvitation(invitation);
+        ApplicationUser acceptingUser = activeUser(2L, "friend");
+        RegistrationAdmission admission = service.requireAdmission(invitation.getInvitationToken());
+        setField(service, "calendarMembershipService", new RejectingMembershipService());
+
+        ValidationException exception = assertThrows(
+                ValidationException.class,
+                () -> service.acceptAdmission(admission, acceptingUser));
+
+        assertAll(
+                () -> assertEquals("Invitation is invalid or no longer available.", exception.getMessage()),
+                () -> assertNull(invitation.getAcceptedAt()),
+                () -> assertNull(invitation.getAcceptedByUser()));
     }
 
     @Test
@@ -199,20 +266,68 @@ final class InvitationServiceTest {
                 () -> assertEquals(ZoneOffset.UTC, unusedInvitation.getRevokedAt().getOffset()),
                 () -> assertTrue(unusedInvitationEntityManagerStub.lockedQueryTexts().stream()
                         .anyMatch(queryText -> queryText.contains("where invitation.id"))),
+                () -> assertTrue(unusedInvitationEntityManagerStub.lockedQueryTexts().stream()
+                        .filter(queryText -> queryText.contains("where invitation.id"))
+                        .noneMatch(queryText -> queryText.contains("join fetch"))),
                 () -> assertThrows(ValidationException.class, () -> usedInvitationService.revokeInvitation(creator, 2L)),
                 () -> assertThrows(ValidationException.class, () -> expiredInvitationService.revokeInvitation(creator, 3L)),
                 () -> assertThrows(AuthorizationException.class, () -> foreignInvitationService.revokeInvitation(creator, 4L)));
     }
 
     @Test
-    void usersListOnlyTheirRecentInvitations() {
+    void usersListTheirFullInvitationHistoryWithoutAResultLimit() {
         List<Invitation> invitations = List.of(registrationInvitation(activeUser(1L, "creator")));
+        EntityManagerStub entityManagerStub = entityManagerStub()
+                .resultList("from Invitation invitation", invitations);
         InvitationService service = service(
-                entityManagerStub().resultList("from Invitation invitation", invitations),
+                entityManagerStub,
                 new FixedTokenService("unused"),
                 new RecordingAuditService());
 
-        assertEquals(invitations, service.listInvitations(activeUser(1L, "creator")));
+        assertAll(
+                () -> assertEquals(invitations, service.listInvitations(activeUser(1L, "creator"))),
+                () -> assertTrue(entityManagerStub.maximumResultLimitedQueryTexts().isEmpty()));
+    }
+
+    @Test
+    void calendarAdminsCanListFullHistoryAndRevokeAvailableInvitationsCreatedByEditors() {
+        Calendar calendar = activeCalendar(200L);
+        ApplicationUser editor = activeUser(1L, "editor");
+        ApplicationUser administrator = activeUser(2L, "administrator");
+        Invitation editorInvitation = editorInvitation(editor, calendar);
+        Invitation usedInvitation = editorInvitation(editor, calendar);
+        usedInvitation.setAcceptedAt(OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
+        Invitation revokedInvitation = editorInvitation(editor, calendar);
+        revokedInvitation.setRevokedAt(OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
+        Invitation expiredInvitation = editorInvitation(editor, calendar);
+        expiredInvitation.setExpiresAt(OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
+        List<Invitation> calendarHistory = List.of(
+                editorInvitation,
+                usedInvitation,
+                revokedInvitation,
+                expiredInvitation);
+        EntityManagerStub listEntityManagerStub = entityManagerStub()
+                .resultList("where calendarMember.calendar = calendar", calendarHistory);
+        InvitationService listService = service(
+                listEntityManagerStub,
+                new FixedTokenService("unused"),
+                new RecordingAuditService());
+
+        List<Invitation> visibleInvitations = listService.listInvitations(administrator);
+
+        RecordingAuditService auditService = new RecordingAuditService();
+        InvitationService revokeService = service(
+                entityManagerStub().singleResult("where invitation.id", editorInvitation),
+                new FixedTokenService("unused"),
+                auditService);
+        revokeService.revokeInvitation(administrator, editorInvitation.getId());
+
+        assertAll(
+                () -> assertEquals(calendarHistory, visibleInvitations),
+                () -> assertTrue(listEntityManagerStub.maximumResultLimitedQueryTexts().isEmpty()),
+                () -> assertEquals(ZoneOffset.UTC, editorInvitation.getRevokedAt().getOffset()),
+                () -> assertSame(calendar, auditService.calendar),
+                () -> assertEquals("revoked", auditService.action));
     }
 
     private InvitationService serviceForInvitation(Invitation invitation) {
@@ -221,6 +336,13 @@ final class InvitationServiceTest {
             return service(entityManagerStub, new FixedTokenService("unused"), new RecordingAuditService());
         }
         entityManagerStub.singleResult("where invitation.invitationToken", invitation);
+        if (invitation.getCreatedByUser() != null && invitation.getCreatedByUser().isActive()) {
+            entityManagerStub.singleResult(
+                    "where applicationUser.id = :invitationCreatorId",
+                    invitation.getCreatedByUser());
+        } else {
+            entityManagerStub.singleResultNotFound("where applicationUser.id = :invitationCreatorId");
+        }
         return service(entityManagerStub, new FixedTokenService("unused"), new RecordingAuditService());
     }
 
@@ -228,14 +350,23 @@ final class InvitationServiceTest {
         return serviceForMissingInvitation(false, "");
     }
 
-    private InvitationService serviceForMissingInvitation(boolean hasActiveUsers, String bootstrapInvitationToken) {
+    private InvitationService serviceForMissingInvitation(
+            boolean anyUserHasEverExisted,
+            String bootstrapInvitationToken,
+            RegistrationBootstrapState bootstrapState) {
         InvitationService service = service(
-                entityManagerStub().singleResultNotFound("where invitation.invitationToken"),
+                entityManagerStub()
+                        .singleResultNotFound("where invitation.invitationToken")
+                        .singleResult("from RegistrationBootstrapState", bootstrapState)
+                        .singleResult("select count(applicationUser)", anyUserHasEverExisted ? 1L : 0L),
                 new FixedTokenService("unused"),
                 new RecordingAuditService());
-        setField(service, "userService", new FixedUserService(hasActiveUsers));
         setField(service, "bootstrapInvitationToken", bootstrapInvitationToken);
         return service;
+    }
+
+    private InvitationService serviceForMissingInvitation(boolean anyUserHasEverExisted, String bootstrapInvitationToken) {
+        return serviceForMissingInvitation(anyUserHasEverExisted, bootstrapInvitationToken, availableBootstrapState());
     }
 
     private InvitationService service(
@@ -249,7 +380,6 @@ final class InvitationServiceTest {
         setField(service, "calendarMembershipService", new RecordingMembershipService());
         setField(service, "invitationPolicy", new InvitationPolicy());
         setField(service, "tokenService", tokenService);
-        setField(service, "userService", new FixedUserService(false));
         setField(service, "auditService", auditService);
         setField(service, "bootstrapInvitationToken", "");
         return service;
@@ -290,19 +420,42 @@ final class InvitationServiceTest {
         return user;
     }
 
+    private RegistrationBootstrapState availableBootstrapState() {
+        RegistrationBootstrapState bootstrapState = new RegistrationBootstrapState();
+        setField(bootstrapState, "singletonId", RegistrationBootstrapState.SINGLETON_ID);
+        return bootstrapState;
+    }
+
     private static final class RecordingMembershipService extends CalendarMembershipService {
         private boolean membershipGranted;
         private Calendar grantedCalendar;
+        private ApplicationUser grantedCreator;
         private ApplicationUser grantedUser;
         private CalendarRole grantedRole;
 
         @Override
-        public app.membership.CalendarMember grantMembershipFromAcceptedInvitation(Calendar calendar, ApplicationUser user, CalendarRole role) {
+        public Optional<app.membership.CalendarMember> grantMembershipFromAcceptedInvitation(
+                Calendar calendar,
+                ApplicationUser invitationCreator,
+                ApplicationUser user,
+                CalendarRole role) {
             membershipGranted = true;
             grantedCalendar = calendar;
+            grantedCreator = invitationCreator;
             grantedUser = user;
             grantedRole = role;
-            return new app.membership.CalendarMember();
+            return Optional.of(new app.membership.CalendarMember());
+        }
+    }
+
+    private static final class RejectingMembershipService extends CalendarMembershipService {
+        @Override
+        public Optional<app.membership.CalendarMember> grantMembershipFromAcceptedInvitation(
+                Calendar calendar,
+                ApplicationUser invitationCreator,
+                ApplicationUser user,
+                CalendarRole role) {
+            return Optional.empty();
         }
     }
 
@@ -322,6 +475,10 @@ final class InvitationServiceTest {
     private static final class AllowingAccessService extends CalendarAccessService {
         @Override
         public void requireCanEdit(ApplicationUser user, Long calendarId) {
+        }
+
+        @Override
+        public void requireCanAdminister(ApplicationUser user, Long calendarId) {
         }
     }
 
@@ -358,16 +515,4 @@ final class InvitationServiceTest {
         }
     }
 
-    private static final class FixedUserService extends UserService {
-        private final boolean hasActiveUsers;
-
-        private FixedUserService(boolean hasActiveUsers) {
-            this.hasActiveUsers = hasActiveUsers;
-        }
-
-        @Override
-        public boolean hasActiveUsers() {
-            return hasActiveUsers;
-        }
-    }
 }

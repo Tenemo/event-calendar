@@ -2,6 +2,7 @@ package app.event;
 
 import app.calendar.CalendarTimeService;
 import java.io.Serializable;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
@@ -82,6 +83,10 @@ public final class CalendarEventRow implements Serializable {
         return endTime;
     }
 
+    public LocalDate getInclusiveEndDate() {
+        return allDay ? endTime.toLocalDate().minusDays(1) : endTime.toLocalDate();
+    }
+
     public boolean isAllDay() {
         return allDay;
     }
@@ -92,11 +97,13 @@ public final class CalendarEventRow implements Serializable {
 
     public String getTimeLabel() {
         if (allDay) {
-            if (!startTime.toLocalDate().equals(endTime.toLocalDate())) {
+            LocalDate firstDay = startTime.toLocalDate();
+            LocalDate lastDay = getInclusiveEndDate();
+            if (!firstDay.equals(lastDay)) {
                 return "All day from "
-                        + startTime.format(ALL_DAY_DATE_FORMAT)
+                        + firstDay.format(ALL_DAY_DATE_FORMAT)
                         + " to "
-                        + endTime.format(ALL_DAY_DATE_FORMAT);
+                        + lastDay.format(ALL_DAY_DATE_FORMAT);
             }
             return "All day";
         }

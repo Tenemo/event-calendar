@@ -13,6 +13,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -38,6 +39,23 @@ final class CalendarTool {
     private static final String RESTORE_VERIFICATION_DATABASE_SERVICE_NAME = "postgres-restore-verification";
     private static final String RESTORE_VERIFICATION_DATABASE_NAME = "calendar_restore";
     private static final String RESTORE_VERIFICATION_DATABASE_USER = "calendar_restore";
+    private static final String BOOTSTRAP_VERIFICATION_DATABASE_SERVICE_NAME =
+            "postgres-bootstrap-verification";
+    private static final String BOOTSTRAP_VERIFICATION_APPLICATION_SERVICE_NAME =
+            "web-bootstrap-verification";
+    private static final String BOOTSTRAP_VERIFICATION_PROFILE = "bootstrap-verification";
+    private static final String BOOTSTRAP_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE =
+            "BOOTSTRAP_VERIFICATION_APPLICATION_PORT";
+    private static final String BOOTSTRAP_VERIFICATION_DATABASE_PORT_ENVIRONMENT_VARIABLE =
+            "BOOTSTRAP_VERIFICATION_DATABASE_PORT";
+    private static final String BOOTSTRAP_VERIFICATION_INVITATION_TOKEN_ENVIRONMENT_VARIABLE =
+            "BOOTSTRAP_VERIFICATION_INVITATION_TOKEN";
+    private static final String BOOTSTRAP_VERIFICATION_BASE_URL_ENVIRONMENT_VARIABLE =
+            "BOOTSTRAP_VERIFICATION_BASE_URL";
+    private static final String DEFAULT_BOOTSTRAP_VERIFICATION_APPLICATION_PORT = "9081";
+    private static final String DEFAULT_BOOTSTRAP_VERIFICATION_DATABASE_PORT = "55432";
+    private static final String DEFAULT_BOOTSTRAP_VERIFICATION_INVITATION_TOKEN =
+            "bootstrap-verification-only-token-00000000000000000000000000000000";
     private static final String POSTGRESQL_CLIENT_IMAGE = "postgres:17";
     private static final String APPLICATION_IMAGE_NAME = "shared-calendar:local";
     private static final String EXEC_MAVEN_PLUGIN_VERSION = "3.6.3";
@@ -88,6 +106,10 @@ final class CalendarTool {
             case "e2e" -> {
                 requireArgumentCount(arguments, 1);
                 runEndToEndTests();
+            }
+            case "verify-bootstrap-registration" -> {
+                requireArgumentCount(arguments, 1);
+                verifyBootstrapRegistrationConcurrency(true);
             }
             case "wait-for-app" -> {
                 requireArgumentCount(arguments, 1);
@@ -434,6 +456,7 @@ final class CalendarTool {
                 + "'calendar_member', (select count(*) from calendar_member), "
                 + "'calendar_event', (select count(*) from calendar_event), "
                 + "'app_invitation', (select count(*) from app_invitation), "
+                + "'app_registration_bootstrap', (select count(*) from app_registration_bootstrap), "
                 + "'audit_log', (select count(*) from audit_log), "
                 + "'flyway_schema_history', (select count(*) from flyway_schema_history))::text;";
         return runCommandAndCapture(
@@ -526,15 +549,110 @@ final class CalendarTool {
     private static void runEndToEndTests() throws IOException, InterruptedException {
         installPlaywrightBrowsers();
         runCommand("Playwright end-to-end tests", "mvn", "verify", "-Pe2e");
+        verifyBootstrapRegistrationConcurrency(false);
+    }
+
+    private static void verifyBootstrapRegistrationConcurrency(boolean installBrowser)
+            throws IOException, InterruptedException {
+        if (installBrowser) {
+            installPlaywrightBrowsers();
+        }
+        buildDockerImage();
+
+        String applicationPort = environmentValueOrDefault(
+                BOOTSTRAP_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE,
+                DEFAULT_BOOTSTRAP_VERIFICATION_APPLICATION_PORT);
+        String databasePort = environmentValueOrDefault(
+                BOOTSTRAP_VERIFICATION_DATABASE_PORT_ENVIRONMENT_VARIABLE,
+                DEFAULT_BOOTSTRAP_VERIFICATION_DATABASE_PORT);
+        String applicationBaseUrl = "http://localhost:" + applicationPort;
+        Map<String, String> verificationEnvironment = new HashMap<>();
+        verificationEnvironment.put(
+                BOOTSTRAP_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE,
+                applicationPort);
+        verificationEnvironment.put(
+                BOOTSTRAP_VERIFICATION_DATABASE_PORT_ENVIRONMENT_VARIABLE,
+                databasePort);
+        verificationEnvironment.put(
+                BOOTSTRAP_VERIFICATION_INVITATION_TOKEN_ENVIRONMENT_VARIABLE,
+                environmentValueOrDefault(
+                        BOOTSTRAP_VERIFICATION_INVITATION_TOKEN_ENVIRONMENT_VARIABLE,
+                        DEFAULT_BOOTSTRAP_VERIFICATION_INVITATION_TOKEN));
+        verificationEnvironment.put(
+                BOOTSTRAP_VERIFICATION_BASE_URL_ENVIRONMENT_VARIABLE,
+                applicationBaseUrl);
+
+        boolean startupAttempted = false;
+        try {
+            startupAttempted = true;
+            runCommandWithEnvironment(
+                    "Bootstrap verification application startup",
+                    verificationEnvironment,
+                    "docker",
+                    "compose",
+                    "--profile",
+                    BOOTSTRAP_VERIFICATION_PROFILE,
+                    "up",
+                    "-d",
+                    "--force-recreate",
+                    "--no-build",
+                    BOOTSTRAP_VERIFICATION_DATABASE_SERVICE_NAME,
+                    BOOTSTRAP_VERIFICATION_APPLICATION_SERVICE_NAME);
+            waitForApplication(URI.create(applicationBaseUrl + "/health"));
+            runCommandWithEnvironment(
+                    "Bootstrap registration concurrency verification",
+                    verificationEnvironment,
+                    "mvn",
+                    "-Pbootstrap-concurrency-e2e",
+                    "test-compile",
+                    "failsafe:integration-test",
+                    "failsafe:verify");
+        } catch (IOException | InterruptedException | RuntimeException exception) {
+            runCommandForExitCode(
+                    true,
+                    verificationEnvironment,
+                    "docker",
+                    "compose",
+                    "--profile",
+                    BOOTSTRAP_VERIFICATION_PROFILE,
+                    "logs",
+                    "--no-color",
+                    BOOTSTRAP_VERIFICATION_APPLICATION_SERVICE_NAME,
+                    BOOTSTRAP_VERIFICATION_DATABASE_SERVICE_NAME);
+            throw exception;
+        } finally {
+            if (startupAttempted) {
+                int cleanupExitCode = runCommandForExitCode(
+                        true,
+                        verificationEnvironment,
+                        "docker",
+                        "compose",
+                        "--profile",
+                        BOOTSTRAP_VERIFICATION_PROFILE,
+                        "rm",
+                        "--force",
+                        "--stop",
+                        BOOTSTRAP_VERIFICATION_APPLICATION_SERVICE_NAME,
+                        BOOTSTRAP_VERIFICATION_DATABASE_SERVICE_NAME);
+                if (cleanupExitCode != 0) {
+                    throw new IllegalStateException(
+                            "Bootstrap verification services did not clean up successfully.");
+                }
+            }
+        }
     }
 
     private static void waitForApplication() throws InterruptedException {
+        waitForApplication(applicationHealthUri());
+    }
+
+    private static void waitForApplication(URI healthUri) throws InterruptedException {
         long deadlineNanos = System.nanoTime() + APPLICATION_READY_TIMEOUT.toNanos();
         Exception lastHealthCheckFailure = null;
 
         while (System.nanoTime() < deadlineNanos) {
             try {
-                checkApplicationHealth();
+                checkApplicationHealth(healthUri);
                 return;
             } catch (IOException | IllegalStateException exception) {
                 lastHealthCheckFailure = exception;
@@ -644,7 +762,10 @@ final class CalendarTool {
     }
 
     private static void checkApplicationHealth() throws IOException, InterruptedException {
-        URI healthUri = applicationHealthUri();
+        checkApplicationHealth(applicationHealthUri());
+    }
+
+    private static void checkApplicationHealth(URI healthUri) throws IOException, InterruptedException {
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
                 .build();
@@ -730,6 +851,16 @@ final class CalendarTool {
         }
     }
 
+    private static void runCommandWithEnvironment(
+            String description,
+            Map<String, String> environment,
+            String... command) throws IOException, InterruptedException {
+        int exitCode = runCommandForExitCode(true, environment, command);
+        if (exitCode != 0) {
+            throw new IllegalStateException(description + " failed with exit code " + exitCode + ".");
+        }
+    }
+
     private static void runCommandToFile(
             String description,
             Path outputPath,
@@ -776,7 +907,15 @@ final class CalendarTool {
 
     private static int runCommandForExitCode(boolean inheritOutput, String... command)
             throws IOException, InterruptedException {
+        return runCommandForExitCode(inheritOutput, Map.of(), command);
+    }
+
+    private static int runCommandForExitCode(
+            boolean inheritOutput,
+            Map<String, String> environment,
+            String... command) throws IOException, InterruptedException {
         ProcessBuilder processBuilder = commandProcessBuilder(command);
+        processBuilder.environment().putAll(environment);
 
         if (inheritOutput) {
             processBuilder.inheritIO();
@@ -826,7 +965,8 @@ final class CalendarTool {
         System.err.println("Usage: " + executableName + " <command> [arguments]");
         System.err.println(
                 "Commands: check-toolchain, prepare-liberty-dev, setup, db, dev, package, install-playwright, e2e, "
-                        + "wait-for-app, verify-local, verify-running-app, docker-build, docker-up, backup-postgres "
+                        + "verify-bootstrap-registration, wait-for-app, verify-local, verify-running-app, "
+                        + "docker-build, docker-up, backup-postgres "
                         + "[output-file], restore-postgres <backup-file> <confirmed-database-name>, verify-backup-restore");
     }
 

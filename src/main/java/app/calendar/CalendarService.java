@@ -2,6 +2,7 @@ package app.calendar;
 
 import app.audit.AuditService;
 import app.config.CalendarConfiguration;
+import app.event.CalendarEvent;
 import app.membership.CalendarAccessService;
 import app.membership.CalendarMember;
 import app.membership.CalendarRole;
@@ -15,6 +16,7 @@ import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PersistenceContext;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -155,12 +157,40 @@ public class CalendarService {
                 "Time zone is required.",
                 MAXIMUM_TIME_ZONE_LENGTH,
                 "Time zone must be 80 characters or fewer.");
-        calendar.setTimeZone(calendarTimeService.normalizeTimeZone(normalizedTimeZone));
+        String validatedTimeZone = calendarTimeService.normalizeTimeZone(normalizedTimeZone);
+        preserveAllDayEventDatesWhenTimeZoneChanges(calendar, validatedTimeZone);
+        calendar.setTimeZone(validatedTimeZone);
         calendar.setPublicAccessEnabled(publicAccessEnabled);
         calendar.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
         auditService.record(actingUser, calendar, "calendar", calendar.getId(), "settings_updated", "Calendar settings updated.");
         flushWithConflictMessage();
         return calendar;
+    }
+
+    private void preserveAllDayEventDatesWhenTimeZoneChanges(Calendar calendar, String newTimeZone) {
+        String previousTimeZone = calendar.getTimeZone();
+        if (newTimeZone.equals(previousTimeZone)) {
+            return;
+        }
+
+        List<CalendarEvent> allDayEvents = entityManager
+                .createQuery(
+                        "select calendarEvent from CalendarEvent calendarEvent "
+                                + "where calendarEvent.calendar.id = :calendarId "
+                                + "and calendarEvent.allDay = true",
+                        CalendarEvent.class)
+                .setParameter("calendarId", calendar.getId())
+                .getResultList();
+        for (CalendarEvent allDayEvent : allDayEvents) {
+            LocalDate firstDay = calendarTimeService
+                    .toCalendarTime(allDayEvent.getStartTime(), previousTimeZone)
+                    .toLocalDate();
+            LocalDate exclusiveEndDay = calendarTimeService
+                    .toCalendarTime(allDayEvent.getEndTime(), previousTimeZone)
+                    .toLocalDate();
+            allDayEvent.setStartTime(calendarTimeService.toStoredStartOfDay(firstDay, newTimeZone));
+            allDayEvent.setEndTime(calendarTimeService.toStoredStartOfDay(exclusiveEndDay, newTimeZone));
+        }
     }
 
     private void requireExpectedVersion(Calendar calendar, Integer expectedVersion) {

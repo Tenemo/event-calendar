@@ -245,4 +245,4 @@ public class HealthServlet extends HttpServlet {
 }
 ```
 
-Do not require database access for `/health`. This is a liveness check.
+At the foundation stage, `/health` can prove only that the web application responds. The completed application must make this endpoint database-aware so deployment health checks fail after database connectivity is lost.

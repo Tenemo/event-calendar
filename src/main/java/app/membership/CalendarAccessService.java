@@ -27,6 +27,7 @@ public class CalendarAccessService {
                                     + "where calendarMember.user.id = :userId "
                                     + "and calendarMember.calendar.id = :calendarId "
                                     + "and calendarMember.active = true "
+                                    + "and calendarMember.user.active = true "
                                     + "and calendarMember.calendar.active = true",
                             CalendarRole.class)
                     .setParameter("userId", user.getId())

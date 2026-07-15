@@ -19,9 +19,10 @@ Shared calendar is a server-rendered web application for event calendars shared 
 - Every registered user can create multiple calendars.
 - A calendar creator receives that calendar's `ADMIN` role.
 - Calendar roles are scoped to one calendar: `VIEWER`, `EDITOR`, and `ADMIN`.
+- Calendar invitations grant `EDITOR` only. There is no viewer-invitation flow; public links are the read-only sharing mechanism.
 - Calendars are public by default through long, random, unguessable bearer links.
 - Public links are read-only and marked `noindex, nofollow`.
-- Events support titles, locations, descriptions, all-day dates, and timed date ranges.
+- Events support titles, locations, descriptions, inclusive all-day date ranges, and timed date ranges. All-day dates are normalized in the calendar's IANA time zone instead of assuming every day is 24 hours.
 - Recurrence, notifications, email delivery, ICS import/export, and native mobile apps are outside the current scope.
 
 ## Local development
@@ -35,7 +36,7 @@ mise run db
 mise run dev
 ```
 
-The application listens on `http://localhost:9080` by default. Its liveness endpoint is `http://localhost:9080/health` and returns `ok`.
+The application listens on `http://localhost:9080` by default. Its database-aware health endpoint is `http://localhost:9080/health`. It returns `200 ok` only when PostgreSQL is reachable and `503 unavailable` otherwise.
 
 Jakarta Faces extensionless routing is enabled. Browser-facing routes include `/login`, `/register`, `/app/calendars`, `/app/calendar`, `/app/calendar-members`, `/app/calendar-settings`, and `/app/invitations`. Public calendars use `/calendar/{publicToken}`. The `.xhtml` files are internal templates, not canonical browser URLs.
 
@@ -55,7 +56,7 @@ Copy `.env.example` to `.env` for local development. Do not commit `.env`.
 | `PGPASSWORD` | `calendar` | PostgreSQL password. Use a generated secret outside local development. |
 | `APP_TIMEZONE` | `Europe/Warsaw` | Default IANA time zone assigned to new calendars. |
 | `APP_BASE_URL` | `http://localhost:9080` | Canonical external base URL used for invitation and public-calendar links. |
-| `APP_BOOTSTRAP_INVITE_TOKEN` | blank | Optional one-time admission secret for creating the first account on an empty database. |
+| `APP_BOOTSTRAP_INVITE_TOKEN` | blank | Optional one-time admission secret for creating the first account on a database that has never contained an account. |
 
 `APP_TIMEZONE` must be a valid IANA time zone. Invalid values stop application startup.
 
@@ -65,7 +66,7 @@ Copy `.env.example` to `.env` for local development. Do not commit `.env`.
 
 ## Database migrations
 
-Flyway runs during application startup and owns the database schema. The application fails startup when a migration cannot be applied. Host-installed PostgreSQL client programs are not required.
+Flyway runs during application startup and owns the database schema. The application fails startup when a migration cannot be applied. The current schema is migration version 7. Host-installed PostgreSQL client programs are not required.
 
 Start and inspect the local database with:
 
@@ -90,7 +91,13 @@ mise run install-playwright
 mise run e2e
 ```
 
-The end-to-end suite covers registration, login, logout, calendar creation, event creation/editing/deletion, public links, token rotation, invitation acceptance, member roles, last-admin protection, validation, and read-only viewer behavior.
+The automated suite contains 118 unit tests and 18 primary browser scenarios covering registration, login, logout, calendar creation, event creation/editing/deletion, public links, token rotation, invitation acceptance, member roles, last-admin protection, validation, and read-only viewer behavior. One additional isolated browser scenario builds the production image and verifies bootstrap-registration rollback and concurrency against a separate application container and tmpfs PostgreSQL database on non-default ports.
+
+Run only the isolated bootstrap-registration verification with:
+
+```bash
+mise run verify-bootstrap-registration
+```
 
 Production packaging and recovery have separate checks:
 
@@ -149,7 +156,7 @@ curl --fail http://localhost:9080/health
 Railway deployment is a manual production operation. Use one project with a PostgreSQL service named `Postgres` and a web service named `shared-calendar-web`.
 
 1. Connect `shared-calendar-web` to this repository and use the root `Dockerfile`.
-2. Keep one web replica. The application currently uses in-memory HTTP sessions.
+2. Keep one web replica. Authenticated cookies and inactivity timeouts roll for 30 days, but the underlying HTTP sessions remain in memory.
 3. Set the health-check path to `/health`.
 4. Let Railway inject `PORT`; the container binds it on all interfaces.
 5. Add the PostgreSQL references and application variables below.
@@ -170,7 +177,7 @@ APP_BASE_URL=https://calendar.example.com
 APP_BOOTSTRAP_INVITE_TOKEN=
 ```
 
-After deployment, verify `/health`, registration, login, public links, invitations, role changes, event persistence, and login persistence across a redeploy. Inspect logs to confirm that passwords, database credentials, public tokens, and invitation tokens are absent.
+After deployment, verify `/health`, registration, login, public links, invitations, role changes, and event persistence. Redeploy, confirm that accounts and calendar data persist, then sign in again because HTTP sessions are intentionally in memory. Inspect logs to confirm that passwords, database credentials, public tokens, and invitation tokens are absent.
 
 ## Registration
 
@@ -180,9 +187,13 @@ Registration requires an unused, unrevoked invitation token. On a brand-new empt
 /register?token=the-random-value
 ```
 
-After the first account is created, clear `APP_BOOTSTRAP_INVITE_TOKEN` and restart or redeploy the application. The normal registration path uses single-use links created from `/app/invitations`.
+After the first account is created, clear `APP_BOOTSTRAP_INVITE_TOKEN` and restart or redeploy the application. Bootstrap admission is claimed in the same database transaction as registration: a failed registration rolls the claim back, while the first successful registration consumes it atomically and permanently. Concurrent attempts cannot create more than one first account, and deactivating every account does not enable bootstrap again. The normal registration path uses single-use links created from `/app/invitations`.
 
 Passwords must be between 14 and 512 characters, nonblank, and different from the username. They are stored as PBKDF2-HMAC-SHA256 hashes with 600,000 iterations, a 32-byte salt, and a 32-byte derived key. Plaintext passwords are never stored.
+
+Five failed sign-in attempts for one normalized username from one client source within 15 minutes block that username/source pair for 15 minutes. Twenty-five failures from one source in the same window block further attempts from that source for 15 minutes, which limits username spraying without letting one remote client lock the account for other sources. Missing and existing usernames follow the same policy and return the same generic failure.
+
+Authenticated sessions use an HTTP-only, SameSite `Lax` cookie that is secure when `COOKIE_SECURE=true`. Authenticated app requests refresh the persistent cookie's rolling 30-day lifetime, and the server invalidates a session after 30 days of inactivity. A server restart or redeploy clears in-memory sessions and requires reauthentication, while accounts and calendar data remain in PostgreSQL.
 
 ## Calendar roles
 
@@ -192,17 +203,27 @@ Passwords must be between 14 and 512 characters, nonblank, and different from th
 
 Role checks are enforced by services, not only by hidden UI controls. Every active calendar must retain at least one active admin. An admin cannot demote or remove their own membership; another admin must perform that change.
 
+There are no viewer invitations. Admins can assign the existing `VIEWER` membership role directly when needed, while the supported link-based read-only sharing flow is the public calendar link.
+
+`VIEWER` is for identity-bound read-only access: the person must sign in, the calendar appears in their account, and an admin can remove only that person's access without changing the public link for everyone else. A public link is anonymous bearer access for anyone who receives it. Because invitations grant only `EDITOR`, a person can become a `VIEWER` only after an admin changes an existing calendar membership to that role.
+
+## Event times
+
+Timed events are entered in the calendar's IANA time zone and stored with their actual UTC offsets. Nonexistent or ambiguous local times at daylight-saving transitions are rejected instead of being guessed.
+
+For all-day events, the first and last dates shown in the form are both inclusive. Persistence uses a start-inclusive, end-exclusive range from the first day's calendar-local start to the calendar-local start of the day after the last date. This preserves the intended civil dates across short, long, skipped, and repeated days, and changing a calendar's time zone renormalizes existing all-day boundaries without changing the displayed dates.
+
 ## Public calendar links
 
 New calendars have public access enabled and receive a random bearer token. Anyone with `/calendar/{publicToken}` can view the calendar without signing in, so the URL should be treated as a secret.
 
-Public pages are read-only and return a generic `404` for invalid, disabled, or rotated tokens. Rotating a public link immediately invalidates the previous URL. Disabling public access preserves the token but makes the public route unavailable until access is re-enabled.
+Public pages are read-only and return a generic `404` for invalid, disabled, or rotated tokens. Rotating a public link immediately invalidates the previous URL. Disabling public access preserves the token but makes the public route unavailable until access is re-enabled. Both operations leave authenticated memberships unchanged and never expose public mutation access.
 
 ## Invitations
 
-Signed-in users can create registration invitations. Calendar editors and admins can create editor invitations that also grant `EDITOR` membership on a selected calendar.
+Signed-in users can create registration invitations. Calendar editors and admins can create editor invitations that grant `EDITOR` membership on a selected calendar. Invitations never grant `VIEWER`.
 
-Invitation links are single-use bearer secrets. They can be revoked by their creator while unused. A new user registers through the link; an existing user signs in and explicitly accepts it. Tokens are not written to application logs.
+Invitation links are single-use bearer secrets and expire after seven days. Their creator can revoke them while unused; a calendar admin can also list and revoke unused editor invitations for that calendar. Every invitation stops working if its creator's account becomes inactive, and an editor invitation also stops working if its creator loses permission to edit that calendar. Acceptance revalidates those permissions and serializes concurrent claims, so one invitation can be consumed by exactly one account. A new user registers through the link; an existing user signs in and explicitly accepts it. Tokens are not written to application logs.
 
 ## Backup and restore
 
@@ -273,6 +294,6 @@ Use a database endpoint reachable from Docker, not a provider-private hostname. 
 
 - Railway deployment, generated-domain checks, custom-domain DNS, and production redeploy persistence must be completed as a separate operational step.
 - Backups are manual; there is no scheduled backup service or retention policy yet.
-- Run one application instance because HTTP sessions are in memory.
-- Password change, account recovery, and login throttling are not implemented.
+- Run one application instance because HTTP sessions are in memory, even though active authenticated cookies and inactivity timeouts roll for 30 days.
+- Password change and account recovery are not implemented.
 - Recurring events, notifications, email delivery, ICS import/export, and native mobile apps are intentionally out of scope.

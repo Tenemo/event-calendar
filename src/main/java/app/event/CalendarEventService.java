@@ -3,6 +3,7 @@ package app.event;
 import app.audit.AuditService;
 import app.calendar.Calendar;
 import app.calendar.CalendarService;
+import app.calendar.CalendarTimeService;
 import app.membership.CalendarAccessService;
 import app.user.ApplicationUser;
 import app.util.ConflictException;
@@ -14,6 +15,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -31,6 +33,9 @@ public class CalendarEventService {
 
     @Inject
     private CalendarService calendarService;
+
+    @Inject
+    private CalendarTimeService calendarTimeService;
 
     @Inject
     private AuditService auditService;
@@ -64,17 +69,18 @@ public class CalendarEventService {
                 location,
                 MAXIMUM_EVENT_LOCATION_LENGTH,
                 "Event location must be 200 characters or fewer.");
-        validateEventTimes(startTime, endTime);
+        validateTimedEventTimesWhenApplicable(startTime, endTime, allDay);
 
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         Calendar calendar = calendarService.requireActiveCalendar(calendarId);
+        EventTimeRange normalizedTimeRange = normalizeEventTimes(calendar, startTime, endTime, allDay);
         CalendarEvent event = new CalendarEvent();
         event.setCalendar(calendar);
         event.setTitle(normalizedTitle);
         event.setDescription(normalizeOptionalText(description));
         event.setLocation(normalizedLocation);
-        event.setStartTime(startTime);
-        event.setEndTime(endTime);
+        event.setStartTime(normalizedTimeRange.startTime());
+        event.setEndTime(normalizedTimeRange.endTime());
         event.setAllDay(allDay);
         event.setCreatedByUser(actingUser);
         event.setUpdatedByUser(actingUser);
@@ -108,13 +114,14 @@ public class CalendarEventService {
                 location,
                 MAXIMUM_EVENT_LOCATION_LENGTH,
                 "Event location must be 200 characters or fewer.");
-        validateEventTimes(startTime, endTime);
+        validateTimedEventTimesWhenApplicable(startTime, endTime, allDay);
+        EventTimeRange normalizedTimeRange = normalizeEventTimes(event.getCalendar(), startTime, endTime, allDay);
 
         event.setTitle(normalizedTitle);
         event.setDescription(normalizeOptionalText(description));
         event.setLocation(normalizedLocation);
-        event.setStartTime(startTime);
-        event.setEndTime(endTime);
+        event.setStartTime(normalizedTimeRange.startTime());
+        event.setEndTime(normalizedTimeRange.endTime());
         event.setAllDay(allDay);
         event.setUpdatedByUser(actingUser);
         event.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
@@ -132,7 +139,20 @@ public class CalendarEventService {
         flushWithConflictMessage();
     }
 
-    private void validateEventTimes(OffsetDateTime startTime, OffsetDateTime endTime) {
+    private void validateTimedEventTimesWhenApplicable(
+            OffsetDateTime startTime,
+            OffsetDateTime endTime,
+            boolean allDay) {
+        if (allDay) {
+            if (startTime == null) {
+                throw new ValidationException("Event first day is required.");
+            }
+            if (endTime == null) {
+                throw new ValidationException("Event last day is required.");
+            }
+            return;
+        }
+
         if (startTime == null) {
             throw new ValidationException("Event start time is required.");
         }
@@ -142,6 +162,27 @@ public class CalendarEventService {
         if (!endTime.isAfter(startTime)) {
             throw new ValidationException("Event end time must be after the start time.");
         }
+    }
+
+    private EventTimeRange normalizeEventTimes(
+            Calendar calendar,
+            OffsetDateTime startTime,
+            OffsetDateTime endTime,
+            boolean allDay) {
+        if (!allDay) {
+            return new EventTimeRange(startTime, endTime);
+        }
+
+        String timeZone = calendar.getTimeZone();
+        LocalDate firstDay = calendarTimeService.toCalendarTime(startTime, timeZone).toLocalDate();
+        LocalDate lastDay = calendarTimeService.toCalendarTime(endTime, timeZone).toLocalDate();
+        if (lastDay.isBefore(firstDay)) {
+            throw new ValidationException("Event last day must be on or after the first day.");
+        }
+
+        return new EventTimeRange(
+                calendarTimeService.toStoredStartOfDay(firstDay, timeZone),
+                calendarTimeService.toStoredStartOfDay(lastDay.plusDays(1), timeZone));
     }
 
     private String normalizeRequiredText(String value, String blankMessage, int maximumLength, String lengthMessage) {
@@ -217,5 +258,8 @@ public class CalendarEventService {
             throw new ValidationException(lengthMessage);
         }
         return normalizedValue;
+    }
+
+    private record EventTimeRange(OffsetDateTime startTime, OffsetDateTime endTime) {
     }
 }

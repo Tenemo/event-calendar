@@ -27,7 +27,7 @@ public class RegistrationService {
             String displayName,
             String password,
             String initialCalendarName) {
-        RegistrationAdmission admission = invitationService.requireAdmission(invitationToken);
+        RegistrationAdmission admission = invitationService.requireRegistrationAdmission(invitationToken);
         ApplicationUser user = userService.createUser(username, displayName, password);
         Calendar calendar = calendarService.createCalendar(user, initialCalendarName);
         invitationService.acceptAdmission(admission, user);

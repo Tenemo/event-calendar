@@ -4,7 +4,7 @@ Use this milestone to make the app packageable, deployable, recoverable, documen
 
 ## Implementation status
 
-The repository implementation was completed and locally verified on 2026-07-10. Railway project creation, deployment, generated-domain validation, custom-domain DNS, HTTPS validation, and persistence checks across a real production redeploy are explicitly deferred to a separate operational task.
+The repository implementation was completed and locally verified on 2026-07-15. Railway project creation, deployment, generated-domain validation, custom-domain DNS, HTTPS validation, and persistence checks across a real production redeploy are explicitly deferred to a separate operational task.
 
 Implemented repository deliverables:
 
@@ -15,6 +15,10 @@ Implemented repository deliverables:
 5. Fresh tmpfs PostgreSQL restore-verification service with schema and row-count comparison.
 6. Maven, database-backed browser tests, production container smoke, Dependency Review, and CodeQL configuration.
 7. Complete public operating runbook in `README.md`.
+8. Database-aware readiness with bounded connection acquisition, source-aware login throttling, and rolling 30-day authenticated session cookies and inactivity handling.
+9. Seven-day editor-only calendar invitations with creator permission revalidation, calendar-admin visibility/revocation, and serialized single-use acceptance.
+10. Permanent transactional bootstrap admission with an isolated real-PostgreSQL rollback and concurrency verifier.
+11. Inclusive all-day date handling backed by exclusive, calendar-time-zone-normalized storage across daylight-saving transitions and Java-only time zones.
 
 Local verification evidence:
 
@@ -22,11 +26,13 @@ Local verification evidence:
 2. The production container ran on local port `9082` with `COOKIE_SECURE=false` and returned `200 ok` from `/health`.
 3. The runtime image contained the WAR and PostgreSQL driver but no Maven installation or build source directory.
 4. Liberty emitted JSON console logs without passwords, public tokens, or invitation tokens.
-5. Flyway migrations 1 through 4 were present and successful.
+5. Flyway migrations 1 through 7 were present and successful.
 6. Invalid public calendar routes returned `404` and included `noindex`.
-7. The local session cookie was `HttpOnly`, `SameSite=Lax`, and correctly omitted `Secure` for HTTP.
+7. The local authenticated session cookie was `HttpOnly`, `SameSite=Lax`, correctly omitted `Secure` for HTTP, refreshed with a rolling 30-day lifetime, and matched the 30-day inactivity timeout.
 8. `mise run verify-backup-restore` restored a custom-format dump into a fresh tmpfs PostgreSQL service and matched all application-table and Flyway-history row counts.
-9. `mise run e2e` against the production container passed 69 unit tests and all 4 browser workflows.
+9. `mise run package` passed 118 unit tests, and the primary Playwright suite passed all 18 browser scenarios.
+10. `mise run verify-bootstrap-registration` passed one isolated real-PostgreSQL browser scenario proving failed-claim rollback and exactly-one-account behavior under concurrent bootstrap registration.
+11. Browser and focused tests verified seven-day invitation expiry, rejection after creator deactivation, editor-only scope, creator permission revalidation, administrator visibility/revocation, serialized acceptance, source-aware login throttling, database-aware health, rolling sessions, and inclusive all-day dates with exclusive normalized storage.
 
 ## Milestone checklist
 
@@ -35,6 +41,7 @@ Outcome: the repository is packaged, Railway-deployable, recoverable from backup
 - [x] Build the production Docker image.
 - [x] Run the app container locally against Dockerized PostgreSQL.
 - [x] Confirm health, registration, login, calendar creation, public links, invite links, event CRUD, member management, environment variables, and `COOKIE_SECURE=false` locally.
+- [x] Confirm database-unavailable health behavior, login throttling, rolling session behavior, invitation authorization/concurrency, permanent bootstrap admission, and all-day daylight-saving normalization.
 - [x] Add Dockerized backup and restore commands.
 - [x] Test backup and restore against a fresh local Docker Compose database.
 - [ ] Create the Railway project, PostgreSQL service, and web service. Deferred by the owner.
@@ -52,6 +59,7 @@ mise run docker-build
 mise run docker-up
 mise run verify-backup-restore
 mise run e2e
+mise run verify-bootstrap-registration
 ```
 
 ## Acceptance status
@@ -65,8 +73,12 @@ mise run e2e
 | Dockerized backup and restore work without host PostgreSQL clients | Verified locally |
 | Railway health and custom HTTPS domain | Deferred |
 | Invitation-only registration and links in production | Deferred; verified in the local production container |
-| Login, public links, invite links, and events persist after redeploy | Deferred |
+| Accounts, public links, invite links, and events persist after redeploy; in-memory sessions require reauthentication | Deferred |
 | Railway logs exclude passwords and bearer tokens | Deferred; verified in local production-container logs |
+| Database-aware health, bounded database acquisition, login throttling, and rolling 30-day session behavior | Verified locally |
+| Seven-day editor-only invitations, creator revalidation, admin revocation, and serialized acceptance | Verified locally |
+| Atomic permanent bootstrap with failed-registration rollback and real PostgreSQL concurrency | Verified in an isolated production-container scenario |
+| Inclusive all-day dates with exclusive calendar-zone-normalized storage | Verified across daylight-saving and Java-only time-zone cases |
 | README contains the complete operating runbook | Implemented |
 | PR definitions cover build, database/browser tests, container smoke, and security checks | Implemented; remote workflow execution pending push |
 
@@ -92,11 +104,12 @@ The PR workflow now provides:
 
 1. Maven Wrapper clean test and package build.
 2. PrimeFaces Jakarta classifier assertion.
-3. PostgreSQL-backed Liberty and Playwright workflows.
-4. Production Docker image build and container smoke against PostgreSQL.
-5. Health, home, invalid-public-route, and Flyway checks on the production container.
-6. Dependency Review for pull requests, failing on new moderate-or-higher vulnerable dependencies.
-7. CodeQL Java analysis on pull requests, pushes to `master`, and a weekly schedule.
+3. PostgreSQL-backed Liberty and 18 primary Playwright scenarios.
+4. One isolated real-PostgreSQL bootstrap rollback and concurrency scenario against a separate production container and tmpfs database.
+5. Production Docker image build and container smoke against PostgreSQL.
+6. Database-aware health, home, invalid-public-route, and Flyway 1-through-7 checks on the production container.
+7. Dependency Review for pull requests, failing on new moderate-or-higher vulnerable dependencies.
+8. CodeQL Java analysis on pull requests, pushes to `master`, and a weekly schedule.
 
 PR workflows do not deploy to Railway and do not require Railway secrets.
 
@@ -186,6 +199,7 @@ README must include:
 ## Deploying to Railway
 ## Registration
 ## Calendar roles
+## Event times
 ## Public calendar links
 ## Invitations
 ## Backup and restore
@@ -220,7 +234,7 @@ Likely causes:
 1. Cookie settings.
 2. `COOKIE_SECURE` wrong for environment.
 3. Domain/HTTPS mismatch.
-4. Session lost after redeploy.
+4. In-memory session lost after redeploy; sign in again even though the authenticated cookie and inactivity window normally roll for 30 days.
 
 ### Public link does not work
 

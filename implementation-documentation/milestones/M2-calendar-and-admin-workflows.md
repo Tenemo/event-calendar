@@ -8,12 +8,13 @@ Use this milestone to build the real user-facing workflows on top of the M1 serv
 
 1. Public calendars use `/calendar/{publicToken}`, return generic 404 pages for invalid or disabled tokens, and include `noindex, nofollow`.
 2. Authenticated calendar pages render persisted events in the calendar timezone and expose create, edit, and delete actions only to editors and admins.
-3. Calendar-local input is converted to offset-aware storage, with invalid and ambiguous daylight-saving times rejected.
+3. Calendar-local timed input is converted to offset-aware storage, with invalid and ambiguous daylight-saving times rejected. Inclusive all-day form dates use calendar-local start boundaries and an exclusive stored end on the following day, including across daylight-saving transitions and Java-only time zones.
 4. Event and calendar writes compare entity versions and translate optimistic-lock failures into user-readable reload messages.
 5. Calendar settings cover name, description, IANA timezone, public access, and audited public-token rotation.
 6. Member administration covers role changes, reactivation, access removal, audit logging, and service-level last-admin protection.
-7. App-only and calendar-editor invitations can be revoked while unused and accepted by either new or existing users.
-8. The Playwright suite exercises the stable routes and complete invitation, calendar, event, public-link, and role workflows against PostgreSQL and Liberty.
+7. App-only and calendar-editor invitations expire after seven days and can be accepted by either new or existing users. Creators can revoke unused links; calendar admins can list and revoke unused editor links; creator permission is revalidated during serialized acceptance.
+8. Public access can be disabled and re-enabled without losing its bearer token, while rotation immediately invalidates the previous URL; every public state remains read-only.
+9. The Playwright suite exercises the stable routes and complete invitation, calendar, event, public-link, role, session, concurrency, and accessibility workflows against PostgreSQL and Liberty.
 
 ## Milestone checklist
 
@@ -60,6 +61,9 @@ Manual role checks:
 11. `ADMIN` member can change member roles.
 12. Last calendar admin cannot be disabled or demoted.
 13. Service methods reject unauthorized mutations even if UI controls are manually triggered.
+14. Calendar admin can see and revoke another creator's unused editor invitation.
+15. Removing an editor's access invalidates editor invitations they previously created.
+16. Disabling or rotating public access makes the affected public URL return a generic not-found response without affecting authenticated access.
 
 Acceptance criteria:
 
@@ -75,6 +79,8 @@ Acceptance criteria:
 10. Last-admin protection is enforced in the service layer.
 11. The UI is responsive and uses the flat design system from M0.
 12. App-smoke CI covers health and stable route-level behavior without brittle sleeps or flaky browser automation.
+13. All-day first and last form dates remain inclusive while stored end boundaries are exclusive and normalized in the calendar time zone.
+14. Concurrent acceptance of one invitation has exactly one winner, and concurrent distinct invitations do not create duplicate memberships.
 
 ## JSF / PrimeFaces UI plan
 
@@ -152,6 +158,7 @@ Responsibilities:
 3. Let editors/admins create/edit/delete events.
 4. Hide edit controls for public visitors.
 5. Still rely on service-layer security for enforcement.
+6. Show inclusive first and last date inputs for all-day events while services store exclusive calendar-local end boundaries.
 
 The exact PrimeFaces schedule model API can change across versions. Check the PrimeFaces 15 showcase/API and adapt the Java code accordingly.
 
@@ -165,6 +172,7 @@ Calendar admins can:
 2. Change member roles.
 3. Disable member access.
 4. See active/inactive state.
+5. See and revoke unused editor invitations for the calendar, including invitations created by another editor.
 
 Use PrimeFaces components:
 
@@ -182,13 +190,16 @@ Do not build email delivery. Invite links are copied manually.
 
 ### App invitations page
 
-Create `app/invitations.xhtml` and `invitation/AppInvitationView.java`.
+Create `app/invitations.xhtml` and `invitation/InvitationView.java`.
 
 Signed-in users can:
 
 1. Generate app-only invitation links.
 2. Generate editor invitation links for calendars where they have `EDITOR` or `ADMIN`.
 3. Revoke their own unused invitation links.
+4. See seven-day expiry and current invitation status.
+
+Calendar admins also see unused editor invitations for calendars they administer and can revoke them. Every invitation stops working when its creator's account becomes inactive. Calendar editor invitations never grant `VIEWER`, also stop working when their creator loses edit permission, and serialize acceptance so only one account can consume a link.
 
 Do not build email delivery. Invitation links are copied manually.
 
@@ -204,7 +215,7 @@ Calendar admins can:
 4. Enable or disable public link access.
 5. Rotate the public link.
 
-Rotating the public link invalidates the previous public URL and must be audited.
+Disabling public access preserves the token for safe re-enablement while returning a generic not-found response publicly. Rotating the public link invalidates the previous public URL immediately. Both changes must be audited and cannot expose mutation controls.
 
 ## GitHub PR checks after M2
 

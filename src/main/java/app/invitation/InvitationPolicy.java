@@ -4,10 +4,13 @@ import app.calendar.Calendar;
 import app.membership.CalendarRole;
 import app.util.ValidationException;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 
 @ApplicationScoped
 public class InvitationPolicy {
+    private static final Duration DEFAULT_VALIDITY = Duration.ofDays(7);
+
     public void requireValidScope(Calendar calendar, CalendarRole role) {
         if (calendar == null && role == null) {
             return;
@@ -26,6 +29,10 @@ public class InvitationPolicy {
             case AVAILABLE -> {
             }
         }
+    }
+
+    public OffsetDateTime resolveExpiration(OffsetDateTime requestedExpiration, OffsetDateTime createdAt) {
+        return requestedExpiration == null ? createdAt.plus(DEFAULT_VALIDITY) : requestedExpiration;
     }
 
     public InvitationStatus status(

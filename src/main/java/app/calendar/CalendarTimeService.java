@@ -3,10 +3,12 @@ package app.calendar;
 import app.util.ValidationException;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.time.DateTimeException;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.List;
 
 @ApplicationScoped
@@ -38,6 +40,19 @@ public class CalendarTimeService {
             throw new ValidationException("The selected time occurs twice in the calendar time zone because of a clock change. Choose another time.");
         }
         return OffsetDateTime.of(localDateTime, validOffsets.getFirst());
+    }
+
+    public OffsetDateTime toStoredStartOfDay(LocalDate calendarDate, String timeZone) {
+        if (calendarDate == null) {
+            return null;
+        }
+
+        ZoneId zoneId = ZoneId.of(normalizeTimeZone(timeZone));
+        ZonedDateTime startOfDay = calendarDate.atStartOfDay(zoneId);
+        if (!startOfDay.toLocalDate().equals(calendarDate)) {
+            throw new ValidationException("The selected date does not exist in the calendar time zone because of a clock change.");
+        }
+        return startOfDay.toOffsetDateTime();
     }
 
     public LocalDateTime toCalendarTime(OffsetDateTime storedTime, String timeZone) {

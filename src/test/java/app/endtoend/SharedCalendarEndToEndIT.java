@@ -13,6 +13,7 @@ import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
+import com.microsoft.playwright.Response;
 import com.microsoft.playwright.assertions.LocatorAssertions;
 import com.microsoft.playwright.options.ReducedMotion;
 import java.io.IOException;
@@ -98,7 +99,10 @@ final class SharedCalendarEndToEndIT {
             assertEquals("Sign in", page.locator("h1").textContent().trim());
             assertBodyContains(page, "Sign-in failed.");
 
+            String unauthenticatedSessionIdentifier = requiredSessionCookieValue(browserContext);
             signIn(page, ownerUsername, TEST_PASSWORD);
+            assertNotEquals(unauthenticatedSessionIdentifier, requiredSessionCookieValue(browserContext));
+            assertRollingSessionCookie(page.navigate(route("/app/calendars")));
             createCalendar(page, firstCalendarName);
             createCalendar(page, secondCalendarName);
             assertBodyContains(page, firstCalendarName);
@@ -154,6 +158,7 @@ final class SharedCalendarEndToEndIT {
             page.locator("button:has-text('Register')").click();
             assertBodyContains(page, "Invitation is invalid or no longer available.");
 
+            String preregistrationSessionIdentifier = requiredSessionCookieValue(browserContext);
             registerNewUser(
                     page,
                     registrationInvitationLink,
@@ -161,6 +166,7 @@ final class SharedCalendarEndToEndIT {
                     "Registration user " + uniqueSuffix,
                     registrationCalendarName,
                     password);
+            assertNotEquals(preregistrationSessionIdentifier, requiredSessionCookieValue(browserContext));
             assertBodyContains(page, registrationCalendarName);
             assertFalse(
                     page.locator("body").innerText().contains(ownerCalendarName),
@@ -188,7 +194,7 @@ final class SharedCalendarEndToEndIT {
 
             page.navigate(editorInvitationLink);
             page.locator("button:has-text('Accept invitation')").click();
-            assertBodyContains(page, "Invitation is already accepted.");
+            assertBodyContains(page, "Invitation is invalid or no longer available.");
             assertNoBrowserMessages(browserMessages);
         }
     }
@@ -254,10 +260,15 @@ final class SharedCalendarEndToEndIT {
             page.locator("button:has-text('Save settings')").click();
             assertBodyContains(page, "Time zone must be a valid region such as Europe/Warsaw.");
             String calendarDescription = "Summer river plans " + uniqueSuffix;
-            page.locator("input[id$='timeZone']").fill("Europe/Warsaw");
+            page.locator("input[id$='timeZone']").fill("America/New_York");
             page.locator("textarea[id$='calendarDescription']").fill(calendarDescription);
             page.locator("button:has-text('Save settings')").click();
             assertBodyContains(page, "Calendar settings saved.");
+            page.locator("a:has-text('Back to calendar')").click();
+            assertThat(page.locator("article", new Page.LocatorOptions().setHasText(allDayEventTitle)))
+                    .containsText("All day from Wed, Jul 22, 2026 to Fri, Jul 24, 2026");
+            assertThat(page.locator("article", new Page.LocatorOptions().setHasText(eventTitle + " updated")))
+                    .containsText("Mon, Jul 20, 2026 at 04:00 to Mon, Jul 20, 2026 at 06:00");
             page.reload();
             assertBodyContains(page, calendarDescription);
             assertNoBrowserMessages(browserMessages);
@@ -453,7 +464,7 @@ final class SharedCalendarEndToEndIT {
             calendarId = requiredQueryParameter(setupPage.url(), "id");
             enterEvent(setupPage, eventTitle, null, "2026-10-01 10:00", "2026-10-01 11:00", false);
             String editorInvitationLink = createEditorInvitation(setupPage, calendarName);
-            String viewerInvitationLink = createEditorInvitation(setupPage, calendarName);
+            String secondEditorInvitationLink = createEditorInvitation(setupPage, calendarName);
             signOut(setupPage);
 
             registerNewUser(
@@ -466,7 +477,7 @@ final class SharedCalendarEndToEndIT {
             signOut(setupPage);
             registerNewUser(
                     setupPage,
-                    viewerInvitationLink,
+                    secondEditorInvitationLink,
                     viewerUsername,
                     "Role viewer " + uniqueSuffix,
                     "Viewer calendar " + uniqueSuffix,
@@ -556,7 +567,7 @@ final class SharedCalendarEndToEndIT {
     }
 
     @Test
-    void invitationStatusesRevocationExpirationAndMalformedLinksAreEnforcedInTheBrowser() throws SQLException {
+    void invitationStatusesRevocationExpirationInactiveCreatorsAndMalformedLinksAreEnforcedInTheBrowser() throws SQLException {
         String uniqueSuffix = uniqueSuffix();
         String ownerUsername = "status-owner-" + uniqueSuffix;
         String password = "status-password-" + uniqueSuffix;
@@ -565,6 +576,7 @@ final class SharedCalendarEndToEndIT {
         String revokedInvitationLink;
         String expiredInvitationLink;
         String usedInvitationLink;
+        String inactiveCreatorInvitationLink;
 
         try (BrowserContext ownerContext = browser.newContext()) {
             Page ownerPage = ownerContext.newPage();
@@ -597,14 +609,31 @@ final class SharedCalendarEndToEndIT {
             ownerPage.reload();
             assertThat(invitationRow(ownerPage, usedInvitationLink)).containsText("Used");
             assertEquals(0, invitationRow(ownerPage, usedInvitationLink).locator("button:has-text('Revoke')").count());
+            inactiveCreatorInvitationLink = createRegistrationInvitation(ownerPage);
         }
+
+        setUserActive(ownerUsername, false);
 
         try (BrowserContext rejectedContext = browser.newContext()) {
             Page rejectedPage = rejectedContext.newPage();
             assertRegistrationRejected(
-                    rejectedPage, revokedInvitationLink, "revoked-" + uniqueSuffix, password, "Invitation is revoked.");
+                    rejectedPage,
+                    revokedInvitationLink,
+                    "revoked-" + uniqueSuffix,
+                    password,
+                    "Invitation is invalid or no longer available.");
             assertRegistrationRejected(
-                    rejectedPage, expiredInvitationLink, "expired-" + uniqueSuffix, password, "Invitation is expired.");
+                    rejectedPage,
+                    expiredInvitationLink,
+                    "expired-" + uniqueSuffix,
+                    password,
+                    "Invitation is invalid or no longer available.");
+            assertRegistrationRejected(
+                    rejectedPage,
+                    inactiveCreatorInvitationLink,
+                    "inactive-creator-" + uniqueSuffix,
+                    password,
+                    "Invitation is invalid or no longer available.");
             assertRegistrationRejected(
                     rejectedPage,
                     route("/register?token=malformed-" + uniqueSuffix),
@@ -676,6 +705,104 @@ final class SharedCalendarEndToEndIT {
     }
 
     @Test
+    void removedEditorsCannotUseSavedSelfInvitationsAndAdminsCanRevokeEditorInvitations() throws SQLException {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "saved-invite-owner-" + uniqueSuffix;
+        String editorUsername = "saved-invite-editor-" + uniqueSuffix;
+        String calendarName = "Saved invitation " + uniqueSuffix;
+        seedUser(ownerUsername);
+        seedUser(editorUsername);
+        String calendarId;
+        String membershipInvitationLink;
+
+        try (BrowserContext ownerContext = browser.newContext()) {
+            Page ownerPage = ownerContext.newPage();
+            signIn(ownerPage, ownerUsername, TEST_PASSWORD);
+            createCalendar(ownerPage, calendarName);
+            openCalendar(ownerPage, calendarName);
+            calendarId = requiredQueryParameter(ownerPage.url(), "id");
+            membershipInvitationLink = createEditorInvitation(ownerPage, calendarName);
+        }
+
+        try (BrowserContext editorContext = browser.newContext(); BrowserContext ownerContext = browser.newContext()) {
+            Page editorPage = editorContext.newPage();
+            Page ownerPage = ownerContext.newPage();
+            signIn(editorPage, editorUsername, TEST_PASSWORD);
+            editorPage.navigate(membershipInvitationLink);
+            editorPage.locator("button:has-text('Accept invitation')").click();
+            editorPage.waitForURL("**/app/calendar?id=*");
+            String savedSelfInvitationLink = createEditorInvitation(editorPage, calendarName);
+            String administratorRevocationLink = createEditorInvitation(editorPage, calendarName);
+
+            signIn(ownerPage, ownerUsername, TEST_PASSWORD);
+            ownerPage.navigate(route("/app/calendar-members?id=" + calendarId));
+            Locator editorRow = ownerPage.locator("tr", new Page.LocatorOptions().setHasText(editorUsername));
+            editorRow.locator("button:has-text('Remove access')").click();
+            ownerPage.locator("button:has-text('Yes')").click();
+            assertBodyContains(ownerPage, "Member access removed.");
+
+            ownerPage.navigate(route("/app/invitations"));
+            assertThat(invitationRow(ownerPage, savedSelfInvitationLink)).isVisible();
+            Locator administratorRevocationRow = invitationRow(ownerPage, administratorRevocationLink);
+            assertThat(administratorRevocationRow).isVisible();
+            administratorRevocationRow.locator("button:has-text('Revoke')").click();
+            assertThat(invitationRow(ownerPage, administratorRevocationLink)).containsText("Revoked");
+
+            editorPage.navigate(savedSelfInvitationLink);
+            editorPage.locator("button:has-text('Accept invitation')").click();
+            assertBodyContains(editorPage, "Invitation is invalid or no longer available.");
+            editorPage.navigate(route("/app/calendar?id=" + calendarId));
+            assertBodyContains(editorPage, "Calendar not found");
+        }
+    }
+
+    @Test
+    void concurrentDistinctInvitationsForOneUserCreateOnlyOneMembershipWithoutFailure() throws SQLException {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "distinct-invite-owner-" + uniqueSuffix;
+        String candidateUsername = "distinct-invite-candidate-" + uniqueSuffix;
+        String calendarName = "Distinct invitations " + uniqueSuffix;
+        seedUser(ownerUsername);
+        seedUser(candidateUsername);
+        String firstInvitationLink;
+        String secondInvitationLink;
+
+        try (BrowserContext ownerContext = browser.newContext()) {
+            Page ownerPage = ownerContext.newPage();
+            signIn(ownerPage, ownerUsername, TEST_PASSWORD);
+            createCalendar(ownerPage, calendarName);
+            firstInvitationLink = createEditorInvitation(ownerPage, calendarName);
+            secondInvitationLink = createEditorInvitation(ownerPage, calendarName);
+        }
+
+        try (BrowserContext firstContext = browser.newContext(); BrowserContext secondContext = browser.newContext()) {
+            Page firstPage = firstContext.newPage();
+            Page secondPage = secondContext.newPage();
+            signIn(firstPage, candidateUsername, TEST_PASSWORD);
+            signIn(secondPage, candidateUsername, TEST_PASSWORD);
+            firstPage.navigate(firstInvitationLink);
+            secondPage.navigate(secondInvitationLink);
+            Locator firstAcceptButton = firstPage.locator("button:has-text('Accept invitation')");
+            Locator secondAcceptButton = secondPage.locator("button:has-text('Accept invitation')");
+            assertThat(firstAcceptButton).isVisible();
+            assertThat(secondAcceptButton).isVisible();
+
+            long scheduledAcceptanceTime = System.currentTimeMillis() + 750;
+            scheduleClickAt(firstAcceptButton, scheduledAcceptanceTime);
+            scheduleClickAt(secondAcceptButton, scheduledAcceptanceTime);
+            waitForInvitationAcceptanceResult(firstPage);
+            waitForInvitationAcceptanceResult(secondPage);
+
+            assertEquals("/app/calendar", URI.create(firstPage.url()).getPath());
+            assertEquals("/app/calendar", URI.create(secondPage.url()).getPath());
+            assertBodyContains(firstPage, calendarName);
+            assertBodyContains(secondPage, calendarName);
+            assertBodyContains(firstPage, "EDITOR");
+            assertBodyContains(secondPage, "EDITOR");
+        }
+    }
+
+    @Test
     void concurrentInvitationAcceptanceAllowsExactlyOneUserAndRevokedAccessInvalidatesOpenSessions()
             throws SQLException {
         String uniqueSuffix = uniqueSuffix();
@@ -732,7 +859,7 @@ final class SharedCalendarEndToEndIT {
             String rejectedUsername = firstCandidateAccepted ? secondCandidateUsername : firstCandidateUsername;
             assertBodyContains(acceptedPage, calendarName);
             assertBodyContains(acceptedPage, "EDITOR");
-            assertBodyContains(rejectedPage, "Invitation is already accepted.");
+            assertBodyContains(rejectedPage, "Invitation is invalid or no longer available.");
 
             rejectedPage.navigate(route("/app/invitations"));
             assertEquals(
@@ -1400,12 +1527,19 @@ final class SharedCalendarEndToEndIT {
         if (location != null) {
             page.locator("input[id$='eventLocation']").fill(location);
         }
-        page.locator("input[id$='eventStart_input']").fill(startTime);
-        page.locator("input[id$='eventEnd_input']").fill(endTime);
         if (allDay) {
             Locator allDayCheckbox = page.getByLabel("All-day event");
             page.locator(".checkbox-field .ui-chkbox-box").click();
             assertThat(allDayCheckbox).isChecked();
+            Locator firstDayInput = page.locator("input[id$='eventStartDate_input']");
+            Locator lastDayInput = page.locator("input[id$='eventEndDate_input']");
+            assertThat(firstDayInput).isVisible();
+            assertThat(lastDayInput).isVisible();
+            firstDayInput.fill(startTime.substring(0, 10));
+            lastDayInput.fill(endTime.substring(0, 10));
+        } else {
+            page.locator("input[id$='eventStart_input']").fill(startTime);
+            page.locator("input[id$='eventEnd_input']").fill(endTime);
         }
         page.locator("button:has-text('Create event')").click();
     }
@@ -1467,7 +1601,7 @@ final class SharedCalendarEndToEndIT {
     private void waitForInvitationAcceptanceResult(Page page) {
         page.waitForFunction(
                 "() => location.pathname === '/app/calendar' "
-                        + "|| document.body.innerText.includes('Invitation is already accepted.')");
+                        + "|| document.body.innerText.includes('Invitation is invalid or no longer available.')");
     }
 
     private void waitForMembershipChangeResult(Page page) {
@@ -1617,6 +1751,10 @@ final class SharedCalendarEndToEndIT {
         executeDatabaseUpdate("update calendar set active = ? where id = ?", active, calendarId);
     }
 
+    private void setUserActive(String username, boolean active) throws SQLException {
+        executeDatabaseUpdate("update app_user set active = ? where username = ?", active, username);
+    }
+
     private long countActiveAdmins(long calendarId) throws SQLException {
         String jdbcUrl = "jdbc:postgresql://"
                 + firstNonBlank(System.getenv(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE), "localhost")
@@ -1720,6 +1858,29 @@ final class SharedCalendarEndToEndIT {
         assertTrue(
                 browserMessages.isEmpty(),
                 () -> "Expected no browser console errors or warnings, but saw: " + browserMessages);
+    }
+
+    private void assertRollingSessionCookie(Response response) {
+        String sessionCookieHeader = response.headerValues("set-cookie").stream()
+                .filter(header -> header.contains("JSESSIONID="))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(
+                        "Authenticated activity did not refresh the session cookie."));
+        assertTrue(sessionCookieHeader.contains("Path=/"));
+        assertTrue(sessionCookieHeader.contains("HttpOnly"));
+        assertTrue(sessionCookieHeader.contains("SameSite=Lax"));
+        assertTrue(
+                sessionCookieHeader.contains("Max-Age=2592000")
+                        || sessionCookieHeader.contains("Expires="),
+                "Refreshed session cookie did not have a persistent 30-day lifetime.");
+    }
+
+    private String requiredSessionCookieValue(BrowserContext browserContext) {
+        return browserContext.cookies(route("/")).stream()
+                .filter(cookie -> "JSESSIONID".equals(cookie.name))
+                .map(cookie -> cookie.value)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Expected a JSESSIONID cookie."));
     }
 
     private void assertOnlyExpectedNotFoundNavigationMessage(List<String> browserMessages) {

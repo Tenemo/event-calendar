@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import app.util.ValidationException;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -45,5 +46,31 @@ final class CalendarTimeServiceTest {
                                 "Europe/Warsaw")),
                 () -> assertThrows(ValidationException.class, () -> calendarTimeService.normalizeTimeZone("Mars/Olympus")),
                 () -> assertThrows(ValidationException.class, () -> calendarTimeService.normalizeTimeZone("   ")));
+    }
+
+    @Test
+    void resolvesAStartOfDayThatFallsInAMidnightClockGap() {
+        OffsetDateTime resolvedStartOfDay = calendarTimeService.toStoredStartOfDay(
+                LocalDate.parse("2018-11-04"),
+                "America/Sao_Paulo");
+
+        assertAll(
+                () -> assertEquals(
+                        OffsetDateTime.parse("2018-11-04T01:00:00-02:00"),
+                        resolvedStartOfDay),
+                () -> assertEquals(
+                        OffsetDateTime.parse("2026-07-10T00:00:00+02:00"),
+                        calendarTimeService.toStoredStartOfDay(
+                                LocalDate.parse("2026-07-10"),
+                                "Europe/Warsaw")));
+    }
+
+    @Test
+    void rejectsACivilDateThatTheTimeZoneSkippedCompletely() {
+        assertThrows(
+                ValidationException.class,
+                () -> calendarTimeService.toStoredStartOfDay(
+                        LocalDate.parse("2011-12-30"),
+                        "Pacific/Apia"));
     }
 }

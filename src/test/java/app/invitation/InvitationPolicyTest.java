@@ -45,6 +45,18 @@ final class InvitationPolicyTest {
     }
 
     @Test
+    void suppliesOneCentralSevenDayDefaultExpirationWithoutOverridingExplicitExpiration() {
+        OffsetDateTime createdAt = OffsetDateTime.parse("2026-07-08T12:00:00Z");
+        OffsetDateTime explicitExpiration = createdAt.plusHours(3);
+
+        assertAll(
+                () -> assertEquals(createdAt.plusDays(7), invitationPolicy.resolveExpiration(null, createdAt)),
+                () -> assertEquals(
+                        explicitExpiration,
+                        invitationPolicy.resolveExpiration(explicitExpiration, createdAt)));
+    }
+
+    @Test
     void derivesOneStatusForAvailabilityRenderingAndRevocation() {
         OffsetDateTime currentTime = OffsetDateTime.parse("2026-07-10T12:00:00Z");
 

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import app.calendar.CalendarTimeService;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import org.junit.jupiter.api.Test;
 
@@ -14,7 +15,7 @@ final class CalendarEventRowTest {
     void multiDayAllDayEventDisplaysBothCalendarDates() {
         CalendarEvent event = event(
                 "2026-07-21T22:00:00Z",
-                "2026-07-23T22:00:00Z",
+                "2026-07-24T22:00:00Z",
                 true,
                 "North landing");
 
@@ -22,6 +23,7 @@ final class CalendarEventRowTest {
 
         assertAll(
                 () -> assertEquals("Jul 22", row.getDateLabel()),
+                () -> assertEquals(LocalDate.parse("2026-07-24"), row.getInclusiveEndDate()),
                 () -> assertEquals(
                         "All day from Wed, Jul 22, 2026 to Fri, Jul 24, 2026",
                         row.getTimeLabel()),
@@ -34,13 +36,14 @@ final class CalendarEventRowTest {
     void singleDayAllDayEventKeepsConciseLabel() {
         CalendarEvent event = event(
                 "2026-07-21T22:00:00Z",
-                "2026-07-22T12:00:00Z",
+                "2026-07-22T22:00:00Z",
                 true,
                 null);
 
         CalendarEventRow row = CalendarEventRow.from(event, "Europe/Warsaw", calendarTimeService);
 
         assertAll(
+                () -> assertEquals(LocalDate.parse("2026-07-22"), row.getInclusiveEndDate()),
                 () -> assertEquals("All day", row.getTimeLabel()),
                 () -> assertEquals("All day", row.getDetailLabel()));
     }

@@ -37,6 +37,10 @@ run = "java scripts/calendar-tool.java install-playwright"
 description = "Run Playwright end-to-end tests against a running app"
 run = "java scripts/calendar-tool.java e2e"
 
+[tasks.verify-bootstrap-registration]
+description = "Verify atomic bootstrap registration against isolated PostgreSQL"
+run = "java scripts/calendar-tool.java verify-bootstrap-registration"
+
 [tasks.wait-for-app]
 description = "Wait for the running app health check"
 run = "java scripts/calendar-tool.java wait-for-app"

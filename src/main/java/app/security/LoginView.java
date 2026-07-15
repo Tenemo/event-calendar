@@ -43,6 +43,7 @@ public class LoginView {
                         .newAuthentication(true));
 
         if (status == AuthenticationStatus.SUCCESS) {
+            AuthenticatedSessionSecurity.rotateSessionIdentifier(request);
             String route = isBlank(invitationToken)
                     ? "/app/calendars"
                     : "/register?token=" + URLEncoder.encode(invitationToken.trim(), StandardCharsets.UTF_8);

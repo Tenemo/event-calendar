@@ -22,6 +22,12 @@ public class DatabaseIdentityStore implements IdentityStore {
     @Inject
     private PasswordService passwordService;
 
+    @Inject
+    private LoginAttemptThrottle loginAttemptThrottle;
+
+    @Inject
+    private LoginRequestSource loginRequestSource;
+
     @Override
     public CredentialValidationResult validate(Credential credential) {
         if (!(credential instanceof UsernamePasswordCredential usernamePasswordCredential)) {
@@ -30,9 +36,22 @@ public class DatabaseIdentityStore implements IdentityStore {
 
         String username = userService.normalizeUsername(usernamePasswordCredential.getCaller());
         String password = usernamePasswordCredential.getPasswordAsString();
-        return userService.findActiveByUsername(username)
-                .map(user -> validatePassword(user, password))
-                .orElseGet(() -> validateMissingUserPassword(password));
+        String sourceIdentifier = loginRequestSource.getSourceIdentifier();
+        synchronized (loginAttemptThrottle.validationLock(sourceIdentifier)) {
+            if (!loginAttemptThrottle.isAuthenticationAllowed(username, sourceIdentifier)) {
+                return CredentialValidationResult.INVALID_RESULT;
+            }
+
+            CredentialValidationResult validationResult = userService.findActiveByUsername(username)
+                    .map(user -> validatePassword(user, password))
+                    .orElseGet(() -> validateMissingUserPassword(password));
+            if (validationResult.getStatus() == CredentialValidationResult.Status.VALID) {
+                loginAttemptThrottle.clearUsernameAndSourceFailures(username, sourceIdentifier);
+            } else {
+                loginAttemptThrottle.recordFailedAuthentication(username, sourceIdentifier);
+            }
+            return validationResult;
+        }
     }
 
     private CredentialValidationResult validatePassword(ApplicationUser user, String password) {

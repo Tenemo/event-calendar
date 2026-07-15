@@ -6,7 +6,6 @@ import static app.testsupport.ServiceTestSupport.setEntityId;
 import static app.testsupport.TestPasswordServices.passwordService;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -82,22 +81,6 @@ final class UserServiceTest {
                 () -> assertTrue(passwordService.verifyPassword("correct horse battery staple", createdUser.getPasswordHash())),
                 () -> assertEquals(1, entityManagerStub.persistedObjects().size()),
                 () -> assertEquals(1, entityManagerStub.flushCount()));
-    }
-
-    @Test
-    void detectsWhetherAnyActiveUserExists() {
-        UserService withUsers = new UserService();
-        setField(withUsers, "entityManager", entityManagerStub()
-                .singleResult("where applicationUser.active = true", 1L)
-                .entityManager());
-        UserService withoutUsers = new UserService();
-        setField(withoutUsers, "entityManager", entityManagerStub()
-                .singleResult("where applicationUser.active = true", 0L)
-                .entityManager());
-
-        assertAll(
-                () -> assertTrue(withUsers.hasActiveUsers()),
-                () -> assertFalse(withoutUsers.hasActiveUsers()));
     }
 
     @Test

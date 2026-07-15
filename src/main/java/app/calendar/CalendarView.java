@@ -18,7 +18,10 @@ import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.Serializable;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -56,6 +59,8 @@ public class CalendarView implements Serializable {
     private String eventLocation;
     private LocalDateTime eventStartTime;
     private LocalDateTime eventEndTime;
+    private LocalDate eventStartDate;
+    private LocalDate eventEndDate;
     private boolean eventAllDay;
 
     public void load() {
@@ -84,8 +89,8 @@ public class CalendarView implements Serializable {
                     eventTitle,
                     eventDescription,
                     eventLocation,
-                    calendarTimeService.toStoredTime(eventStartTime, timeZone),
-                    calendarTimeService.toStoredTime(eventEndTime, timeZone),
+                    toSubmittedTime(eventStartTime, eventStartDate),
+                    toSubmittedTime(eventEndTime, eventEndDate),
                     eventAllDay);
             reloadEvents(actingUser);
             resetEventForm();
@@ -107,6 +112,8 @@ public class CalendarView implements Serializable {
         eventLocation = event.getLocation();
         eventStartTime = event.getStartTime();
         eventEndTime = event.getEndTime();
+        eventStartDate = event.getStartTime().toLocalDate();
+        eventEndDate = event.getInclusiveEndDate();
         eventAllDay = event.isAllDay();
     }
 
@@ -123,8 +130,8 @@ public class CalendarView implements Serializable {
                     eventTitle,
                     eventDescription,
                     eventLocation,
-                    calendarTimeService.toStoredTime(eventStartTime, timeZone),
-                    calendarTimeService.toStoredTime(eventEndTime, timeZone),
+                    toSubmittedTime(eventStartTime, eventStartDate),
+                    toSubmittedTime(eventEndTime, eventEndDate),
                     eventAllDay);
             reloadEvents(actingUser);
             resetEventForm();
@@ -159,7 +166,54 @@ public class CalendarView implements Serializable {
                 .truncatedTo(ChronoUnit.HOURS);
         eventStartTime = nextHour;
         eventEndTime = nextHour.plusHours(1);
+        eventStartDate = nextHour.toLocalDate();
+        eventEndDate = nextHour.toLocalDate();
         eventAllDay = false;
+    }
+
+    public void changeEventAllDayMode() {
+        if (eventAllDay) {
+            LocalDate firstDay = eventStartTime == null ? null : eventStartTime.toLocalDate();
+            LocalDate lastDay = inclusiveEndDateForTimedRange(firstDay);
+            if (firstDay != null) {
+                eventStartDate = firstDay;
+            }
+            if (lastDay != null) {
+                eventEndDate = lastDay;
+            }
+            return;
+        }
+
+        if (eventStartDate != null) {
+            eventStartTime = eventStartDate.atStartOfDay();
+        }
+        if (eventEndDate != null) {
+            eventEndTime = eventEndDate.plusDays(1).atStartOfDay();
+        }
+    }
+
+    private LocalDate inclusiveEndDateForTimedRange(LocalDate firstDay) {
+        if (eventEndTime == null) {
+            return null;
+        }
+
+        LocalDate inclusiveEndDate = eventEndTime.toLocalDate();
+        if (eventEndTime.toLocalTime().equals(LocalTime.MIDNIGHT)
+                && eventStartTime != null
+                && eventEndTime.isAfter(eventStartTime)) {
+            LocalDate previousDay = inclusiveEndDate.minusDays(1);
+            if (firstDay == null || !previousDay.isBefore(firstDay)) {
+                return previousDay;
+            }
+        }
+        return inclusiveEndDate;
+    }
+
+    private OffsetDateTime toSubmittedTime(LocalDateTime timedValue, LocalDate allDayDate) {
+        if (eventAllDay) {
+            return calendarTimeService.toStoredStartOfDay(allDayDate, timeZone);
+        }
+        return calendarTimeService.toStoredTime(timedValue, timeZone);
     }
 
     private void reloadEvents(ApplicationUser actingUser) {
@@ -200,6 +254,10 @@ public class CalendarView implements Serializable {
     public void setEventStartTime(LocalDateTime eventStartTime) { this.eventStartTime = eventStartTime; }
     public LocalDateTime getEventEndTime() { return eventEndTime; }
     public void setEventEndTime(LocalDateTime eventEndTime) { this.eventEndTime = eventEndTime; }
+    public LocalDate getEventStartDate() { return eventStartDate; }
+    public void setEventStartDate(LocalDate eventStartDate) { this.eventStartDate = eventStartDate; }
+    public LocalDate getEventEndDate() { return eventEndDate; }
+    public void setEventEndDate(LocalDate eventEndDate) { this.eventEndDate = eventEndDate; }
     public boolean isEventAllDay() { return eventAllDay; }
     public void setEventAllDay(boolean eventAllDay) { this.eventAllDay = eventAllDay; }
 }

@@ -49,6 +49,7 @@ public final class ServiceTestSupport {
         private final EntityManager entityManager;
         private final Map<FindKey, Object> findResults = new HashMap<>();
         private final List<String> lockedQueryTexts = new ArrayList<>();
+        private final List<String> maximumResultLimitedQueryTexts = new ArrayList<>();
         private final List<Object> persistedObjects = new ArrayList<>();
         private final List<Object> removedObjects = new ArrayList<>();
         private final Map<String, QueryBehavior> queryBehaviors = new LinkedHashMap<>();
@@ -73,6 +74,10 @@ public final class ServiceTestSupport {
 
         public List<String> lockedQueryTexts() {
             return lockedQueryTexts;
+        }
+
+        public List<String> maximumResultLimitedQueryTexts() {
+            return maximumResultLimitedQueryTexts;
         }
 
         public List<Object> removedObjects() {
@@ -186,6 +191,7 @@ public final class ServiceTestSupport {
                     return proxy;
                 }
                 if (methodName.equals("setMaxResults")) {
+                    maximumResultLimitedQueryTexts.add(queryText);
                     return proxy;
                 }
                 if (methodName.equals("getSingleResult")) {

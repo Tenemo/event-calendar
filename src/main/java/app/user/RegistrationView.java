@@ -2,6 +2,7 @@ package app.user;
 
 import app.invitation.Invitation;
 import app.invitation.InvitationService;
+import app.security.AuthenticatedSessionSecurity;
 import app.security.CurrentUser;
 import app.util.AuthorizationException;
 import app.util.ValidationException;
@@ -123,6 +124,7 @@ public class RegistrationView {
                         .newAuthentication(true));
 
         if (status == AuthenticationStatus.SUCCESS) {
+            AuthenticatedSessionSecurity.rotateSessionIdentifier(request);
             facesContext.getExternalContext().redirect(facesContext.getExternalContext().getRequestContextPath() + "/app/calendars");
             facesContext.responseComplete();
         } else if (status == AuthenticationStatus.SEND_CONTINUE) {
