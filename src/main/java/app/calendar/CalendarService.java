@@ -220,7 +220,7 @@ public class CalendarService {
 
     private String generateUniquePublicToken() {
         for (int attempt = 0; attempt < MAXIMUM_TOKEN_GENERATION_ATTEMPTS; attempt++) {
-            String token = tokenService.generateToken();
+            String token = tokenService.generateCalendarPublicToken();
             Long existingCount = entityManager
                     .createQuery(
                             "select count(calendarEntity) from Calendar calendarEntity where calendarEntity.publicToken = :token",

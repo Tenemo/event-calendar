@@ -1,5 +1,6 @@
 package app.security;
 
+import app.calendar.CalendarPublicToken;
 import jakarta.inject.Inject;
 import jakarta.servlet.Filter;
 import jakarta.servlet.FilterChain;
@@ -7,12 +8,10 @@ import jakarta.servlet.ServletOutputStream;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
-import jakarta.servlet.annotation.WebFilter;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpServletResponseWrapper;
-import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.security.Principal;
@@ -21,7 +20,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
-@WebFilter(urlPatterns = {"/app/*", "/calendar/*", "/public-calendar.xhtml"})
 public class SessionCookieRefreshFilter implements Filter {
     static final int SESSION_COOKIE_LIFETIME_SECONDS = Math.toIntExact(Duration.ofDays(30).toSeconds());
 
@@ -45,7 +43,16 @@ public class SessionCookieRefreshFilter implements Filter {
             throws IOException, ServletException {
         if (servletRequest instanceof HttpServletRequest request
                 && servletResponse instanceof HttpServletResponse response) {
-            if (invalidateStaleAuthenticatedSession(request, response)) {
+            if (!isManagedRequest(request)) {
+                filterChain.doFilter(servletRequest, servletResponse);
+                return;
+            }
+            if (clearStaleAuthenticatedSession(request)) {
+                if (isCanonicalCalendarRequest(request)) {
+                    filterChain.doFilter(servletRequest, servletResponse);
+                } else {
+                    response.sendRedirect(request.getContextPath() + "/login?reauthenticationRequired=true");
+                }
                 return;
             }
             SessionCookieRefreshResponse responseWrapper =
@@ -59,30 +66,30 @@ public class SessionCookieRefreshFilter implements Filter {
         filterChain.doFilter(servletRequest, servletResponse);
     }
 
-    private boolean invalidateStaleAuthenticatedSession(
-            HttpServletRequest request,
-            HttpServletResponse response) throws IOException, ServletException {
+    private boolean clearStaleAuthenticatedSession(HttpServletRequest request) throws ServletException {
         if (request.getUserPrincipal() == null || currentUser.isSignedIn()) {
             return false;
         }
 
-        request.logout();
-        HttpSession session = request.getSession(false);
-        if (session != null) {
-            session.invalidate();
-        }
+        AuthenticatedSessionSecurity.invalidateSessionAndLogout(request);
+        return true;
+    }
 
+    private boolean isManagedRequest(HttpServletRequest request) {
         String contextPath = request.getContextPath();
         String requestUri = request.getRequestURI();
-        if (requestUri.startsWith(contextPath + "/calendar/")) {
-            String queryString = request.getQueryString();
-            response.sendRedirect(queryString == null || queryString.isBlank()
-                    ? requestUri
-                    : requestUri + "?" + queryString);
-        } else {
-            response.sendRedirect(contextPath + "/login?reauthenticationRequired=true");
+        if (contextPath == null || requestUri == null || !requestUri.startsWith(contextPath)) {
+            return false;
         }
-        return true;
+        String applicationPath = requestUri.substring(contextPath.length());
+        return applicationPath.equals("/app")
+                || applicationPath.startsWith("/app/")
+                || applicationPath.equals("/public-calendar.xhtml")
+                || isCanonicalCalendarRequest(request);
+    }
+
+    private boolean isCanonicalCalendarRequest(HttpServletRequest request) {
+        return CalendarPublicToken.fromRequestPath(request.getContextPath(), request.getRequestURI()) != null;
     }
 
     private void refreshAuthenticatedSessionCookie(

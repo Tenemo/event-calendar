@@ -130,15 +130,24 @@ final class SharedCalendarEndToEndIT {
         String uniqueSuffix = uniqueSuffix();
         String username = "password-owner-" + uniqueSuffix;
         String newPassword = "Changed password 2026 " + uniqueSuffix;
+        String calendarName = "Password session calendar " + uniqueSuffix;
         seedUser(username);
         List<String> browserMessages = new ArrayList<>();
 
         try (BrowserContext changingContext = browser.newContext();
-                BrowserContext otherSessionContext = browser.newContext()) {
+                BrowserContext otherSessionContext = browser.newContext();
+                BrowserContext canonicalCalendarSessionContext = browser.newContext()) {
             Page changingPage = newPage(changingContext, browserMessages);
             Page otherSessionPage = newPage(otherSessionContext, browserMessages);
+            Page canonicalCalendarSessionPage = newPage(canonicalCalendarSessionContext, browserMessages);
             signIn(changingPage, username, TEST_PASSWORD);
             signIn(otherSessionPage, username, TEST_PASSWORD);
+            signIn(canonicalCalendarSessionPage, username, TEST_PASSWORD);
+            createCalendar(changingPage, calendarName);
+            String calendarId = Long.toString(findCalendarId(calendarName));
+            String canonicalCalendarLink = calendarLink(calendarId);
+            canonicalCalendarSessionPage.navigate(canonicalCalendarLink);
+            assertBodyContains(canonicalCalendarSessionPage, "Create event");
 
             changingPage.locator("a:has-text('Account settings')").click();
             changingPage.waitForURL("**/app/account-settings");
@@ -194,6 +203,14 @@ final class SharedCalendarEndToEndIT {
             URI staleSessionUri = URI.create(otherSessionPage.url());
             assertEquals("/login", staleSessionUri.getPath(), () -> "Unexpected stale-session URL " + staleSessionUri);
             assertBodyContains(otherSessionPage, "Sign in");
+
+            canonicalCalendarSessionPage.navigate(canonicalCalendarLink);
+            assertEquals(
+                    URI.create(canonicalCalendarLink).getPath(),
+                    URI.create(canonicalCalendarSessionPage.url()).getPath());
+            assertBodyContains(canonicalCalendarSessionPage, calendarName);
+            assertBodyContains(canonicalCalendarSessionPage, "Read-only");
+            assertFalse(canonicalCalendarSessionPage.locator("body").innerText().contains("Create event"));
 
             changingPage.locator("input[id$='username']").fill(username);
             changingPage.locator("input[id$='password']").fill(TEST_PASSWORD);
@@ -261,7 +278,7 @@ final class SharedCalendarEndToEndIT {
             assertEquals("Accept invitation", page.locator("h1").textContent().trim());
             assertBodyContains(page, "already signed in");
             page.locator("button:has-text('Accept invitation')").click();
-            page.waitForURL("**/calendar/*");
+            waitForCanonicalCalendarRoute(page);
             assertBodyContains(page, ownerCalendarName);
             signOut(page);
 
@@ -787,7 +804,7 @@ final class SharedCalendarEndToEndIT {
             signIn(page, memberUsername, password);
             page.navigate(strongerRoleInvitationLink);
             page.locator("button:has-text('Accept invitation')").click();
-            page.waitForURL("**/calendar/*");
+            waitForCanonicalCalendarRoute(page);
             assertBodyContains(page, "ADMIN");
             signOut(page);
 
@@ -803,7 +820,7 @@ final class SharedCalendarEndToEndIT {
             signIn(page, memberUsername, password);
             page.navigate(reactivationInvitationLink);
             page.locator("button:has-text('Accept invitation')").click();
-            page.waitForURL("**/calendar/*");
+            waitForCanonicalCalendarRoute(page);
             assertBodyContains(page, calendarName);
             assertBodyContains(page, "EDITOR");
         }
@@ -835,7 +852,7 @@ final class SharedCalendarEndToEndIT {
             signIn(editorPage, editorUsername, TEST_PASSWORD);
             editorPage.navigate(membershipInvitationLink);
             editorPage.locator("button:has-text('Accept invitation')").click();
-            editorPage.waitForURL("**/calendar/*");
+            waitForCanonicalCalendarRoute(editorPage);
             String savedSelfInvitationLink = createEditorInvitation(editorPage, calendarName);
             String administratorRevocationLink = createEditorInvitation(editorPage, calendarName);
 
@@ -1489,7 +1506,7 @@ final class SharedCalendarEndToEndIT {
             page.navigate(route("/register"));
             assertEquals(1, page.locator("h1").count());
             assertEquals("Create your calendar", page.locator("h1").textContent().trim());
-            page.navigate(route("/login-error"));
+            page.navigate(route("/sign-in-error"));
             assertEquals(1, page.locator("h1").count());
             assertEquals("Sign-in error", page.locator("h1").textContent().trim());
             assertNoBrowserMessages(browserMessages);
@@ -1551,11 +1568,11 @@ final class SharedCalendarEndToEndIT {
     }
 
     @Test
-    void invalidCalendarLinkReturnsClearNoindexNotFoundPage() {
+    void invalidCalendarLinkReturnsClearNoindexNotFoundPageAndTheLegacyPrefixDoesNotRoute() {
         List<String> browserMessages = new ArrayList<>();
         try (BrowserContext browserContext = browser.newContext()) {
             Page page = newPage(browserContext, browserMessages);
-            com.microsoft.playwright.Response response = page.navigate(route("/calendar/not-a-valid-calendar-token"));
+            com.microsoft.playwright.Response response = page.navigate(route("/AAAAAAAAAAA"));
             assertEquals(404, response.status());
             assertEquals("Calendar link unavailable - Shared calendar", page.title());
             assertEquals("Calendar link unavailable", page.locator("h1").textContent().trim());
@@ -1564,6 +1581,11 @@ final class SharedCalendarEndToEndIT {
             assertBodyContains(page, "Ask a calendar editor for the current link.");
             assertFalse(hasHorizontalOverflow(page));
             assertOnlyExpectedNotFoundNavigationMessage(browserMessages);
+
+            List<String> legacyRouteBrowserMessages = new ArrayList<>();
+            Page legacyRoutePage = newPage(browserContext, legacyRouteBrowserMessages);
+            assertEquals(404, legacyRoutePage.navigate(route("/calendar/AAAAAAAAAAA")).status());
+            assertOnlyExpectedNotFoundNavigationMessage(legacyRouteBrowserMessages);
         }
     }
 
@@ -1659,7 +1681,7 @@ final class SharedCalendarEndToEndIT {
             page.navigate(route("/app/calendars"));
         }
         page.locator("a", new Page.LocatorOptions().setHasText(calendarName)).first().click();
-        page.waitForURL("**/calendar/*");
+        waitForCanonicalCalendarRoute(page);
     }
 
     private void enterEvent(
@@ -1746,8 +1768,12 @@ final class SharedCalendarEndToEndIT {
 
     private void waitForInvitationAcceptanceResult(Page page) {
         page.waitForFunction(
-                "() => location.pathname.startsWith('/calendar/') "
+                "() => /^\\/[A-Za-z0-9_-]{10}[AEIMQUYcgkosw048]$/.test(location.pathname) "
                         + "|| document.body.innerText.includes('Invitation is invalid or no longer available.')");
+    }
+
+    private void waitForCanonicalCalendarRoute(Page page) {
+        page.waitForFunction("() => /^\\/[A-Za-z0-9_-]{10}[AEIMQUYcgkosw048]$/.test(location.pathname)");
     }
 
     private void waitForMembershipChangeResult(Page page) {
@@ -1939,7 +1965,7 @@ final class SharedCalendarEndToEndIT {
             statement.setLong(1, numericCalendarId);
             try (java.sql.ResultSet resultSet = statement.executeQuery()) {
                 assertTrue(resultSet.next(), () -> "Expected calendar " + calendarId + " to exist.");
-                return route("/calendar/" + resultSet.getString(1));
+                return route("/" + resultSet.getString(1));
             }
         }
     }
@@ -2039,9 +2065,7 @@ final class SharedCalendarEndToEndIT {
 
     private boolean isCanonicalCalendarPath(String url) {
         String path = URI.create(url).getPath();
-        return path.startsWith("/calendar/")
-                && path.length() > "/calendar/".length()
-                && path.indexOf('/', "/calendar/".length()) < 0;
+        return path.matches("/[A-Za-z0-9_-]{10}[AEIMQUYcgkosw048]");
     }
 
     private void assertBodyContains(Page page, String expectedText) {

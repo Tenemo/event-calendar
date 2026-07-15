@@ -46,7 +46,7 @@ final class BootstrapRegistrationConcurrencyIT {
     private static final String DATABASE_NAME = "calendar_bootstrap_verification";
     private static final String DATABASE_USER = "calendar_bootstrap_verification";
     private static final String DATABASE_PASSWORD = "calendar_bootstrap_verification";
-    private static final String EXPECTED_LATEST_FLYWAY_VERSION = "9";
+    private static final String EXPECTED_LATEST_FLYWAY_VERSION = "10";
     private static final String VALID_PASSWORD = "Bootstrap password 2026";
     private static final Duration APPLICATION_READY_TIMEOUT = Duration.ofSeconds(120);
     private static final Duration BLOCKED_REQUEST_TIMEOUT = Duration.ofSeconds(20);
@@ -127,6 +127,8 @@ final class BootstrapRegistrationConcurrencyIT {
             assertEquals(1L, queryLong("select count(*) from app_user"));
             assertEquals(successfulUsername, queryString("select username from app_user"));
             assertEquals(1L, queryLong("select count(*) from calendar"));
+            assertTrue(queryBoolean(
+                    "select public_token ~ '^[A-Za-z0-9_-]{10}[AEIMQUYcgkosw048]$' from calendar"));
             assertEquals(1L, queryLong("select count(*) from calendar_member"));
             assertEquals(
                     1L,
@@ -227,6 +229,10 @@ final class BootstrapRegistrationConcurrencyIT {
         assertEquals(0L, queryLong("select count(*) from app_user"));
         assertFalse(queryBoolean(
                 "select consumed_at is not null from app_registration_bootstrap where singleton_id = 1"));
+        assertTrue(queryBoolean(
+                "select pg_get_constraintdef(oid) like '%[AEIMQUYcgkosw048]%' "
+                        + "from pg_constraint where conrelid = 'calendar'::regclass "
+                        + "and conname = 'calendar_public_token_check'"));
     }
 
     private long queryLong(String sql) throws SQLException {

@@ -2,9 +2,11 @@ package app.security;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -139,34 +141,55 @@ final class SessionCookieRefreshFilterTest {
     }
 
     @Test
-    void invalidatesStaleAuthenticatedSessionsBeforeProtectedContentRuns() throws Exception {
-        for (StaleSessionCase staleSessionCase : List.of(
-                new StaleSessionCase(
-                        "/app/calendars",
-                        "/login?reauthenticationRequired=true"),
-                new StaleSessionCase(
-                        "/calendar/current-token",
-                        "/calendar/current-token"))) {
-            AtomicBoolean loggedOut = new AtomicBoolean();
-            AtomicBoolean sessionInvalidated = new AtomicBoolean();
-            AtomicReference<String> redirectLocation = new AtomicReference<>();
-            AtomicInteger filterChainCalls = new AtomicInteger();
+    void invalidatesAStaleApplicationSessionAndUsesOnlyTheFixedLoginRedirect() throws Exception {
+        AtomicBoolean loggedOut = new AtomicBoolean();
+        AtomicBoolean sessionInvalidated = new AtomicBoolean();
+        List<String> sessionCleanupOperations = new ArrayList<>();
+        AtomicReference<String> redirectLocation = new AtomicReference<>();
+        AtomicInteger filterChainCalls = new AtomicInteger();
 
-            new SessionCookieRefreshFilter(currentUser(false))
-                    .doFilter(
-                            staleSessionRequest(
-                                    staleSessionCase.requestUri(),
-                                    loggedOut,
-                                    sessionInvalidated),
-                            redirectResponse(redirectLocation),
-                            filterChain(filterChainCalls));
+        new SessionCookieRefreshFilter(currentUser(false))
+                .doFilter(
+                        staleSessionRequest(
+                                "/app/calendars",
+                                loggedOut,
+                                sessionInvalidated,
+                                sessionCleanupOperations),
+                        redirectResponse(redirectLocation),
+                        filterChain(filterChainCalls));
 
-            assertAll(
-                    () -> assertTrue(loggedOut.get()),
-                    () -> assertTrue(sessionInvalidated.get()),
-                    () -> assertEquals(staleSessionCase.redirectLocation(), redirectLocation.get()),
-                    () -> assertEquals(0, filterChainCalls.get()));
-        }
+        assertAll(
+                () -> assertTrue(loggedOut.get()),
+                () -> assertTrue(sessionInvalidated.get()),
+                () -> assertEquals(List.of("session invalidated", "logout"), sessionCleanupOperations),
+                () -> assertEquals("/login?reauthenticationRequired=true", redirectLocation.get()),
+                () -> assertEquals(0, filterChainCalls.get()));
+    }
+
+    @Test
+    void continuesAStaleCanonicalCalendarRequestAnonymouslyWithoutRedirectingUserInput() throws Exception {
+        AtomicBoolean loggedOut = new AtomicBoolean();
+        AtomicBoolean sessionInvalidated = new AtomicBoolean();
+        List<String> sessionCleanupOperations = new ArrayList<>();
+        AtomicReference<String> redirectLocation = new AtomicReference<>();
+        AtomicInteger filterChainCalls = new AtomicInteger();
+
+        new SessionCookieRefreshFilter(currentUser(false))
+                .doFilter(
+                        staleSessionRequest(
+                                "/Abc_123-xY0",
+                                loggedOut,
+                                sessionInvalidated,
+                                sessionCleanupOperations),
+                        redirectResponse(redirectLocation),
+                        filterChain(filterChainCalls));
+
+        assertAll(
+                () -> assertTrue(loggedOut.get()),
+                () -> assertTrue(sessionInvalidated.get()),
+                () -> assertEquals(List.of("session invalidated", "logout"), sessionCleanupOperations),
+                () -> assertNull(redirectLocation.get()),
+                () -> assertEquals(1, filterChainCalls.get()));
     }
 
     private CurrentUser currentUser(boolean signedIn) {
@@ -200,6 +223,8 @@ final class SessionCookieRefreshFilterTest {
                     case "getUserPrincipal" -> authenticated.get() ? (Principal) () -> "active-user" : null;
                     case "isRequestedSessionIdValid" -> requestedSessionIdValid;
                     case "isSecure" -> secure;
+                    case "getContextPath" -> "";
+                    case "getRequestURI" -> "/app/calendars";
                     default -> defaultValue(method.getReturnType());
                 });
     }
@@ -232,13 +257,15 @@ final class SessionCookieRefreshFilterTest {
     private HttpServletRequest staleSessionRequest(
             String requestUri,
             AtomicBoolean loggedOut,
-            AtomicBoolean sessionInvalidated) {
+            AtomicBoolean sessionInvalidated,
+            List<String> sessionCleanupOperations) {
         HttpSession session = (HttpSession) Proxy.newProxyInstance(
                 HttpSession.class.getClassLoader(),
                 new Class<?>[] {HttpSession.class},
                 (proxy, method, arguments) -> {
                     if (method.getName().equals("invalidate")) {
                         sessionInvalidated.set(true);
+                        sessionCleanupOperations.add("session invalidated");
                         return null;
                     }
                     return defaultValue(method.getReturnType());
@@ -250,9 +277,16 @@ final class SessionCookieRefreshFilterTest {
                     case "getUserPrincipal" -> (Principal) () -> "stale-user";
                     case "logout" -> {
                         loggedOut.set(true);
+                        sessionCleanupOperations.add("logout");
                         yield null;
                     }
-                    case "getSession" -> session;
+                    case "getSession" -> {
+                        if (loggedOut.get()) {
+                            throw new ServletException(
+                                    "SESN0008E: An anonymous user cannot access the authenticated user's session.");
+                        }
+                        yield session;
+                    }
                     case "getContextPath" -> "";
                     case "getRequestURI" -> requestUri;
                     case "getQueryString" -> null;
@@ -291,8 +325,5 @@ final class SessionCookieRefreshFilterTest {
     }
 
     private record TestCase(CurrentUser currentUser, HttpServletRequest request) {
-    }
-
-    private record StaleSessionCase(String requestUri, String redirectLocation) {
     }
 }

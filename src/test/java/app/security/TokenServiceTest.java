@@ -3,6 +3,7 @@ package app.security;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.calendar.CalendarPublicToken;
 import java.util.HashSet;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -23,5 +24,20 @@ final class TokenServiceTest {
         }
 
         assertEquals(generatedTokenCount, tokens.size(), "Generated tokens should not collide in this sample.");
+    }
+
+    @Test
+    void generatesShortCalendarTokensWithoutWeakeningInvitationTokens() {
+        int generatedTokenCount = 256;
+        Set<String> calendarTokens = new HashSet<>();
+
+        for (int tokenNumber = 0; tokenNumber < generatedTokenCount; tokenNumber++) {
+            String calendarToken = tokenService.generateCalendarPublicToken();
+            assertTrue(CalendarPublicToken.isValid(calendarToken));
+            calendarTokens.add(calendarToken);
+        }
+
+        assertEquals(generatedTokenCount, calendarTokens.size());
+        assertTrue(tokenService.generateToken().matches("[A-Za-z0-9_-]{43}"));
     }
 }

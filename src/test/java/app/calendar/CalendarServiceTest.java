@@ -37,7 +37,7 @@ final class CalendarServiceTest {
 
         CalendarService calendarService = new CalendarService();
         setField(calendarService, "entityManager", entityManagerStub.entityManager());
-        setField(calendarService, "tokenService", new FixedTokenService("public-token-123456789012345678901234567890"));
+        setField(calendarService, "tokenService", new FixedTokenService("Abc_123-xY0"));
         setField(calendarService, "auditService", new NoopAuditService());
         setField(calendarService, "calendarTimeService", new CalendarTimeService());
         setField(calendarService, "calendarConfiguration", calendarConfiguration("Europe/Warsaw"));
@@ -53,7 +53,7 @@ final class CalendarServiceTest {
         assertAll(
                 () -> assertEquals("Kayaking", calendar.getName()),
                 () -> assertEquals("River weekend", calendar.getDescription()),
-                () -> assertEquals("public-token-123456789012345678901234567890", calendar.getPublicToken()),
+                () -> assertEquals("Abc_123-xY0", calendar.getPublicToken()),
                 () -> assertEquals(ZoneOffset.UTC, calendar.getCreatedAt().getOffset()),
                 () -> assertEquals(ZoneOffset.UTC, calendar.getUpdatedAt().getOffset()),
                 () -> assertTrue(calendar.isPublicAccessEnabled()),
@@ -87,7 +87,7 @@ final class CalendarServiceTest {
         RecordingAuditService auditService = new RecordingAuditService();
         CalendarService calendarService = new CalendarService();
         setField(calendarService, "entityManager", entityManagerStub.entityManager());
-        setField(calendarService, "tokenService", new FixedTokenService("regenerated-token-123456789012345678901234567890"));
+        setField(calendarService, "tokenService", new FixedTokenService("New_123-xY0"));
         setField(calendarService, "auditService", auditService);
         setField(calendarService, "calendarAccessService", new AllowingAccessService());
         setField(calendarService, "calendarTimeService", new CalendarTimeService());
@@ -110,7 +110,7 @@ final class CalendarServiceTest {
                 () -> assertFalse(calendar.isPublicAccessEnabled()),
                 () -> assertEquals(calendar, regeneratedCalendar),
                 () -> assertEquals(
-                        "regenerated-token-123456789012345678901234567890",
+                        "New_123-xY0",
                         regeneratedCalendar.getPublicToken()),
                 () -> assertEquals(List.of("settings_updated", "public_token_regenerated"), auditService.actions),
                 () -> assertEquals(2, entityManagerStub.flushCount()));
@@ -283,7 +283,7 @@ final class CalendarServiceTest {
         }
 
         @Override
-        public String generateToken() {
+        public String generateCalendarPublicToken() {
             return token;
         }
     }

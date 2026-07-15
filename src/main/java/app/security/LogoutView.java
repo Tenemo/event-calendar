@@ -6,7 +6,6 @@ import jakarta.inject.Named;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 
 @Named
@@ -17,11 +16,7 @@ public class LogoutView {
         HttpServletRequest request = (HttpServletRequest) facesContext.getExternalContext().getRequest();
         HttpServletResponse response = (HttpServletResponse) facesContext.getExternalContext().getResponse();
 
-        request.logout();
-        HttpSession session = request.getSession(false);
-        if (session != null) {
-            session.invalidate();
-        }
+        AuthenticatedSessionSecurity.invalidateSessionAndLogout(request);
         response.sendRedirect(facesContext.getExternalContext().getRequestContextPath() + "/");
         facesContext.responseComplete();
     }

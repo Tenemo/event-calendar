@@ -65,7 +65,7 @@ public class CalendarSettingsView implements Serializable {
     }
 
     public String getCalendarLink() {
-        return applicationUrlService.linkTo("/calendar/" + publicToken);
+        return applicationUrlService.linkTo("/" + publicToken);
     }
 
     private void copyCalendar(Calendar calendar) {

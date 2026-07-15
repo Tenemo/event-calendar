@@ -25,7 +25,7 @@ public class Calendar {
 
     private String description;
 
-    @Column(name = "public_token", nullable = false, unique = true, length = 80)
+    @Column(name = "public_token", nullable = false, unique = true, length = CalendarPublicToken.ENCODED_LENGTH)
     private String publicToken;
 
     @Column(name = "timezone", nullable = false, length = 80)

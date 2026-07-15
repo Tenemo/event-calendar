@@ -73,13 +73,13 @@ public class CalendarView implements Serializable {
         try {
             FacesContext facesContext = FacesContext.getCurrentInstance();
             HttpServletRequest request = (HttpServletRequest) facesContext.getExternalContext().getRequest();
-            if (Boolean.TRUE.equals(request.getAttribute(CalendarRouteServlet.NOT_FOUND_REQUEST_ATTRIBUTE))) {
+            if (Boolean.TRUE.equals(request.getAttribute(CalendarRouteFilter.NOT_FOUND_REQUEST_ATTRIBUTE))) {
                 throw new NotFoundException("Calendar was not found.");
             }
 
-            publicToken = (String) request.getAttribute(CalendarRouteServlet.CALENDAR_TOKEN_REQUEST_ATTRIBUTE);
+            publicToken = (String) request.getAttribute(CalendarRouteFilter.CALENDAR_TOKEN_REQUEST_ATTRIBUTE);
             ApplicationUser actingUser = currentUser.find().orElse(null);
-            Calendar calendar = (Calendar) request.getAttribute(CalendarRouteServlet.CALENDAR_REQUEST_ATTRIBUTE);
+            Calendar calendar = (Calendar) request.getAttribute(CalendarRouteFilter.CALENDAR_REQUEST_ATTRIBUTE);
             if (calendar == null) {
                 calendar = calendarAccessService.requireCalendarReadableByToken(actingUser, publicToken);
             }
@@ -108,7 +108,7 @@ public class CalendarView implements Serializable {
             calendarVersion = calendar.getVersion();
             FacesContext facesContext = FacesContext.getCurrentInstance();
             facesContext.getExternalContext().redirect(
-                    facesContext.getExternalContext().getRequestContextPath() + "/calendar/" + publicToken);
+                    facesContext.getExternalContext().getRequestContextPath() + "/" + publicToken);
             facesContext.responseComplete();
         } catch (AuthorizationException | ConflictException | NotFoundException exception) {
             addMessage(FacesMessage.SEVERITY_ERROR, "Calendar link could not be regenerated.", exception.getMessage());

@@ -21,7 +21,7 @@ Shared calendar is a server-rendered web application for event calendars shared 
 - Calendar roles are scoped to one calendar: `EDITOR` and `ADMIN`.
 - Calendar invitations grant `EDITOR`; read-only access uses the calendar's bearer link rather than a membership role.
 - Signed-in users can change their own password from account settings; doing so invalidates every existing session.
-- Calendars are public by default through long, random, unguessable bearer links.
+- Calendars are public by default through compact, random bearer links.
 - Public links are read-only and marked `noindex, nofollow`.
 - Events support titles, locations, descriptions, inclusive all-day date ranges, and timed date ranges. All-day dates are normalized in the calendar's IANA time zone instead of assuming every day is 24 hours.
 - Recurrence, notifications, email delivery, ICS import/export, and native mobile apps are outside the current scope.
@@ -39,7 +39,7 @@ mise run dev
 
 The application listens on `http://localhost:9080` by default. Its database-aware health endpoint is `http://localhost:9080/health`. It returns `200 ok` only when PostgreSQL is reachable and `503 unavailable` otherwise.
 
-Jakarta Faces extensionless routing is enabled. Browser-facing routes include `/login`, `/register`, `/app/calendars`, `/app/account-settings`, `/app/calendar-members`, `/app/calendar-settings`, and `/app/invitations`. Every calendar uses `/calendar/{calendarToken}` as its canonical URL for editors, admins, and anonymous readers. The `.xhtml` files are internal templates, not canonical browser URLs.
+Jakarta Faces extensionless routing is enabled. Browser-facing routes include `/login`, `/register`, `/app/calendars`, `/app/account-settings`, `/app/calendar-members`, `/app/calendar-settings`, and `/app/invitations`. Every calendar uses one 11-character token directly at the root, such as `https://calendar.social/Abc_123-xY0`, as its canonical URL for editors, admins, and anonymous readers. The root 11-character Base64URL namespace is reserved for calendars. The `.xhtml` files are internal templates, not canonical browser URLs.
 
 ## Environment variables
 
@@ -66,7 +66,7 @@ Copy `.env.example` to `.env` for local development. Do not commit `.env`.
 
 ## Database migrations
 
-Flyway runs during application startup and owns the database schema. The application fails startup when a migration cannot be applied. The current schema is migration version 9. Migration 8 removes existing read-only memberships rather than promoting them to editor access and restricts calendar memberships to `EDITOR` and `ADMIN`. Migration 9 adds the password version used to invalidate older authenticated sessions after a password change. Host-installed PostgreSQL client programs are not required.
+Flyway runs during application startup and owns the database schema. The application fails startup when a migration cannot be applied. The current schema is migration version 10. Migration 8 removes existing read-only memberships rather than promoting them to editor access and restricts calendar memberships to `EDITOR` and `ADMIN`. Migration 9 adds the password version used to invalidate older authenticated sessions after a password change. Migration 10 replaces every existing calendar bearer token with the compact format, so deploying it invalidates every previously shared calendar URL once. Host-installed PostgreSQL client programs are not required.
 
 Start and inspect the local database with:
 
@@ -91,7 +91,7 @@ mise run install-playwright
 mise run e2e
 ```
 
-The automated suite contains 129 unit tests and 19 primary browser scenarios covering registration, login, logout, password changes and session revocation, calendar creation, event creation/editing/deletion, canonical calendar links, public-access disabling, link regeneration, invitation acceptance, editor removal, last-admin protection, validation, and anonymous read-only behavior. One additional isolated browser scenario builds the production image and verifies bootstrap-registration rollback and concurrency against a separate application container and tmpfs PostgreSQL database on non-default ports.
+The automated suite contains 141 unit tests and 19 primary browser scenarios covering registration, login, logout, password changes and session revocation, calendar creation, event creation/editing/deletion, compact canonical calendar links, public-access disabling, link regeneration, invitation acceptance, editor removal, last-admin protection, validation, request throttling, and anonymous read-only behavior. One additional isolated browser scenario builds the production image and verifies bootstrap-registration rollback and concurrency against a separate application container and tmpfs PostgreSQL database on non-default ports.
 
 Run only the isolated bootstrap-registration verification with:
 
@@ -195,6 +195,8 @@ Set `APP_BOOTSTRAP_INVITE_TOKEN` temporarily to a generated high-entropy secret 
 
 After deployment, verify `/health`, registration, login, password change, public links, invitations, role changes, and event persistence. Redeploy, confirm that accounts and calendar data persist, then sign in again because HTTP sessions are intentionally in memory. Inspect logs to confirm that passwords, database credentials, public tokens, and invitation tokens are absent. Railway's deployment health check is not continuous monitoring, so configure an external HTTPS uptime check for `https://calendar.social/health` before relying on the service.
 
+Railway protects its network below the application layer, but it does not provide an application-layer WAF. The application rejects malformed calendar paths before database access, limits each client source to 300 valid-looking calendar-link requests per minute, permits at most 16 such requests to execute concurrently, and bounds source tracking to 10,000 entries. These controls make online token iteration impractical from one source and shed excess application work without disrupting a busy shared network; they cannot absorb a volumetric or large distributed attack before traffic reaches Railway. For stronger public-internet protection, proxy `calendar.social` through a service such as Cloudflare with application-layer rate limiting and bot/WAF rules, then remove Railway's generated public domain so it cannot bypass that edge. Netlify is not required.
+
 ## Registration
 
 Registration requires an unused, unrevoked invitation token. On a brand-new empty database, create the first account by temporarily setting `APP_BOOTSTRAP_INVITE_TOKEN` to a long random value and opening:
@@ -236,7 +238,9 @@ For all-day events, the first and last dates shown in the form are both inclusiv
 
 ## Calendar links and public access
 
-New calendars have public access enabled and receive a random bearer token. `/calendar/{calendarToken}` is the one canonical calendar URL: it is the address editors and admins see in their browser, and it is the address they copy and share. Active editors and admins see mutation controls at that URL. Anyone else with the URL receives only the read-only calendar, without signing in, so the URL should be treated as a secret.
+New calendars have public access enabled and receive a bearer token made from 64 cryptographically random bits, encoded as exactly 11 unpadded Base64URL characters. `/{calendarToken}` is the one canonical calendar URL: it is the address editors and admins see in their browser, and it is the address they copy and share. There is no `/calendar/` prefix. Active editors and admins see mutation controls at that URL. Anyone else with the URL receives only the read-only calendar, without signing in, so the URL should be treated as a secret.
+
+Only exact one-segment paths containing the canonical unpadded Base64URL encoding of eight bytes enter calendar lookup. That means ten URL-safe Base64 characters followed by one of `AEIMQUYcgkosw048`; other 11-character lookalikes are rejected without a calendar database query. Valid-looking requests are source-rate-limited and globally concurrency-limited before lookup. Missing, disabled, and regenerated tokens use the same link-unavailable `404`; overload uses a generic `429` with `Retry-After`, without echoing the candidate token.
 
 An admin can disable public access without changing the URL. Active editors and admins can continue using that same URL, while everyone else receives a `404` page explaining that the link may have been regenerated or public access may be disabled. Re-enabling public access restores read-only access at the same URL.
 
@@ -299,7 +303,7 @@ Confirm that `APP_BASE_URL` exactly matches the HTTPS domain, only one applicati
 
 ### Calendar link does not work
 
-For an anonymous reader, confirm that public access is enabled and the URL has not been regenerated. The route must start with `/calendar/` followed by exactly one token segment. Editors and admins can open the current URL from **My calendars** even while public access is disabled. Also confirm that `APP_BASE_URL` is correct for generated invitation links.
+For an anonymous reader, confirm that public access is enabled and the URL has not been regenerated. The path must be exactly one root segment containing 11 Base64URL characters, with no `/calendar/` prefix. Editors and admins can open the current URL from **My calendars** even while public access is disabled. A `429` means the client source sent too many calendar-link requests and should wait for the `Retry-After` interval. Also confirm that `APP_BASE_URL` is correct for generated invitation links.
 
 ### Tables are missing
 
@@ -316,6 +320,7 @@ Use a database endpoint reachable from Docker, not a provider-private hostname. 
 ## Known limitations
 
 - Railway's deployment health check is not continuous monitoring; external uptime monitoring and alerting are not configured by this repository.
+- The direct Railway deployment has network-layer DDoS protection but no application-layer WAF. The in-process calendar-link controls limit brute-force and application work, while a large distributed or volumetric attack requires an upstream service such as Cloudflare.
 - Backups are manual; there is no scheduled backup service or retention policy yet.
 - Run one application instance because HTTP sessions are in memory, even though active authenticated cookies and inactivity timeouts roll for 30 days.
 - Forgotten-password account recovery is not implemented; signed-in password changes are available from account settings.

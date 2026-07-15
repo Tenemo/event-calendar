@@ -1,6 +1,7 @@
 package app.security;
 
 import app.user.ApplicationUser;
+import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 
@@ -28,6 +29,14 @@ public final class AuthenticatedSessionSecurity {
         }
         rotateSessionIdentifier(request);
         request.getSession(true).setAttribute(PASSWORD_VERSION_SESSION_ATTRIBUTE, user.getPasswordVersion());
+    }
+
+    public static void invalidateSessionAndLogout(HttpServletRequest request) throws ServletException {
+        HttpSession existingSession = request.getSession(false);
+        if (existingSession != null) {
+            existingSession.invalidate();
+        }
+        request.logout();
     }
 
     public static boolean hasCurrentPasswordVersion(

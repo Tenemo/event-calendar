@@ -9,11 +9,78 @@ import app.user.ApplicationUser;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import java.lang.reflect.Proxy;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 final class AuthenticatedSessionSecurityTest {
+    @Test
+    void invalidatesTheOwnedSessionBeforeRemovingTheAuthenticatedIdentity() throws Exception {
+        AtomicBoolean authenticated = new AtomicBoolean(true);
+        List<String> cleanupOperations = new ArrayList<>();
+        HttpSession session = (HttpSession) Proxy.newProxyInstance(
+                HttpSession.class.getClassLoader(),
+                new Class<?>[] {HttpSession.class},
+                (proxy, method, arguments) -> {
+                    if (method.getName().equals("invalidate")) {
+                        assertTrue(authenticated.get());
+                        cleanupOperations.add("session invalidated");
+                    }
+                    return defaultValue(method.getReturnType());
+                });
+        HttpServletRequest request = (HttpServletRequest) Proxy.newProxyInstance(
+                HttpServletRequest.class.getClassLoader(),
+                new Class<?>[] {HttpServletRequest.class},
+                (proxy, method, arguments) -> {
+                    if (method.getName().equals("getSession")) {
+                        if (!authenticated.get()) {
+                            throw new AssertionError("An anonymous identity cannot access the authenticated session.");
+                        }
+                        return session;
+                    }
+                    if (method.getName().equals("logout")) {
+                        cleanupOperations.add("logout");
+                        authenticated.set(false);
+                    }
+                    return defaultValue(method.getReturnType());
+                });
+
+        AuthenticatedSessionSecurity.invalidateSessionAndLogout(request);
+
+        assertAll(
+                () -> assertEquals(List.of("session invalidated", "logout"), cleanupOperations),
+                () -> assertFalse(authenticated.get()));
+    }
+
+    @Test
+    void logsOutWithoutCreatingAReplacementWhenThereIsNoSession() throws Exception {
+        AtomicInteger sessionLookups = new AtomicInteger();
+        AtomicInteger logoutCalls = new AtomicInteger();
+        HttpServletRequest request = (HttpServletRequest) Proxy.newProxyInstance(
+                HttpServletRequest.class.getClassLoader(),
+                new Class<?>[] {HttpServletRequest.class},
+                (proxy, method, arguments) -> {
+                    if (method.getName().equals("getSession")) {
+                        assertEquals(Boolean.FALSE, arguments[0]);
+                        sessionLookups.incrementAndGet();
+                        return null;
+                    }
+                    if (method.getName().equals("logout")) {
+                        logoutCalls.incrementAndGet();
+                    }
+                    return defaultValue(method.getReturnType());
+                });
+
+        AuthenticatedSessionSecurity.invalidateSessionAndLogout(request);
+
+        assertAll(
+                () -> assertEquals(1, sessionLookups.get()),
+                () -> assertEquals(1, logoutCalls.get()));
+    }
+
     @Test
     void rotatesAnExistingUnauthenticatedSessionAfterAuthentication() {
         AtomicInteger sessionIdentifierChanges = new AtomicInteger();

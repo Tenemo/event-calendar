@@ -15,6 +15,28 @@
         <param-value>true</param-value>
     </context-param>
 
+    <filter>
+        <filter-name>Session cookie refresh filter</filter-name>
+        <filter-class>app.security.SessionCookieRefreshFilter</filter-class>
+    </filter>
+
+    <filter>
+        <filter-name>Calendar route filter</filter-name>
+        <filter-class>app.calendar.CalendarRouteFilter</filter-class>
+    </filter>
+
+    <filter-mapping>
+        <filter-name>Session cookie refresh filter</filter-name>
+        <url-pattern>/*</url-pattern>
+        <dispatcher>REQUEST</dispatcher>
+    </filter-mapping>
+
+    <filter-mapping>
+        <filter-name>Calendar route filter</filter-name>
+        <url-pattern>/*</url-pattern>
+        <dispatcher>REQUEST</dispatcher>
+    </filter-mapping>
+
     <servlet>
         <servlet-name>Faces servlet</servlet-name>
         <servlet-class>jakarta.faces.webapp.FacesServlet</servlet-class>

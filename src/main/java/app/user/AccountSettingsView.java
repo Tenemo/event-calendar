@@ -1,5 +1,6 @@
 package app.user;
 
+import app.security.AuthenticatedSessionSecurity;
 import app.security.CurrentUser;
 import app.util.AuthorizationException;
 import app.util.ValidationException;
@@ -10,7 +11,6 @@ import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 
 @Named
@@ -51,11 +51,7 @@ public class AccountSettingsView {
     private void signOutAndRedirect() throws IOException, ServletException {
         FacesContext facesContext = FacesContext.getCurrentInstance();
         HttpServletRequest request = (HttpServletRequest) facesContext.getExternalContext().getRequest();
-        request.logout();
-        HttpSession session = request.getSession(false);
-        if (session != null) {
-            session.invalidate();
-        }
+        AuthenticatedSessionSecurity.invalidateSessionAndLogout(request);
         facesContext.getExternalContext().redirect(
                 facesContext.getExternalContext().getRequestContextPath() + "/login?passwordChanged=true");
         facesContext.responseComplete();

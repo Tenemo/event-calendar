@@ -34,7 +34,7 @@
                          emptyMessage="No calendars yet."
                          styleClass="surface-table">
                 <p:column headerText="Calendar">
-                    <h:outputLink value="#{request.contextPath}/calendar/#{calendar.publicToken}">#{calendar.calendarName}</h:outputLink>
+                    <h:outputLink value="#{request.contextPath}/#{calendar.publicToken}">#{calendar.calendarName}</h:outputLink>
                 </p:column>
                 <p:column headerText="Role">
                     <h:outputText value="#{calendar.role}"/>
@@ -43,7 +43,7 @@
                     <h:outputText value="#{calendar.publicAccessEnabled ? 'Enabled' : 'Disabled'}"/>
                 </p:column>
                 <p:column headerText="Action">
-                    <h:outputLink value="#{request.contextPath}/calendar/#{calendar.publicToken}"
+                    <h:outputLink value="#{request.contextPath}/#{calendar.publicToken}"
                                   styleClass="button-link secondary-link">Open</h:outputLink>
                     <h:outputLink value="#{request.contextPath}/app/calendar-settings"
                                   styleClass="button-link secondary-link"
