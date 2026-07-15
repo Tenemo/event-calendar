@@ -26,7 +26,7 @@ final class RuntimeSessionConfigurationTest {
 
         assertAll(
                 () -> assertEquals("true", httpSession.getAttribute("cookieHttpOnly")),
-                () -> assertEquals("${COOKIE_SECURE}", httpSession.getAttribute("cookieSecure")),
+                () -> assertEquals("true", httpSession.getAttribute("cookieSecure")),
                 () -> assertEquals("Lax", httpSession.getAttribute("cookieSameSite")),
                 () -> assertEquals("720h", httpSession.getAttribute("cookieMaxAge")),
                 () -> assertEquals("720h", httpSession.getAttribute("invalidationTimeout")),

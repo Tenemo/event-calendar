@@ -119,7 +119,6 @@ jobs:
     needs: build
     env:
       APP_BASE_URL: http://localhost:9080
-      COOKIE_SECURE: "false"
       PORT: "9080"
 
     steps:

@@ -26,7 +26,6 @@ services:
     environment:
       PORT: 9080
       HTTPS_PORT: 9443
-      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       PGHOST: postgres
       PGPORT: 5432
       PGDATABASE: ${PGDATABASE:-calendar}
@@ -85,7 +84,6 @@ services:
     environment:
       PORT: 9080
       HTTPS_PORT: 9443
-      COOKIE_SECURE: "false"
       PGHOST: postgres-bootstrap-verification
       PGPORT: 5432
       PGDATABASE: calendar_bootstrap_verification

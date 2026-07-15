@@ -6,7 +6,6 @@
 
     <variable name="PORT" defaultValue="9080"/>
     <variable name="HTTPS_PORT" defaultValue="9443"/>
-    <variable name="COOKIE_SECURE" defaultValue="false"/>
 
     <variable name="PGHOST" defaultValue="localhost"/>
     <variable name="PGPORT" defaultValue="5432"/>
@@ -22,7 +21,7 @@
     </httpEndpoint>
 
     <httpSession cookieHttpOnly="true"
-                 cookieSecure="${COOKIE_SECURE}"
+                 cookieSecure="true"
                  cookieSameSite="Lax"
                  cookieMaxAge="720h"
                  invalidationTimeout="720h"

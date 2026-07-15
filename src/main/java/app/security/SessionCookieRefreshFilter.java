@@ -26,21 +26,15 @@ public class SessionCookieRefreshFilter implements Filter {
     static final int SESSION_COOKIE_LIFETIME_SECONDS = Math.toIntExact(Duration.ofDays(30).toSeconds());
 
     private static final String SESSION_COOKIE_NAME = "JSESSIONID";
-    private static final String COOKIE_SECURE_ENVIRONMENT_VARIABLE = "COOKIE_SECURE";
 
     @Inject
     private CurrentUser currentUser;
 
-    private final boolean secureCookie;
-
     public SessionCookieRefreshFilter() {
-        this.secureCookie = Boolean.parseBoolean(
-                System.getenv().getOrDefault(COOKIE_SECURE_ENVIRONMENT_VARIABLE, "false"));
     }
 
-    SessionCookieRefreshFilter(CurrentUser currentUser, boolean secureCookie) {
+    SessionCookieRefreshFilter(CurrentUser currentUser) {
         this.currentUser = currentUser;
-        this.secureCookie = secureCookie;
     }
 
     @Override
@@ -105,7 +99,7 @@ public class SessionCookieRefreshFilter implements Filter {
             Cookie refreshedSessionCookie = new Cookie(SESSION_COOKIE_NAME, sessionCookie.getValue());
             refreshedSessionCookie.setPath("/");
             refreshedSessionCookie.setHttpOnly(true);
-            refreshedSessionCookie.setSecure(secureCookie || request.isSecure());
+            refreshedSessionCookie.setSecure(true);
             refreshedSessionCookie.setMaxAge(SESSION_COOKIE_LIFETIME_SECONDS);
             refreshedSessionCookie.setAttribute("SameSite", "Lax");
             response.addCookie(refreshedSessionCookie);

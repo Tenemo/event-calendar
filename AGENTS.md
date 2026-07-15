@@ -42,7 +42,7 @@
 - Serialize invitation acceptance so one invitation can be consumed by exactly one account, including under concurrent requests.
 - Treat bootstrap registration as a permanent database fact. Claim it atomically with account creation, roll the claim back when registration fails, and never re-enable it because accounts were deactivated.
 - Keep login throttling source-aware and username-aware without revealing whether an account exists.
-- Keep authenticated session cookies and inactivity timeouts rolling for 30 days across both authenticated application pages and canonical calendar routes. Sessions remain in memory, so application restart or redeploy requires reauthentication.
+- Keep authenticated session cookies unconditionally Secure, HTTP-only, SameSite `Lax`, and rolling for 30 days across both authenticated application pages and canonical calendar routes. Sessions remain in memory, so application restart or redeploy requires reauthentication.
 - Keep `/health` database-aware: return `200 ok` only when PostgreSQL is usable and `503 unavailable` otherwise.
 
 ## Implementation rules

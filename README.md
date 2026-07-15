@@ -49,7 +49,6 @@ Copy `.env.example` to `.env` for local development. Do not commit `.env`.
 | --- | --- | --- |
 | `PORT` | `9080` | Liberty HTTP port, or the host port used by the Compose web service. Railway injects this value. |
 | `HTTPS_PORT` | `9443` | Optional local Liberty HTTPS listener. Railway terminates HTTPS at its proxy. |
-| `COOKIE_SECURE` | `false` | Set to `true` whenever the external application URL uses HTTPS. |
 | `PGHOST` | `localhost` | PostgreSQL host. The Compose web container uses `postgres`. |
 | `PGPORT` | `5432` | PostgreSQL port. |
 | `PGDATABASE` | `calendar` | PostgreSQL database name. |
@@ -144,7 +143,7 @@ mise run docker-up
 docker compose --profile application logs --follow web
 ```
 
-The Compose application profile uses `COOKIE_SECURE=false` and the local database service. Set `PORT` and `APP_BASE_URL` together if port `9080` is unavailable. For example, use `PORT=9082` and `APP_BASE_URL=http://localhost:9082` in `.env`.
+The Compose application profile uses the local database service. Session cookies are always Secure, including during local development; use the documented `localhost` URL or HTTPS rather than a plain-HTTP non-local hostname. Set `PORT` and `APP_BASE_URL` together if port `9080` is unavailable. For example, use `PORT=9082` and `APP_BASE_URL=http://localhost:9082` in `.env`.
 
 Confirm the runtime directly:
 
@@ -182,7 +181,6 @@ Keep the resolved database password only in Railway. The `DATABASE_URL` referenc
 Web service variables:
 
 ```text
-COOKIE_SECURE=true
 PGHOST=${{Postgres.RAILWAY_PRIVATE_DOMAIN}}
 PGPORT=5432
 PGDATABASE=${{Postgres.POSTGRES_DB}}
@@ -211,7 +209,7 @@ Passwords must be between 8 and 512 characters, contain at least one uppercase l
 
 Five failed sign-in attempts for one normalized username from one client source within 15 minutes block that username/source pair for 15 minutes. Twenty-five failures from one source in the same window block further attempts from that source for 15 minutes, which limits username spraying without letting one remote client lock the account for other sources. Missing and existing usernames follow the same policy and return the same generic failure.
 
-Authenticated sessions use an HTTP-only, SameSite `Lax` cookie that is secure when `COOKIE_SECURE=true`. Authenticated application and calendar requests refresh the persistent cookie's rolling 30-day lifetime, and the server invalidates a session after 30 days of inactivity. A server restart or redeploy clears in-memory sessions and requires reauthentication, while accounts and calendar data remain in PostgreSQL.
+Authenticated sessions use an unconditionally Secure, HTTP-only, SameSite `Lax` cookie. Authenticated application and calendar requests refresh the persistent cookie's rolling 30-day lifetime, and the server invalidates a session after 30 days of inactivity. A server restart or redeploy clears in-memory sessions and requires reauthentication, while accounts and calendar data remain in PostgreSQL.
 
 ## Password changes
 
@@ -297,7 +295,7 @@ Confirm that Liberty uses `host="*"`, the web service receives Railway's `PORT`,
 
 ### Login works locally but not in production
 
-Confirm that `COOKIE_SECURE=true`, `APP_BASE_URL` exactly matches the HTTPS domain, only one application replica is running, and the browser is not switching between generated and custom domains.
+Confirm that `APP_BASE_URL` exactly matches the HTTPS domain, only one application replica is running, and the browser is not switching between generated and custom domains. Session cookies are always Secure and cannot be downgraded through configuration.
 
 ### Calendar link does not work
 

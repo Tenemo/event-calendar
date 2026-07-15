@@ -230,7 +230,7 @@ Do not expose sequential calendar ids in calendar read URLs. Do not use calendar
 ### 3.4 Runtime and persistence requirements
 
 1. The repository must provide Maven Wrapper, repository-scoped Java configuration, portable `mise` tasks, Docker Compose PostgreSQL 17, and a thin portable Java orchestration helper.
-2. Open Liberty must bind to every container interface, use the injected `PORT`, deploy the WAR at `/`, disable URL-rewritten sessions, and configure HTTP-only SameSite `Lax` session cookies. `COOKIE_SECURE` controls the production `Secure` attribute.
+2. Open Liberty must bind to every container interface, use the injected `PORT`, deploy the WAR at `/`, disable URL-rewritten sessions, and configure unconditionally Secure, HTTP-only, SameSite `Lax` session cookies.
 3. The PostgreSQL driver must be available to Liberty as a server resource. Downloaded drivers and generated Liberty state belong under ignored build output.
 4. Flyway owns every schema change and runs before the application accepts traffic. Jakarta Persistence schema generation remains disabled.
 5. Persistence code must remain provider-neutral and use the Jakarta Persistence XML schema supported by the runtime.
@@ -452,7 +452,7 @@ Production packaging and deployment requirements:
 4. Keep Railway build, start, restart, and deployment-health configuration in repository-owned configuration-as-code where Railway supports it.
 5. Deploy production from pushes or merges to `master`; do not create preview deployments or deploy from pull-request workflows.
 6. Use Railway's injected `PORT`, private PostgreSQL service references, persistent PostgreSQL storage, managed HTTPS, and the `calendar.social` custom domain.
-7. Set `COOKIE_SECURE=true` and `APP_BASE_URL=https://calendar.social` in production.
+7. Set `APP_BASE_URL=https://calendar.social` in production. Session cookies remain Secure without an environment-controlled downgrade path.
 8. Keep the bootstrap invitation secret only until the first account is created, then clear it and redeploy. Permanent database bootstrap consumption remains authoritative.
 9. Gate a deployment on `/health`, then use an external HTTPS monitor for continuous outage detection because Railway deployment probes are not ongoing monitoring.
 10. Verify account, calendar, membership, invitation, event, audit, and password-version persistence after a redeploy; expect all in-memory sessions to require sign-in again.

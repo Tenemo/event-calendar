@@ -2070,6 +2070,7 @@ final class SharedCalendarEndToEndIT {
                 .orElseThrow(() -> new AssertionError(
                         "Authenticated activity did not refresh the session cookie."));
         assertTrue(sessionCookieHeader.contains("Path=/"));
+        assertTrue(sessionCookieHeader.contains("Secure"));
         assertTrue(sessionCookieHeader.contains("HttpOnly"));
         assertTrue(sessionCookieHeader.contains("SameSite=Lax"));
         assertTrue(

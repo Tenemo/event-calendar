@@ -2,7 +2,6 @@ package app.security;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import jakarta.servlet.FilterChain;
@@ -26,7 +25,7 @@ final class SessionCookieRefreshFilterTest {
 
     @Test
     void refreshesOnlyTheAuthenticatedValidSessionCookieForThirtyDays() throws Exception {
-        SessionCookieRefreshFilter filter = new SessionCookieRefreshFilter(currentUser(true), false);
+        SessionCookieRefreshFilter filter = new SessionCookieRefreshFilter(currentUser(true));
         List<Cookie> responseCookies = new ArrayList<>();
         AtomicInteger filterChainCalls = new AtomicInteger();
 
@@ -43,7 +42,7 @@ final class SessionCookieRefreshFilterTest {
                 () -> assertEquals(SESSION_ID, refreshedSessionCookie.getValue()),
                 () -> assertEquals("/", refreshedSessionCookie.getPath()),
                 () -> assertTrue(refreshedSessionCookie.isHttpOnly()),
-                () -> assertFalse(refreshedSessionCookie.getSecure()),
+                () -> assertTrue(refreshedSessionCookie.getSecure()),
                 () -> assertEquals(
                         SessionCookieRefreshFilter.SESSION_COOKIE_LIFETIME_SECONDS,
                         refreshedSessionCookie.getMaxAge()),
@@ -51,12 +50,12 @@ final class SessionCookieRefreshFilterTest {
     }
 
     @Test
-    void secureTransportAlwaysProducesASecureRefreshedCookie() throws Exception {
-        for (boolean secureCookieConfiguration : List.of(false, true)) {
+    void backendTransportCannotProduceAnInsecureRefreshedCookie() throws Exception {
+        for (boolean secureBackendTransport : List.of(false, true)) {
             List<Cookie> responseCookies = new ArrayList<>();
-            new SessionCookieRefreshFilter(currentUser(true), secureCookieConfiguration)
+            new SessionCookieRefreshFilter(currentUser(true))
                     .doFilter(
-                            request(true, true, true, new Cookie("JSESSIONID", SESSION_ID)),
+                            request(true, true, secureBackendTransport, new Cookie("JSESSIONID", SESSION_ID)),
                             response(responseCookies, false),
                             filterChain(new AtomicInteger()));
             assertTrue(responseCookies.getFirst().getSecure());
@@ -82,7 +81,7 @@ final class SessionCookieRefreshFilterTest {
         for (TestCase testCase : testCases) {
             List<Cookie> responseCookies = new ArrayList<>();
             AtomicInteger filterChainCalls = new AtomicInteger();
-            new SessionCookieRefreshFilter(testCase.currentUser(), false)
+            new SessionCookieRefreshFilter(testCase.currentUser())
                     .doFilter(testCase.request(), response(responseCookies, false), filterChain(filterChainCalls));
             assertAll(
                     () -> assertTrue(responseCookies.isEmpty()),
@@ -94,7 +93,7 @@ final class SessionCookieRefreshFilterTest {
     void doesNotRefreshAfterLogoutOrAfterTheResponseIsCommitted() throws Exception {
         AtomicBoolean authenticated = new AtomicBoolean(true);
         List<Cookie> logoutResponseCookies = new ArrayList<>();
-        new SessionCookieRefreshFilter(currentUser(true), true)
+        new SessionCookieRefreshFilter(currentUser(true))
                 .doFilter(
                         request(
                                 true,
@@ -105,7 +104,7 @@ final class SessionCookieRefreshFilterTest {
                         (request, response) -> authenticated.set(false));
 
         List<Cookie> committedResponseCookies = new ArrayList<>();
-        new SessionCookieRefreshFilter(currentUser(true), true)
+        new SessionCookieRefreshFilter(currentUser(true))
                 .doFilter(
                         request(true, true, false, new Cookie("JSESSIONID", SESSION_ID)),
                         response(committedResponseCookies, true),
@@ -120,14 +119,14 @@ final class SessionCookieRefreshFilterTest {
     void refreshesBeforeRenderingCanCommitButNotBeforeAnErrorResponse() throws Exception {
         AtomicBoolean renderingResponseCommitted = new AtomicBoolean();
         List<Cookie> renderingResponseCookies = new ArrayList<>();
-        new SessionCookieRefreshFilter(currentUser(true), false)
+        new SessionCookieRefreshFilter(currentUser(true))
                 .doFilter(
                         request(true, true, false, new Cookie("JSESSIONID", SESSION_ID)),
                         response(renderingResponseCookies, renderingResponseCommitted),
                         (request, response) -> ((HttpServletResponse) response).getWriter());
 
         List<Cookie> errorResponseCookies = new ArrayList<>();
-        new SessionCookieRefreshFilter(currentUser(true), false)
+        new SessionCookieRefreshFilter(currentUser(true))
                 .doFilter(
                         request(true, true, false, new Cookie("JSESSIONID", SESSION_ID)),
                         response(errorResponseCookies, false),
@@ -153,7 +152,7 @@ final class SessionCookieRefreshFilterTest {
             AtomicReference<String> redirectLocation = new AtomicReference<>();
             AtomicInteger filterChainCalls = new AtomicInteger();
 
-            new SessionCookieRefreshFilter(currentUser(false), true)
+            new SessionCookieRefreshFilter(currentUser(false))
                     .doFilter(
                             staleSessionRequest(
                                     staleSessionCase.requestUri(),
