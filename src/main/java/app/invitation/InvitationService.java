@@ -29,8 +29,20 @@ import java.util.Optional;
 
 @Stateless
 public class InvitationService {
+    static final int MAXIMUM_INVITATIONS_PER_PAGE = 50;
+
     private static final int MAXIMUM_TOKEN_GENERATION_ATTEMPTS = 10;
     private static final String BOOTSTRAP_INVITATION_TOKEN_ENVIRONMENT_VARIABLE = "APP_BOOTSTRAP_INVITE_TOKEN";
+    private static final String VISIBLE_INVITATION_PREDICATE =
+            "invitation.createdByUser.id = :actingUserId "
+                    + "or exists ("
+                    + "select calendarMember.calendar.id from CalendarMember calendarMember "
+                    + "where calendarMember.calendar = calendar "
+                    + "and calendarMember.user.id = :actingUserId "
+                    + "and calendarMember.role = :adminRole "
+                    + "and calendarMember.active = true "
+                    + "and calendarMember.user.active = true "
+                    + "and calendarMember.calendar.active = true)";
 
     @PersistenceContext(unitName = "calendarPU")
     private EntityManager entityManager;
@@ -71,25 +83,36 @@ public class InvitationService {
         return invitation;
     }
 
-    public List<Invitation> listInvitations(ApplicationUser actingUser) {
+    public long countInvitations(ApplicationUser actingUser) {
         requireActiveUser(actingUser);
-        return entityManager
-                .createQuery(
-                        "select invitation from Invitation invitation "
-                                + "left join fetch invitation.calendar calendar "
-                                + "where invitation.createdByUser.id = :actingUserId "
-                                + "or exists ("
-                                + "select calendarMember.calendar.id from CalendarMember calendarMember "
-                                + "where calendarMember.calendar = calendar "
-                                + "and calendarMember.user.id = :actingUserId "
-                                + "and calendarMember.role = :adminRole "
-                                + "and calendarMember.active = true "
-                                + "and calendarMember.user.active = true "
-                                + "and calendarMember.calendar.active = true) "
-                                + "order by invitation.createdAt desc, invitation.id desc",
-                        Invitation.class)
-                .setParameter("actingUserId", actingUser.getId())
-                .setParameter("adminRole", CalendarRole.ADMIN)
+        return bindInvitationVisibility(
+                        entityManager.createQuery(
+                                "select count(invitation) from Invitation invitation "
+                                        + "left join invitation.calendar calendar "
+                                        + "where "
+                                        + VISIBLE_INVITATION_PREDICATE,
+                                Long.class),
+                        actingUser)
+                .getSingleResult();
+    }
+
+    public List<Invitation> listInvitations(
+            ApplicationUser actingUser,
+            int firstResult,
+            int maximumResults) {
+        requireActiveUser(actingUser);
+        requireValidInvitationPage(firstResult, maximumResults);
+        return bindInvitationVisibility(
+                        entityManager.createQuery(
+                                "select invitation from Invitation invitation "
+                                        + "left join fetch invitation.calendar calendar "
+                                        + "where "
+                                        + VISIBLE_INVITATION_PREDICATE
+                                        + " order by invitation.createdAt desc, invitation.id desc",
+                                Invitation.class),
+                        actingUser)
+                .setFirstResult(firstResult)
+                .setMaxResults(maximumResults)
                 .getResultList();
     }
 
@@ -250,6 +273,26 @@ public class InvitationService {
             return Optional.of(query.setLockMode(LockModeType.PESSIMISTIC_WRITE).getSingleResult());
         } catch (NoResultException exception) {
             return Optional.empty();
+        }
+    }
+
+    private <T> TypedQuery<T> bindInvitationVisibility(
+            TypedQuery<T> query,
+            ApplicationUser actingUser) {
+        return query
+                .setParameter("actingUserId", actingUser.getId())
+                .setParameter("adminRole", CalendarRole.ADMIN);
+    }
+
+    private void requireValidInvitationPage(int firstResult, int maximumResults) {
+        if (firstResult < 0) {
+            throw new IllegalArgumentException("The first invitation result cannot be negative.");
+        }
+        if (maximumResults < 1 || maximumResults > MAXIMUM_INVITATIONS_PER_PAGE) {
+            throw new IllegalArgumentException(
+                    "The invitation page size must be between 1 and "
+                            + MAXIMUM_INVITATIONS_PER_PAGE
+                            + ".");
         }
     }
 

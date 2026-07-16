@@ -4,6 +4,8 @@ import static app.testsupport.ServiceTestSupport.setField;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import jakarta.servlet.http.HttpServletResponse;
@@ -63,6 +65,18 @@ final class HealthServletTest {
                 () -> assertFalse(responseCapture.body().contains(sensitiveFailureMessage)));
     }
 
+    @Test
+    void unexpectedProgrammingFailuresAreNotMisreportedAsDatabaseOutages() {
+        IllegalStateException unexpectedFailure = new IllegalStateException("Unexpected datasource implementation failure.");
+        HealthServlet healthServlet = healthServlet(dataSourceThrowing(unexpectedFailure));
+
+        IllegalStateException thrownFailure = assertThrows(
+                IllegalStateException.class,
+                () -> healthServlet.doGet(null, new ResponseCapture().response()));
+
+        assertSame(unexpectedFailure, thrownFailure);
+    }
+
     private static HealthServlet healthServlet(DataSource dataSource) {
         HealthServlet healthServlet = new HealthServlet();
         setField(healthServlet, "dataSource", dataSource);
@@ -78,7 +92,7 @@ final class HealthServletTest {
         });
     }
 
-    private static DataSource dataSourceThrowing(SQLException exception) {
+    private static DataSource dataSourceThrowing(Throwable exception) {
         return dataSource((proxy, method, arguments) -> {
             if (method.getName().equals("getConnection")) {
                 throw exception;

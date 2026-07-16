@@ -61,6 +61,11 @@
             <div class="table-scroll-region" role="region" aria-label="Invitations table" tabindex="0">
             <p:dataTable value="#{invitationView.invitations}"
                          var="invitation"
+                         lazy="true"
+                         paginator="true"
+                         paginatorAlwaysVisible="false"
+                         paginatorPosition="bottom"
+                         rows="50"
                          emptyMessage="No invitations yet."
                          styleClass="surface-table">
                 <p:column headerText="Invitation link">

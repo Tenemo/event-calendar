@@ -19,6 +19,7 @@ import app.membership.CalendarMembershipService;
 import app.membership.CalendarRole;
 import app.security.TokenService;
 import app.testsupport.ServiceTestSupport.EntityManagerStub;
+import app.testsupport.ServiceTestSupport.QueryPagination;
 import app.user.ApplicationUser;
 import app.user.RegistrationAdmission;
 import app.user.RegistrationBootstrapState;
@@ -275,18 +276,34 @@ final class InvitationServiceTest {
     }
 
     @Test
-    void usersListTheirFullInvitationHistoryWithoutAResultLimit() {
+    void invitationHistoryIsCountedAndFetchedInBoundedPages() {
         List<Invitation> invitations = List.of(registrationInvitation(activeUser(1L, "creator")));
         EntityManagerStub entityManagerStub = entityManagerStub()
+                .singleResult("select count(invitation)", 73L)
                 .resultList("from Invitation invitation", invitations);
         InvitationService service = service(
                 entityManagerStub,
                 new FixedTokenService("unused"),
                 new RecordingAuditService());
 
+        ApplicationUser creator = activeUser(1L, "creator");
+        List<Invitation> invitationPage = service.listInvitations(creator, 50, 23);
+        QueryPagination queryPagination = entityManagerStub.queryPaginations().getFirst();
+
         assertAll(
-                () -> assertEquals(invitations, service.listInvitations(activeUser(1L, "creator"))),
-                () -> assertTrue(entityManagerStub.maximumResultLimitedQueryTexts().isEmpty()));
+                () -> assertEquals(73L, service.countInvitations(creator)),
+                () -> assertEquals(invitations, invitationPage),
+                () -> assertEquals(50, queryPagination.firstResult()),
+                () -> assertEquals(23, queryPagination.maximumResults()),
+                () -> assertFalse(entityManagerStub.maximumResultLimitedQueryTexts().isEmpty()),
+                () -> assertThrows(IllegalArgumentException.class, () -> service.listInvitations(creator, -1, 23)),
+                () -> assertThrows(IllegalArgumentException.class, () -> service.listInvitations(creator, 0, 0)),
+                () -> assertThrows(
+                        IllegalArgumentException.class,
+                        () -> service.listInvitations(
+                                creator,
+                                0,
+                                InvitationService.MAXIMUM_INVITATIONS_PER_PAGE + 1)));
     }
 
     @Test
@@ -313,7 +330,10 @@ final class InvitationServiceTest {
                 new FixedTokenService("unused"),
                 new RecordingAuditService());
 
-        List<Invitation> visibleInvitations = listService.listInvitations(administrator);
+        List<Invitation> visibleInvitations = listService.listInvitations(
+                administrator,
+                0,
+                InvitationService.MAXIMUM_INVITATIONS_PER_PAGE);
 
         RecordingAuditService auditService = new RecordingAuditService();
         InvitationService revokeService = service(
@@ -324,7 +344,7 @@ final class InvitationServiceTest {
 
         assertAll(
                 () -> assertEquals(calendarHistory, visibleInvitations),
-                () -> assertTrue(listEntityManagerStub.maximumResultLimitedQueryTexts().isEmpty()),
+                () -> assertFalse(listEntityManagerStub.maximumResultLimitedQueryTexts().isEmpty()),
                 () -> assertEquals(ZoneOffset.UTC, editorInvitation.getRevokedAt().getOffset()),
                 () -> assertSame(calendar, auditService.calendar),
                 () -> assertEquals("revoked", auditService.action));

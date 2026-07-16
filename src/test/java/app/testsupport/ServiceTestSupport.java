@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public final class ServiceTestSupport {
     private ServiceTestSupport() {
@@ -50,6 +51,7 @@ public final class ServiceTestSupport {
         private final Map<FindKey, Object> findResults = new HashMap<>();
         private final List<String> lockedQueryTexts = new ArrayList<>();
         private final List<String> maximumResultLimitedQueryTexts = new ArrayList<>();
+        private final List<QueryPagination> queryPaginations = new ArrayList<>();
         private final List<Object> persistedObjects = new ArrayList<>();
         private final List<Object> removedObjects = new ArrayList<>();
         private final Map<String, QueryBehavior> queryBehaviors = new LinkedHashMap<>();
@@ -78,6 +80,10 @@ public final class ServiceTestSupport {
 
         public List<String> maximumResultLimitedQueryTexts() {
             return maximumResultLimitedQueryTexts;
+        }
+
+        public List<QueryPagination> queryPaginations() {
+            return queryPaginations;
         }
 
         public List<Object> removedObjects() {
@@ -174,6 +180,8 @@ public final class ServiceTestSupport {
         }
 
         private TypedQuery<?> createTypedQuery(String queryText) {
+            AtomicInteger firstResult = new AtomicInteger();
+            AtomicInteger maximumResults = new AtomicInteger(Integer.MAX_VALUE);
             InvocationHandler queryHandler = (proxy, method, arguments) -> {
                 String methodName = method.getName();
                 if (method.getDeclaringClass() == Object.class) {
@@ -192,12 +200,21 @@ public final class ServiceTestSupport {
                 }
                 if (methodName.equals("setMaxResults")) {
                     maximumResultLimitedQueryTexts.add(queryText);
+                    maximumResults.set((Integer) arguments[0]);
+                    return proxy;
+                }
+                if (methodName.equals("setFirstResult")) {
+                    firstResult.set((Integer) arguments[0]);
                     return proxy;
                 }
                 if (methodName.equals("getSingleResult")) {
                     return matchingBehavior(queryText).singleResult();
                 }
                 if (methodName.equals("getResultList")) {
+                    queryPaginations.add(new QueryPagination(
+                            queryText,
+                            firstResult.get(),
+                            maximumResults.get()));
                     return matchingBehavior(queryText).resultList();
                 }
                 throw new AssertionError("Unsupported TypedQuery method: " + methodName);
@@ -229,6 +246,9 @@ public final class ServiceTestSupport {
     }
 
     private record FindKey(Class<?> entityType, Object id) {
+    }
+
+    public record QueryPagination(String queryText, int firstResult, int maximumResults) {
     }
 
     private static final class QueryBehavior {

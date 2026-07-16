@@ -766,6 +766,31 @@ final class SharedCalendarEndToEndIT {
     }
 
     @Test
+    void invitationHistoryUsesDatabaseBackedPaginationWithoutHidingOlderAvailableInvitations() throws SQLException {
+        String uniqueSuffix = uniqueSuffix();
+        String username = "pagination-owner-" + uniqueSuffix;
+        seedUser(username);
+        insertRegistrationInvitations(username, 55);
+        List<String> browserMessages = new ArrayList<>();
+
+        try (BrowserContext browserContext = browser.newContext()) {
+            Page page = newPage(browserContext, browserMessages);
+            signIn(page, username, TEST_PASSWORD);
+            page.navigate(route("/app/invitations"));
+
+            Locator invitationRows = page.locator(".ui-datatable tbody tr");
+            assertThat(invitationRows).hasCount(50);
+            assertThat(page.locator(".ui-paginator-next")).isEnabled();
+            page.locator(".ui-paginator-next").click();
+
+            assertThat(invitationRows).hasCount(5);
+            assertEquals(5, invitationRows.locator("button:has-text('Revoke')").count());
+            assertThat(page.locator(".ui-paginator-prev")).isEnabled();
+            assertNoBrowserMessages(browserMessages);
+        }
+    }
+
+    @Test
     void acceptedInvitationsPreserveStrongerRolesAndReactivateRemovedMembers() throws SQLException {
         String uniqueSuffix = uniqueSuffix();
         String ownerUsername = "membership-owner-" + uniqueSuffix;
@@ -1917,6 +1942,35 @@ final class SharedCalendarEndToEndIT {
             assertEquals(1, statement.executeUpdate(), "Expected one expired invitation to be inserted for test setup.");
         }
         return route("/register?token=" + invitationToken);
+    }
+
+    private void insertRegistrationInvitations(String creatorUsername, int invitationCount) throws SQLException {
+        String jdbcUrl = "jdbc:postgresql://"
+                + firstNonBlank(System.getenv(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE), "localhost")
+                + ":"
+                + firstNonBlank(System.getenv(POSTGRESQL_PORT_ENVIRONMENT_VARIABLE), "5432")
+                + "/"
+                + firstNonBlank(System.getenv(POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE), "calendar");
+        try (Connection connection = DriverManager.getConnection(
+                        jdbcUrl,
+                        firstNonBlank(System.getenv(POSTGRESQL_USER_ENVIRONMENT_VARIABLE), "calendar"),
+                        firstNonBlank(System.getenv(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE), "calendar"));
+                PreparedStatement statement = connection.prepareStatement(
+                        "insert into app_invitation "
+                                + "(invite_token, calendar_id, role_name, created_by_user_id, expires_at, created_at) "
+                                + "select ?, null, null, id, now() + interval '7 days', "
+                                + "now() - (? * interval '1 second') "
+                                + "from app_user where username = ?")) {
+            for (int invitationIndex = 0; invitationIndex < invitationCount; invitationIndex++) {
+                statement.setString(1, "pagination-test-" + UUID.randomUUID().toString().replace("-", ""));
+                statement.setInt(2, invitationIndex);
+                statement.setString(3, creatorUsername);
+                statement.addBatch();
+            }
+            for (int updateCount : statement.executeBatch()) {
+                assertEquals(1, updateCount, "Expected each paginated invitation fixture to be inserted.");
+            }
+        }
     }
 
     private void setCalendarActive(long calendarId, boolean active) throws SQLException {

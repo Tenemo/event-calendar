@@ -17,6 +17,10 @@ import jakarta.inject.Named;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
+import org.primefaces.model.FilterMeta;
+import org.primefaces.model.LazyDataModel;
+import org.primefaces.model.SortMeta;
 
 @Named
 @RequestScoped
@@ -38,7 +42,7 @@ public class InvitationView {
 
     private Long selectedCalendarId;
     private List<EditableCalendarOption> editableCalendars = List.of();
-    private List<InvitationRow> invitations = List.of();
+    private LazyDataModel<InvitationRow> invitations;
     private String generatedInvitationLink;
 
     @PostConstruct
@@ -48,7 +52,7 @@ public class InvitationView {
                 .filter(this::canCreateEditorInvitation)
                 .map(calendar -> new EditableCalendarOption(calendar.getCalendarId(), calendar.getCalendarName()))
                 .toList();
-        reloadInvitations(actingUser);
+        invitations = new InvitationLazyDataModel(actingUser);
     }
 
     public void createRegistrationInvitation() {
@@ -56,7 +60,6 @@ public class InvitationView {
             ApplicationUser actingUser = currentUser.require();
             Invitation invitation = invitationService.createRegistrationInvitation(actingUser);
             generatedInvitationLink = invitationLink(invitation.getInvitationToken());
-            reloadInvitations(actingUser);
             addMessage(FacesMessage.SEVERITY_INFO, "Registration invitation created.", "Share the generated link directly.");
         } catch (AuthorizationException | ValidationException exception) {
             addMessage(FacesMessage.SEVERITY_ERROR, "Invitation failed.", exception.getMessage());
@@ -71,7 +74,6 @@ public class InvitationView {
             ApplicationUser actingUser = currentUser.require();
             Invitation invitation = invitationService.createCalendarEditorInvitation(actingUser, selectedCalendarId, null);
             generatedInvitationLink = invitationLink(invitation.getInvitationToken());
-            reloadInvitations(actingUser);
             addMessage(FacesMessage.SEVERITY_INFO, "Editor invitation created.", "Share the generated link directly.");
         } catch (AuthorizationException | ValidationException exception) {
             addMessage(FacesMessage.SEVERITY_ERROR, "Invitation failed.", exception.getMessage());
@@ -82,7 +84,6 @@ public class InvitationView {
         try {
             ApplicationUser actingUser = currentUser.require();
             invitationService.revokeInvitation(actingUser, invitationId);
-            reloadInvitations(actingUser);
             addMessage(FacesMessage.SEVERITY_INFO, "Invitation revoked.", "The link can no longer be used.");
         } catch (AuthorizationException | ValidationException exception) {
             addMessage(FacesMessage.SEVERITY_ERROR, "Revoke failed.", exception.getMessage());
@@ -105,7 +106,7 @@ public class InvitationView {
         return !editableCalendars.isEmpty();
     }
 
-    public List<InvitationRow> getInvitations() {
+    public LazyDataModel<InvitationRow> getInvitations() {
         return invitations;
     }
 
@@ -119,13 +120,6 @@ public class InvitationView {
 
     private boolean canCreateEditorInvitation(CalendarMembershipSummary calendar) {
         return calendar.getRole() == CalendarRole.EDITOR || calendar.getRole() == CalendarRole.ADMIN;
-    }
-
-    private void reloadInvitations(ApplicationUser actingUser) {
-        OffsetDateTime currentTime = OffsetDateTime.now(ZoneOffset.UTC);
-        invitations = invitationService.listInvitations(actingUser).stream()
-                .map(invitation -> toRow(invitation, currentTime))
-                .toList();
     }
 
     private InvitationRow toRow(Invitation invitation, OffsetDateTime currentTime) {
@@ -165,6 +159,31 @@ public class InvitationView {
 
     private void addMessage(FacesMessage.Severity severity, String summary, String detail) {
         FacesContext.getCurrentInstance().addMessage(null, new FacesMessage(severity, summary, detail));
+    }
+
+    private final class InvitationLazyDataModel extends LazyDataModel<InvitationRow> {
+        private final ApplicationUser actingUser;
+
+        private InvitationLazyDataModel(ApplicationUser actingUser) {
+            this.actingUser = actingUser;
+        }
+
+        @Override
+        public int count(Map<String, FilterMeta> filterMetadata) {
+            return Math.toIntExact(invitationService.countInvitations(actingUser));
+        }
+
+        @Override
+        public List<InvitationRow> load(
+                int firstResult,
+                int pageSize,
+                Map<String, SortMeta> sortMetadata,
+                Map<String, FilterMeta> filterMetadata) {
+            OffsetDateTime currentTime = OffsetDateTime.now(ZoneOffset.UTC);
+            return invitationService.listInvitations(actingUser, firstResult, pageSize).stream()
+                    .map(invitation -> toRow(invitation, currentTime))
+                    .toList();
+        }
     }
 
     public static final class EditableCalendarOption {
