@@ -141,29 +141,31 @@ final class SessionCookieRefreshFilterTest {
     }
 
     @Test
-    void invalidatesAStaleApplicationSessionAndUsesOnlyTheFixedLoginRedirect() throws Exception {
-        AtomicBoolean loggedOut = new AtomicBoolean();
-        AtomicBoolean sessionInvalidated = new AtomicBoolean();
-        List<String> sessionCleanupOperations = new ArrayList<>();
-        AtomicReference<String> redirectLocation = new AtomicReference<>();
-        AtomicInteger filterChainCalls = new AtomicInteger();
+    void invalidatesStaleApplicationAndCalendarPostbackSessionsWithTheFixedLoginRedirect() throws Exception {
+        for (String requestUri : List.of("/app/calendars", "/public-calendar.xhtml")) {
+            AtomicBoolean loggedOut = new AtomicBoolean();
+            AtomicBoolean sessionInvalidated = new AtomicBoolean();
+            List<String> sessionCleanupOperations = new ArrayList<>();
+            AtomicReference<String> redirectLocation = new AtomicReference<>();
+            AtomicInteger filterChainCalls = new AtomicInteger();
 
-        new SessionCookieRefreshFilter(currentUser(false))
-                .doFilter(
-                        staleSessionRequest(
-                                "/app/calendars",
-                                loggedOut,
-                                sessionInvalidated,
-                                sessionCleanupOperations),
-                        redirectResponse(redirectLocation),
-                        filterChain(filterChainCalls));
+            new SessionCookieRefreshFilter(currentUser(false))
+                    .doFilter(
+                            staleSessionRequest(
+                                    requestUri,
+                                    loggedOut,
+                                    sessionInvalidated,
+                                    sessionCleanupOperations),
+                            redirectResponse(redirectLocation),
+                            filterChain(filterChainCalls));
 
-        assertAll(
-                () -> assertTrue(loggedOut.get()),
-                () -> assertTrue(sessionInvalidated.get()),
-                () -> assertEquals(List.of("session invalidated", "logout"), sessionCleanupOperations),
-                () -> assertEquals("/login?reauthenticationRequired=true", redirectLocation.get()),
-                () -> assertEquals(0, filterChainCalls.get()));
+            assertAll(
+                    () -> assertTrue(loggedOut.get()),
+                    () -> assertTrue(sessionInvalidated.get()),
+                    () -> assertEquals(List.of("session invalidated", "logout"), sessionCleanupOperations),
+                    () -> assertEquals("/login?reauthenticationRequired=true", redirectLocation.get()),
+                    () -> assertEquals(0, filterChainCalls.get()));
+        }
     }
 
     @Test

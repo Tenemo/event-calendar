@@ -49,11 +49,11 @@ final class RuntimeHealthConfigurationTest {
     }
 
     @Test
-    void httpEndpointUsesTrustedProxyRemoteAddressProcessing() throws Exception {
+    void httpEndpointLeavesClientSourceResolutionToTheRailwayAwareApplicationPolicy() throws Exception {
         Document serverConfiguration = readServerConfiguration();
         Element httpEndpoint = elementWithId(serverConfiguration, "httpEndpoint", "defaultHttpEndpoint");
 
-        assertEquals(1, httpEndpoint.getElementsByTagName("remoteIp").getLength());
+        assertEquals(0, httpEndpoint.getElementsByTagName("remoteIp").getLength());
     }
 
     private static Document readServerConfiguration() throws Exception {

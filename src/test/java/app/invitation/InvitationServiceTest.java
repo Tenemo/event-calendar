@@ -67,12 +67,12 @@ final class InvitationServiceTest {
         setField(service, "calendarService", new FixedCalendarService(calendar));
         ApplicationUser actingUser = activeUser(1L, "editor");
 
-        Invitation invitation = service.createCalendarEditorInvitation(actingUser, calendar.getId(), OffsetDateTime.parse("2026-07-15T12:00:00Z"));
+        Invitation invitation = service.createCalendarEditorInvitation(actingUser, calendar.getId());
 
         assertAll(
                 () -> assertSame(calendar, invitation.getCalendar()),
                 () -> assertEquals(CalendarRole.EDITOR, invitation.getRole()),
-                () -> assertEquals(OffsetDateTime.parse("2026-07-15T12:00:00Z"), invitation.getExpiresAt()),
+                () -> assertEquals(invitation.getCreatedAt().plusDays(7), invitation.getExpiresAt()),
                 () -> assertEquals(calendar, auditService.calendar),
                 () -> assertEquals("app_invitation", auditService.entityType),
                 () -> assertEquals("created", auditService.action));
@@ -88,7 +88,7 @@ final class InvitationServiceTest {
 
         assertThrows(
                 AuthorizationException.class,
-                () -> service.createCalendarEditorInvitation(activeUser(1L, "unrelated-user"), 200L, null));
+                () -> service.createCalendarEditorInvitation(activeUser(1L, "unrelated-user"), 200L));
     }
 
     @Test
@@ -295,6 +295,8 @@ final class InvitationServiceTest {
                 () -> assertEquals(invitations, invitationPage),
                 () -> assertEquals(50, queryPagination.firstResult()),
                 () -> assertEquals(23, queryPagination.maximumResults()),
+                () -> assertTrue(queryPagination.queryText().contains(
+                        "invitation.expiresAt > :currentTime then 0 else 1 end")),
                 () -> assertFalse(entityManagerStub.maximumResultLimitedQueryTexts().isEmpty()),
                 () -> assertThrows(IllegalArgumentException.class, () -> service.listInvitations(creator, -1, 23)),
                 () -> assertThrows(IllegalArgumentException.class, () -> service.listInvitations(creator, 0, 0)),

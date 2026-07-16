@@ -68,6 +68,29 @@ final class PasswordServiceTest {
     }
 
     @Test
+    void countsUnicodeCodePointsAsCharactersAtBothLengthBoundaries() {
+        RecordingPasswordHash passwordHash = new RecordingPasswordHash();
+        PasswordService passwordService = passwordService(passwordHash);
+        String supplementaryCharacter = new String(Character.toChars(0x1F600));
+        String maximumLengthPassword = "A1" + supplementaryCharacter.repeat(PasswordService.MAXIMUM_PASSWORD_LENGTH - 2);
+
+        String hash = assertDoesNotThrow(() -> passwordService.hashPassword("piotr", maximumLengthPassword));
+
+        assertAll(
+                () -> assertTrue(passwordService.verifyPassword(maximumLengthPassword, hash)),
+                () -> assertPasswordRejected(
+                        passwordService,
+                        "piotr",
+                        "A1" + supplementaryCharacter.repeat(3),
+                        "Password must be at least 8 characters."),
+                () -> assertPasswordRejected(
+                        passwordService,
+                        "piotr",
+                        maximumLengthPassword + "p",
+                        "Password must be 512 characters or fewer."));
+    }
+
+    @Test
     void rejectsPasswordsThatViolateEachPolicyRequirementBeforeHashing() {
         PasswordService passwordService = passwordService();
 

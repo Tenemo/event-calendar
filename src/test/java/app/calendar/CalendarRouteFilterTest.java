@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.membership.CalendarAccessService;
+import app.security.ClientRequestSourceResolver;
 import app.security.CurrentUser;
 import app.user.ApplicationUser;
 import app.util.NotFoundException;
@@ -27,6 +28,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.HashMap;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -196,14 +198,63 @@ final class CalendarRouteFilterTest {
                 () -> assertTrue(!rejectedResponse.body.toString().contains(CALENDAR_TOKEN)));
     }
 
+    @Test
+    void railwayClientsBehindTheSameProxyReceiveIndependentCalendarLimits() throws Exception {
+        AtomicInteger accessCalls = new AtomicInteger();
+        CalendarRouteFilter filter = filter(new CalendarAccessService() {
+            @Override
+            public Calendar requireCalendarReadableByToken(ApplicationUser user, String calendarToken) {
+                accessCalls.incrementAndGet();
+                return new Calendar();
+            }
+        }, null, throttle(1, 1), new ClientRequestSourceResolver("production-environment-id"));
+        RequestDispatcher requestDispatcher = forwardingDispatcher(new AtomicInteger());
+
+        filter.doFilter(
+                request(
+                        "GET",
+                        "/" + CALENDAR_TOKEN,
+                        requestDispatcher,
+                        new HashMap<>(),
+                        "100.64.8.9",
+                        "198.51.100.10"),
+                response(new ResponseState()),
+                filterChain(new AtomicInteger()));
+        filter.doFilter(
+                request(
+                        "GET",
+                        "/" + CALENDAR_TOKEN,
+                        requestDispatcher,
+                        new HashMap<>(),
+                        "100.64.8.9",
+                        "198.51.100.11"),
+                response(new ResponseState()),
+                filterChain(new AtomicInteger()));
+
+        assertEquals(2, accessCalls.get());
+    }
+
     private static CalendarRouteFilter filter(
             CalendarAccessService calendarAccessService,
             ApplicationUser user,
             CalendarLinkRequestThrottle throttle) {
+        return filter(
+                calendarAccessService,
+                user,
+                throttle,
+                new ClientRequestSourceResolver(null));
+    }
+
+    private static CalendarRouteFilter filter(
+            CalendarAccessService calendarAccessService,
+            ApplicationUser user,
+            CalendarLinkRequestThrottle throttle,
+            ClientRequestSourceResolver clientRequestSourceResolver) {
         CalendarRouteFilter filter = new CalendarRouteFilter();
         setField(filter, "calendarAccessService", calendarAccessService);
         setField(filter, "currentUser", new FixedCurrentUser(user));
         setField(filter, "requestThrottle", throttle);
+        setField(filter, "clientRequestSourceResolver", clientRequestSourceResolver);
         return filter;
     }
 
@@ -235,6 +286,22 @@ final class CalendarRouteFilterTest {
             RequestDispatcher requestDispatcher,
             Map<String, Object> requestAttributes,
             String remoteAddress) {
+        return request(
+                method,
+                requestUri,
+                requestDispatcher,
+                requestAttributes,
+                remoteAddress,
+                new String[0]);
+    }
+
+    private static HttpServletRequest request(
+            String method,
+            String requestUri,
+            RequestDispatcher requestDispatcher,
+            Map<String, Object> requestAttributes,
+            String remoteAddress,
+            String... realIpHeaders) {
         return (HttpServletRequest) Proxy.newProxyInstance(
                 CalendarRouteFilterTest.class.getClassLoader(),
                 new Class<?>[] {HttpServletRequest.class},
@@ -243,6 +310,9 @@ final class CalendarRouteFilterTest {
                     case "getContextPath" -> "";
                     case "getRequestURI" -> requestUri;
                     case "getRemoteAddr" -> remoteAddress;
+                    case "getHeaders" -> "X-Real-IP".equals(arguments[0])
+                            ? Collections.enumeration(java.util.List.of(realIpHeaders))
+                            : Collections.emptyEnumeration();
                     case "getRequestDispatcher" -> requestDispatcher;
                     case "getAttribute" -> requestAttributes.get(arguments[0]);
                     case "setAttribute" -> {

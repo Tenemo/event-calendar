@@ -1,6 +1,7 @@
 package app.calendar;
 
 import app.membership.CalendarAccessService;
+import app.security.ClientRequestSourceResolver;
 import app.security.CurrentUser;
 import app.util.NotFoundException;
 import jakarta.inject.Inject;
@@ -32,6 +33,9 @@ public class CalendarRouteFilter implements Filter {
     @Inject
     private CalendarLinkRequestThrottle requestThrottle;
 
+    @Inject
+    private ClientRequestSourceResolver clientRequestSourceResolver;
+
     @Override
     public void doFilter(
             ServletRequest servletRequest,
@@ -51,7 +55,8 @@ public class CalendarRouteFilter implements Filter {
             return;
         }
 
-        try (CalendarLinkRequestThrottle.Admission admission = requestThrottle.tryAcquire(request.getRemoteAddr())) {
+        String sourceIdentifier = clientRequestSourceResolver.resolve(request);
+        try (CalendarLinkRequestThrottle.Admission admission = requestThrottle.tryAcquire(sourceIdentifier)) {
             if (!admission.isAccepted()) {
                 sendRateLimitResponse(response, admission.getRetryAfterSeconds());
                 return;

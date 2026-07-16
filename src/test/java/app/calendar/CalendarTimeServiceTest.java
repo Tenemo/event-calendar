@@ -73,4 +73,13 @@ final class CalendarTimeServiceTest {
                         LocalDate.parse("2011-12-30"),
                         "Pacific/Apia"));
     }
+
+    @Test
+    void resolvesAnInternalExclusiveBoundaryPastASkippedCivilDate() {
+        assertEquals(
+                OffsetDateTime.parse("2011-12-31T00:00:00+14:00"),
+                calendarTimeService.toStoredExclusiveDayBoundary(
+                        LocalDate.parse("2011-12-30"),
+                        "Pacific/Apia"));
+    }
 }

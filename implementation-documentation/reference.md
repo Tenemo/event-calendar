@@ -118,12 +118,12 @@ The first deployed version must include:
 
 Final v1 invariants:
 
-1. App-only and calendar-editor invitations expire after seven days and are serialized during acceptance.
+1. App-only and calendar-editor invitations expire exactly seven days after creation, cannot be issued with a longer lifetime, are capped by the database, and are serialized during acceptance.
 2. Every invitation becomes invalid when its creator's account becomes inactive. Calendar invitations grant only `EDITOR`, also become invalid when their creator loses edit permission, and can be listed and revoked by calendar admins.
 3. `/{calendarToken}` is the one canonical URL for members and anonymous readers. The token is exactly 11 unpadded Base64URL characters and there is no `/calendar/` prefix. Public access can be disabled without changing that URL, and regeneration invalidates the previous URL immediately for everyone.
 4. Bootstrap admission is claimed in the account-creation transaction, rolls back with a failed registration, and is permanently consumed after the first successful account.
-5. All-day UI dates are inclusive while storage ends at the exclusive start of the following calendar-local day. Normalization uses the calendar's Java time-zone rules, including daylight-saving transitions and zones not known to PostgreSQL.
-6. Authenticated session cookies and inactivity timeouts roll for 30 days, while in-memory sessions require reauthentication after restart or redeploy.
+5. All-day UI dates are inclusive while storage ends at the exclusive start of the following calendar-local day. Services receive civil dates directly, use the calendar's Java time-zone rules, and reject stale event forms after a concurrent calendar-settings change.
+6. Anonymous sessions are non-persistent and expire after 30 minutes of inactivity. Successful authentication extends that session to a rolling 30 days, while in-memory sessions require reauthentication after restart or redeploy.
 7. `/health` returns success only while PostgreSQL is usable.
 8. Password changes require the signed-in user's current password, matching new-password confirmation, the current password policy, and a genuinely different password. Success is audited without secrets, increments a database-backed password version, ends the changing session, invalidates every older session on its next request, and requires reauthentication with the new password.
 
@@ -259,9 +259,9 @@ Login and session requirements:
 
 1. Return the same sign-in failure for missing, inactive, and incorrectly authenticated accounts.
 2. Perform a real password-hash verification for existing accounts and a fixed dummy-hash verification for missing accounts.
-3. Track failures by normalized username and client source. Five failures for one username/source pair in 15 minutes block that pair for 15 minutes; 25 source-wide failures in the same window block that source for 15 minutes.
+3. Track failures by normalized username and client source. Five failures for one username/source pair in 15 minutes block that pair for 15 minutes; 25 source-wide failures in the same window block that source for 15 minutes. On Railway, resolve the source from the platform-controlled leftmost `X-Forwarded-For` address only when `RAILWAY_ENVIRONMENT_ID` is present; elsewhere ignore forwarded addresses and use the direct TCP peer.
 4. Rotate the session identifier after authentication and bind the user's current password version to the session.
-5. Refresh authenticated application and canonical-calendar session cookies with a rolling 30-day lifetime and enforce a 30-day server-side inactivity timeout.
+5. Keep anonymous cookies non-persistent with a 30-minute server-side inactivity timeout. Only after successful authentication, set the server-side timeout to 30 days and refresh authenticated application and canonical-calendar cookies with a rolling 30-day lifetime.
 6. Compare the session's password version with the active user record before protected application or canonical-calendar processing. A mismatch invalidates the session before the request reaches a backing bean or service.
 7. Redirect stale protected application sessions to sign-in. A stale canonical-calendar session is discarded and the same URL is re-evaluated as anonymous read-only access.
 8. Keep sessions in memory for one application instance. Restart or redeploy requires reauthentication and must not affect persisted account or calendar data.
@@ -289,8 +289,8 @@ Application authentication answers "who is signed in." Calendar authorization an
 6. `ADMIN` members can do everything editors can do, plus manage calendar settings and members, including enabling or disabling public access.
 7. Active editors and admins may continue using the canonical URL while public access is disabled; all nonmembers receive the same clear link-unavailable `404` response.
 8. At least one active `ADMIN` membership must remain on every active calendar.
-9. Signed-in users can create seven-day app-only invitations.
-10. Calendar editors and admins can create seven-day invitations that grant editor access to that calendar.
+9. Signed-in users can create app-only invitations that expire exactly seven days after creation.
+10. Calendar editors and admins can create invitations that grant editor access to that calendar and expire exactly seven days after creation.
 11. Invitation creators may revoke unused links, and calendar admins may list and revoke unused editor invitations for calendars they administer.
 12. Revalidate the creator's current edit permission during editor-invitation acceptance and serialize acceptance so exactly one account can consume a link.
 13. UI controls may hide unavailable actions, but services must enforce membership and role checks.
@@ -319,7 +319,7 @@ Before first real use:
 17. Do not log app invitation tokens.
 18. Keep one app instance unless session handling is reviewed.
 19. Throttle repeated login failures by normalized username and client source without revealing whether an account exists or allowing one source to lock out other sources.
-20. Refresh authenticated cookies on app and canonical calendar activity, use a 30-day inactivity timeout, and require reauthentication after application restart or redeploy while sessions remain in memory.
+20. Keep anonymous sessions non-persistent with a 30-minute inactivity timeout. Refresh authenticated cookies on app and canonical calendar activity, use a 30-day authenticated inactivity timeout, and require reauthentication after application restart or redeploy while sessions remain in memory.
 21. Make `/health` fail when the database is unavailable and bound connection acquisition within the probe timeout.
 22. Make bootstrap consumption permanent after successful registration and transactional so a failed attempt releases the claim.
 23. Revalidate editor-invitation creator permission inside the serialized membership grant.
@@ -327,7 +327,7 @@ Before first real use:
 25. Serialize password replacement for one account and increment its password version atomically with the new hash.
 26. Invalidate the changing session immediately and reject every older session before protected request processing.
 27. Keep passwords, password hashes, password versions, and session identifiers out of URLs, audit details, and logs.
-28. Reject malformed root paths without calendar database access; source-rate-limit valid-looking paths, cap concurrent calendar rendering, and keep throttle memory bounded.
+28. Reject malformed root paths without calendar database access; source-rate-limit valid-looking paths through the same Railway-aware, spoof-resistant client-source resolver used by login, cap concurrent calendar rendering, and keep throttle memory bounded.
 29. Use generic `404` and `429` responses that do not reveal whether a guessed token exists or echo the candidate token.
 30. Do not describe in-process throttling as complete DDoS protection. Railway supplies network-layer protection but no application-layer WAF; use an upstream application-layer edge and prevent direct-origin bypass when the threat requires it.
 
@@ -395,14 +395,14 @@ Minimum automated tests:
 9. Last-calendar-admin protection.
 10. Timezone display helpers if extracted into pure Java.
 11. Inclusive all-day dates and exclusive stored ends across short, long, skipped, and repeated civil days.
-12. Seven-day invitation expiry, creator permission revalidation, administrator visibility/revocation, and concurrent single-use acceptance.
+12. Exact seven-day invitation expiry in the service and database, migration capping of older invitations, creator permission revalidation, administrator visibility/revocation, and concurrent single-use acceptance.
 13. Permanent atomic bootstrap consumption, including rollback and a real PostgreSQL race.
 14. Source-aware login throttling with generic missing-user behavior.
-15. Rolling authenticated cookies, 30-day inactivity, restart reauthentication, and database-aware health.
+15. Non-persistent 30-minute anonymous sessions, rolling authenticated cookies, 30-day authenticated inactivity, restart reauthentication, and database-aware health.
 16. Password-change validation for wrong current password, mismatched confirmation, policy failures, password reuse, successful hash replacement, password-version increment, audit safety, and database locking.
 17. Browser-level password change from two authenticated sessions, including immediate logout, old-password rejection, new-password acceptance, and stale-session invalidation.
 18. Exact root-route recognition, legacy `/calendar/` rejection, and malformed-path rejection before calendar lookup.
-19. Per-source calendar-link throttling, bounded source state, global concurrency admission, generic overload responses, and permit release on every success and exception path.
+19. Railway direct/CDN/internal forwarded chains, spoof-resistant local fallback, per-source calendar-link throttling, bounded source state, global concurrency admission, generic overload responses, and permit release on every success and exception path.
 
 Manual acceptance checks before deployment and after deployment:
 
@@ -425,6 +425,7 @@ Manual acceptance checks before deployment and after deployment:
 | Admin disables public access or editor regenerates URL | Disabled or previous URL returns a clear link-unavailable `404` |
 | Editor creates event                       | Event appears and persists                                |
 | Editor saves all-day event across DST      | Inclusive dates display unchanged; exclusive bounds persist |
+| Editor submits an event after another admin changes calendar settings | Rejected with a reload message; no date is shifted |
 | Editor edits event                         | Changes persist                                           |
 | Editor deletes event                       | Event removed                                             |
 | Calendar admin manages members             | Changes persist and are audited                           |
@@ -537,7 +538,7 @@ The local agent is done only when all of these are true:
 21. There are no accidental `javax.*` enterprise imports.
 22. PrimeFaces dependency uses the `jakarta` classifier.
 23. JPA code is provider-neutral and does not depend on Hibernate.
-24. Flyway migrations through version 10 apply successfully, including one-time rotation of existing calendar URLs into the compact root format.
+24. Flyway migrations through version 11 apply successfully, including one-time rotation of existing calendar URLs into the compact root format and the enforced seven-day invitation cap.
 25. The focused unit suite, primary browser scenarios, and isolated real-PostgreSQL bootstrap race pass without retries.
 
 ## 12. Reference links

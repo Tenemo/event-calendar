@@ -1,7 +1,5 @@
 package app.security;
 
-import app.user.ApplicationUser;
-import app.user.UserService;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
@@ -17,6 +15,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.OptionalLong;
 
 @Named
 @RequestScoped
@@ -25,7 +24,7 @@ public class LoginView {
     private SecurityContext securityContext;
 
     @Inject
-    private UserService userService;
+    private PasswordValidationState passwordValidationState;
 
     private String username;
     private String password;
@@ -51,14 +50,17 @@ public class LoginView {
                         .newAuthentication(true));
 
         if (status == AuthenticationStatus.SUCCESS) {
-            ApplicationUser authenticatedUser = userService.findActiveByUsername(username).orElse(null);
-            if (authenticatedUser == null) {
+            OptionalLong validatedPasswordVersion = passwordValidationState.consumeValidatedPasswordVersion(
+                    securityContext.getCallerPrincipal());
+            if (validatedPasswordVersion.isEmpty()) {
                 AuthenticatedSessionSecurity.invalidateSessionAndLogout(request);
                 response.setStatus(HttpServletResponse.SC_OK);
                 addFailureMessage("Sign-in failed. Check your username and password.");
                 return;
             }
-            AuthenticatedSessionSecurity.establishAuthenticatedSession(request, authenticatedUser);
+            AuthenticatedSessionSecurity.establishAuthenticatedSession(
+                    request,
+                    validatedPasswordVersion.getAsLong());
             String route = isBlank(invitationToken)
                     ? "/app/calendars"
                     : "/register?token=" + URLEncoder.encode(invitationToken.trim(), StandardCharsets.UTF_8);

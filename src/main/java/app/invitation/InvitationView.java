@@ -72,7 +72,7 @@ public class InvitationView {
                 throw new ValidationException("Calendar is required.");
             }
             ApplicationUser actingUser = currentUser.require();
-            Invitation invitation = invitationService.createCalendarEditorInvitation(actingUser, selectedCalendarId, null);
+            Invitation invitation = invitationService.createCalendarEditorInvitation(actingUser, selectedCalendarId);
             generatedInvitationLink = invitationLink(invitation.getInvitationToken());
             addMessage(FacesMessage.SEVERITY_INFO, "Editor invitation created.", "Share the generated link directly.");
         } catch (AuthorizationException | ValidationException exception) {

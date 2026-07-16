@@ -55,6 +55,22 @@ public class CalendarTimeService {
         return startOfDay.toOffsetDateTime();
     }
 
+    public OffsetDateTime toStoredExclusiveDayBoundary(LocalDate exclusiveCalendarDate, String timeZone) {
+        if (exclusiveCalendarDate == null) {
+            return null;
+        }
+
+        ZoneId zoneId = ZoneId.of(normalizeTimeZone(timeZone));
+        return exclusiveCalendarDate.atStartOfDay(zoneId).toOffsetDateTime();
+    }
+
+    public LocalDate toCalendarDateImmediatelyBefore(OffsetDateTime storedExclusiveEnd, String timeZone) {
+        if (storedExclusiveEnd == null) {
+            return null;
+        }
+        return toCalendarTime(storedExclusiveEnd.minusNanos(1), timeZone).toLocalDate();
+    }
+
     public LocalDateTime toCalendarTime(OffsetDateTime storedTime, String timeZone) {
         if (storedTime == null) {
             return null;

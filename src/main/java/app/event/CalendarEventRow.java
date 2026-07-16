@@ -20,6 +20,7 @@ public final class CalendarEventRow implements Serializable {
     private final LocalDateTime startTime;
     private final LocalDateTime endTime;
     private final boolean allDay;
+    private final LocalDate inclusiveEndDate;
 
     private CalendarEventRow(
             Long id,
@@ -29,7 +30,8 @@ public final class CalendarEventRow implements Serializable {
             String location,
             LocalDateTime startTime,
             LocalDateTime endTime,
-            boolean allDay) {
+            boolean allDay,
+            LocalDate inclusiveEndDate) {
         this.id = id;
         this.version = version;
         this.title = title;
@@ -38,12 +40,14 @@ public final class CalendarEventRow implements Serializable {
         this.startTime = startTime;
         this.endTime = endTime;
         this.allDay = allDay;
+        this.inclusiveEndDate = inclusiveEndDate;
     }
 
     public static CalendarEventRow from(
             CalendarEvent event,
             String timeZone,
             CalendarTimeService calendarTimeService) {
+        LocalDateTime calendarEndTime = calendarTimeService.toCalendarTime(event.getEndTime(), timeZone);
         return new CalendarEventRow(
                 event.getId(),
                 event.getVersion(),
@@ -51,8 +55,11 @@ public final class CalendarEventRow implements Serializable {
                 event.getDescription(),
                 event.getLocation(),
                 calendarTimeService.toCalendarTime(event.getStartTime(), timeZone),
-                calendarTimeService.toCalendarTime(event.getEndTime(), timeZone),
-                event.isAllDay());
+                calendarEndTime,
+                event.isAllDay(),
+                event.isAllDay()
+                        ? calendarTimeService.toCalendarDateImmediatelyBefore(event.getEndTime(), timeZone)
+                        : calendarEndTime.toLocalDate());
     }
 
     public Long getId() {
@@ -84,7 +91,7 @@ public final class CalendarEventRow implements Serializable {
     }
 
     public LocalDate getInclusiveEndDate() {
-        return allDay ? endTime.toLocalDate().minusDays(1) : endTime.toLocalDate();
+        return inclusiveEndDate;
     }
 
     public boolean isAllDay() {

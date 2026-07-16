@@ -4,8 +4,11 @@ import app.user.ApplicationUser;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
+import java.time.Duration;
 
 public final class AuthenticatedSessionSecurity {
+    static final int AUTHENTICATED_SESSION_LIFETIME_SECONDS =
+            Math.toIntExact(Duration.ofDays(30).toSeconds());
     static final String PASSWORD_VERSION_SESSION_ATTRIBUTE =
             AuthenticatedSessionSecurity.class.getName() + ".passwordVersion";
 
@@ -23,12 +26,16 @@ public final class AuthenticatedSessionSecurity {
 
     public static void establishAuthenticatedSession(
             HttpServletRequest request,
-            ApplicationUser user) {
-        if (user == null) {
-            throw new IllegalArgumentException("Authenticated user is required.");
+            long validatedPasswordVersion) {
+        if (validatedPasswordVersion < 0) {
+            throw new IllegalArgumentException("Validated password version cannot be negative.");
         }
         rotateSessionIdentifier(request);
-        request.getSession(true).setAttribute(PASSWORD_VERSION_SESSION_ATTRIBUTE, user.getPasswordVersion());
+        HttpSession authenticatedSession = request.getSession(true);
+        authenticatedSession.setMaxInactiveInterval(AUTHENTICATED_SESSION_LIFETIME_SECONDS);
+        authenticatedSession.setAttribute(
+                PASSWORD_VERSION_SESSION_ATTRIBUTE,
+                validatedPasswordVersion);
     }
 
     public static void invalidateSessionAndLogout(HttpServletRequest request) throws ServletException {

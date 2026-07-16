@@ -49,10 +49,11 @@ public class PasswordService {
         if (password == null || password.isBlank()) {
             throw new ValidationException("Password is required.");
         }
-        if (password.length() < MINIMUM_PASSWORD_LENGTH) {
+        int passwordLength = password.codePointCount(0, password.length());
+        if (passwordLength < MINIMUM_PASSWORD_LENGTH) {
             throw new ValidationException("Password must be at least " + MINIMUM_PASSWORD_LENGTH + " characters.");
         }
-        if (password.length() > MAXIMUM_PASSWORD_LENGTH) {
+        if (passwordLength > MAXIMUM_PASSWORD_LENGTH) {
             throw new ValidationException("Password must be " + MAXIMUM_PASSWORD_LENGTH + " characters or fewer.");
         }
         if (username != null && password.equalsIgnoreCase(username.trim())) {
@@ -80,7 +81,7 @@ public class PasswordService {
         if (password == null || password.isBlank() || storedHash == null || storedHash.isBlank()) {
             return false;
         }
-        if (password.length() > MAXIMUM_PASSWORD_LENGTH) {
+        if (password.codePointCount(0, password.length()) > MAXIMUM_PASSWORD_LENGTH) {
             return false;
         }
 

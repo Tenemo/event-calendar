@@ -9,7 +9,10 @@ public class LoginRequestSource {
     @Inject
     private HttpServletRequest request;
 
+    @Inject
+    private ClientRequestSourceResolver clientRequestSourceResolver;
+
     public String getSourceIdentifier() {
-        return request.getRemoteAddr();
+        return clientRequestSourceResolver.resolve(request);
     }
 }

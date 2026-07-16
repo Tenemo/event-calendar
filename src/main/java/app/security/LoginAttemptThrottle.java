@@ -35,6 +35,7 @@ public class LoginAttemptThrottle {
     private final Map<UsernameAndSourceKey, FailedLoginState> usernameAndSourceFailures;
     private final Map<String, FailedLoginState> sourceFailures;
     private final Object[] validationLocks;
+    private Instant saturationBlockedUntil;
 
     public LoginAttemptThrottle() {
         this(
@@ -86,11 +87,27 @@ public class LoginAttemptThrottle {
     synchronized boolean isAuthenticationAllowed(String normalizedUsername, String sourceIdentifier) {
         Instant now = clock.instant();
         String normalizedSourceKey = sourceKey(sourceIdentifier);
+        UsernameAndSourceKey usernameAndSourceKey = new UsernameAndSourceKey(
+                usernameKey(normalizedUsername), normalizedSourceKey);
+        if (isSaturationBlockActive(now)) {
+            return false;
+        }
+        if (cannotTrackNewState(
+                        sourceFailures,
+                        normalizedSourceKey,
+                        maximumTrackedSources,
+                        now)
+                || cannotTrackNewState(
+                        usernameAndSourceFailures,
+                        usernameAndSourceKey,
+                        maximumTrackedUsernameAndSourceCombinations,
+                        now)) {
+            saturationBlockedUntil = now.plus(blockDuration);
+            return false;
+        }
         if (!isAuthenticationAllowed(sourceFailures, normalizedSourceKey, now)) {
             return false;
         }
-        UsernameAndSourceKey usernameAndSourceKey = new UsernameAndSourceKey(
-                usernameKey(normalizedUsername), normalizedSourceKey);
         return isAuthenticationAllowed(usernameAndSourceFailures, usernameAndSourceKey, now);
     }
 
@@ -99,18 +116,21 @@ public class LoginAttemptThrottle {
         String normalizedSourceKey = sourceKey(sourceIdentifier);
         UsernameAndSourceKey usernameAndSourceKey = new UsernameAndSourceKey(
                 usernameKey(normalizedUsername), normalizedSourceKey);
-        recordFailedAuthentication(
+        boolean usernameAndSourceFailureRecorded = recordFailedAuthentication(
                 usernameAndSourceFailures,
                 usernameAndSourceKey,
                 maximumFailedAttemptsPerUsernameAndSource,
                 maximumTrackedUsernameAndSourceCombinations,
                 now);
-        recordFailedAuthentication(
+        boolean sourceFailureRecorded = recordFailedAuthentication(
                 sourceFailures,
                 normalizedSourceKey,
                 maximumFailedAttemptsPerSource,
                 maximumTrackedSources,
                 now);
+        if (!usernameAndSourceFailureRecorded || !sourceFailureRecorded) {
+            saturationBlockedUntil = now.plus(blockDuration);
+        }
     }
 
     synchronized void clearUsernameAndSourceFailures(String normalizedUsername, String sourceIdentifier) {
@@ -143,7 +163,7 @@ public class LoginAttemptThrottle {
         return true;
     }
 
-    private <KeyType> void recordFailedAuthentication(
+    private <KeyType> boolean recordFailedAuthentication(
             Map<KeyType, FailedLoginState> failedLogins,
             KeyType loginKey,
             int maximumFailedAttempts,
@@ -156,19 +176,43 @@ public class LoginAttemptThrottle {
         }
         if (failedLoginState == null) {
             if (!makeRoomForNewState(failedLogins, maximumTrackedKeys, now)) {
-                return;
+                return false;
             }
             failedLoginState = new FailedLoginState(now);
             failedLogins.put(loginKey, failedLoginState);
         }
         if (failedLoginState.isActivelyBlocked(now)) {
-            return;
+            return true;
         }
 
         failedLoginState.failedAttemptCount++;
         if (failedLoginState.failedAttemptCount >= maximumFailedAttempts) {
             failedLoginState.blockedUntil = now.plus(blockDuration);
         }
+        return true;
+    }
+
+    private boolean isSaturationBlockActive(Instant now) {
+        if (saturationBlockedUntil == null) {
+            return false;
+        }
+        if (now.isBefore(saturationBlockedUntil)) {
+            return true;
+        }
+        saturationBlockedUntil = null;
+        return false;
+    }
+
+    private <KeyType> boolean cannotTrackNewState(
+            Map<KeyType, FailedLoginState> failedLogins,
+            KeyType loginKey,
+            int maximumTrackedKeys,
+            Instant now) {
+        removeExpiredStates(failedLogins, now);
+        if (failedLogins.containsKey(loginKey) || failedLogins.size() < maximumTrackedKeys) {
+            return false;
+        }
+        return failedLogins.values().stream().allMatch(failedLoginState -> failedLoginState.isActivelyBlocked(now));
     }
 
     private <KeyType> boolean makeRoomForNewState(

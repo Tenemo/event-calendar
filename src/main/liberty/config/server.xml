@@ -16,15 +16,12 @@
     <httpEndpoint id="defaultHttpEndpoint"
                   host="*"
                   httpPort="${PORT}"
-                  httpsPort="${HTTPS_PORT}">
-        <remoteIp/>
-    </httpEndpoint>
+                  httpsPort="${HTTPS_PORT}"/>
 
     <httpSession cookieHttpOnly="true"
                  cookieSecure="true"
                  cookieSameSite="Lax"
-                 cookieMaxAge="720h"
-                 invalidationTimeout="720h"
+                 invalidationTimeout="30m"
                  urlRewritingEnabled="false"/>
 
     <library id="postgresqlDriver">

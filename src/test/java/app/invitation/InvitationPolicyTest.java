@@ -44,15 +44,12 @@ final class InvitationPolicyTest {
     }
 
     @Test
-    void suppliesOneCentralSevenDayDefaultExpirationWithoutOverridingExplicitExpiration() {
+    void suppliesTheOnlyAllowedSevenDayExpiration() {
         OffsetDateTime createdAt = OffsetDateTime.parse("2026-07-08T12:00:00Z");
-        OffsetDateTime explicitExpiration = createdAt.plusHours(3);
 
         assertAll(
-                () -> assertEquals(createdAt.plusDays(7), invitationPolicy.resolveExpiration(null, createdAt)),
-                () -> assertEquals(
-                        explicitExpiration,
-                        invitationPolicy.resolveExpiration(explicitExpiration, createdAt)));
+                () -> assertEquals(createdAt.plusDays(7), invitationPolicy.expirationFor(createdAt)),
+                () -> assertThrows(IllegalArgumentException.class, () -> invitationPolicy.expirationFor(null)));
     }
 
     @Test

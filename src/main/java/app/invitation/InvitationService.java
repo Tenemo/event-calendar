@@ -69,16 +69,16 @@ public class InvitationService {
 
     public Invitation createRegistrationInvitation(ApplicationUser actingUser) {
         requireActiveUser(actingUser);
-        Invitation invitation = createInvitation(actingUser, null, null, null);
+        Invitation invitation = createInvitation(actingUser, null, null);
         auditService.record(actingUser, null, "app_invitation", invitation.getId(), "created", "Registration invitation created.");
         return invitation;
     }
 
-    public Invitation createCalendarEditorInvitation(ApplicationUser actingUser, Long calendarId, OffsetDateTime expiresAt) {
+    public Invitation createCalendarEditorInvitation(ApplicationUser actingUser, Long calendarId) {
         requireActiveUser(actingUser);
         calendarAccessService.requireCanEdit(actingUser, calendarId);
         Calendar calendar = calendarService.requireActiveCalendar(calendarId);
-        Invitation invitation = createInvitation(actingUser, calendar, CalendarRole.EDITOR, expiresAt);
+        Invitation invitation = createInvitation(actingUser, calendar, CalendarRole.EDITOR);
         auditService.record(actingUser, calendar, "app_invitation", invitation.getId(), "created", "Calendar editor invitation created.");
         return invitation;
     }
@@ -108,9 +108,13 @@ public class InvitationService {
                                         + "left join fetch invitation.calendar calendar "
                                         + "where "
                                         + VISIBLE_INVITATION_PREDICATE
-                                        + " order by invitation.createdAt desc, invitation.id desc",
+                                        + " order by case when invitation.acceptedAt is null "
+                                        + "and invitation.revokedAt is null "
+                                        + "and invitation.expiresAt > :currentTime then 0 else 1 end, "
+                                        + "invitation.createdAt desc, invitation.id desc",
                                 Invitation.class),
                         actingUser)
+                .setParameter("currentTime", OffsetDateTime.now(ZoneOffset.UTC))
                 .setFirstResult(firstResult)
                 .setMaxResults(maximumResults)
                 .getResultList();
@@ -194,8 +198,7 @@ public class InvitationService {
     private Invitation createInvitation(
             ApplicationUser actingUser,
             Calendar calendar,
-            CalendarRole role,
-            OffsetDateTime expiresAt) {
+            CalendarRole role) {
         invitationPolicy.requireValidScope(calendar, role);
 
         Invitation invitation = new Invitation();
@@ -204,7 +207,7 @@ public class InvitationService {
         invitation.setRole(role);
         invitation.setCreatedByUser(actingUser);
         OffsetDateTime createdAt = OffsetDateTime.now(ZoneOffset.UTC);
-        invitation.setExpiresAt(invitationPolicy.resolveExpiration(expiresAt, createdAt));
+        invitation.setExpiresAt(invitationPolicy.expirationFor(createdAt));
         invitation.setCreatedAt(createdAt);
         entityManager.persist(invitation);
         entityManager.flush();

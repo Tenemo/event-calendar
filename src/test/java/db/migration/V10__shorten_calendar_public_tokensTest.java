@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import app.calendar.CalendarPublicToken;
 import java.security.SecureRandom;
 import java.util.ArrayDeque;
 import java.util.Arrays;
@@ -22,7 +21,7 @@ final class V10__shorten_calendar_public_tokensTest {
 
         assertEquals(3, tokens.size());
         assertEquals(3, tokens.stream().distinct().count());
-        assertTrue(tokens.stream().allMatch(CalendarPublicToken::isValid));
+        assertTrue(tokens.stream().allMatch(V10__shorten_calendar_public_tokens::isValidPublicToken));
         assertEquals(4, secureRandom.getRequestCount());
     }
 

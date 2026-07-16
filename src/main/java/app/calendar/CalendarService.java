@@ -14,6 +14,7 @@ import app.util.ValidationException;
 import jakarta.ejb.Stateless;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PersistenceContext;
 import java.time.LocalDate;
@@ -99,6 +100,10 @@ public class CalendarService {
         return calendar;
     }
 
+    public Calendar requireActiveCalendarForEventMutation(Long calendarId) {
+        return requireActiveCalendar(calendarId, LockModeType.PESSIMISTIC_READ);
+    }
+
     public Calendar requireAdminCalendar(ApplicationUser actingUser, Long calendarId) {
         calendarAccessService.requireCanAdminister(actingUser, calendarId);
         return requireActiveCalendar(calendarId);
@@ -127,7 +132,7 @@ public class CalendarService {
 
     public Calendar regeneratePublicToken(ApplicationUser actingUser, Long calendarId, Integer expectedVersion) {
         calendarAccessService.requireCanEdit(actingUser, calendarId);
-        Calendar calendar = requireActiveCalendar(calendarId);
+        Calendar calendar = requireActiveCalendar(calendarId, LockModeType.PESSIMISTIC_WRITE);
         requireExpectedVersion(calendar, expectedVersion);
         calendar.setPublicToken(generateUniquePublicToken());
         calendar.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
@@ -151,7 +156,7 @@ public class CalendarService {
             boolean publicAccessEnabled,
             Integer expectedVersion) {
         calendarAccessService.requireCanAdminister(actingUser, calendarId);
-        Calendar calendar = requireActiveCalendar(calendarId);
+        Calendar calendar = requireActiveCalendar(calendarId, LockModeType.PESSIMISTIC_WRITE);
         requireExpectedVersion(calendar, expectedVersion);
         calendar.setName(normalizeRequiredText(
                 name,
@@ -192,12 +197,25 @@ public class CalendarService {
             LocalDate firstDay = calendarTimeService
                     .toCalendarTime(allDayEvent.getStartTime(), previousTimeZone)
                     .toLocalDate();
-            LocalDate exclusiveEndDay = calendarTimeService
-                    .toCalendarTime(allDayEvent.getEndTime(), previousTimeZone)
-                    .toLocalDate();
+            LocalDate lastDay = calendarTimeService.toCalendarDateImmediatelyBefore(
+                    allDayEvent.getEndTime(),
+                    previousTimeZone);
             allDayEvent.setStartTime(calendarTimeService.toStoredStartOfDay(firstDay, newTimeZone));
-            allDayEvent.setEndTime(calendarTimeService.toStoredStartOfDay(exclusiveEndDay, newTimeZone));
+            if (!lastDay.equals(firstDay)) {
+                calendarTimeService.toStoredStartOfDay(lastDay, newTimeZone);
+            }
+            allDayEvent.setEndTime(calendarTimeService.toStoredExclusiveDayBoundary(
+                    lastDay.plusDays(1),
+                    newTimeZone));
         }
+    }
+
+    private Calendar requireActiveCalendar(Long calendarId, LockModeType lockMode) {
+        Calendar calendar = entityManager.find(Calendar.class, calendarId, lockMode);
+        if (calendar == null || !calendar.isActive()) {
+            throw new NotFoundException("Calendar was not found.");
+        }
+        return calendar;
     }
 
     private void requireExpectedVersion(Calendar calendar, Integer expectedVersion) {

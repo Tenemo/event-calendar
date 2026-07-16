@@ -49,6 +49,7 @@ public final class ServiceTestSupport {
     public static final class EntityManagerStub {
         private final EntityManager entityManager;
         private final Map<FindKey, Object> findResults = new HashMap<>();
+        private final List<FindLock> findLocks = new ArrayList<>();
         private final List<String> lockedQueryTexts = new ArrayList<>();
         private final List<String> maximumResultLimitedQueryTexts = new ArrayList<>();
         private final List<QueryPagination> queryPaginations = new ArrayList<>();
@@ -72,6 +73,10 @@ public final class ServiceTestSupport {
 
         public List<Object> persistedObjects() {
             return persistedObjects;
+        }
+
+        public List<FindLock> findLocks() {
+            return findLocks;
         }
 
         public List<String> lockedQueryTexts() {
@@ -125,6 +130,9 @@ public final class ServiceTestSupport {
                 return invokeObjectMethod(proxy, methodName, arguments, "EntityManager");
             }
             if (methodName.equals("find")) {
+                if (arguments.length >= 3 && arguments[2] instanceof LockModeType lockMode) {
+                    findLocks.add(new FindLock((Class<?>) arguments[0], arguments[1], lockMode));
+                }
                 return findResults.get(new FindKey((Class<?>) arguments[0], arguments[1]));
             }
             if (methodName.equals("persist")) {
@@ -246,6 +254,9 @@ public final class ServiceTestSupport {
     }
 
     private record FindKey(Class<?> entityType, Object id) {
+    }
+
+    public record FindLock(Class<?> entityType, Object id, LockModeType lockMode) {
     }
 
     public record QueryPagination(String queryText, int firstResult, int maximumResults) {

@@ -39,6 +39,7 @@
                                          action="#{calendarView.regenerateCalendarLink}"
                                          ajax="true"
                                          process="@this"
+                                         update=":messages"
                                          styleClass="ui-button-danger ui-button-outlined">
                             <p:confirm header="Regenerate calendar link"
                                        message="The current URL will stop working for everyone. Continue?"/>

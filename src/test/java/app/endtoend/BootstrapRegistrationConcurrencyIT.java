@@ -46,7 +46,7 @@ final class BootstrapRegistrationConcurrencyIT {
     private static final String DATABASE_NAME = "calendar_bootstrap_verification";
     private static final String DATABASE_USER = "calendar_bootstrap_verification";
     private static final String DATABASE_PASSWORD = "calendar_bootstrap_verification";
-    private static final String EXPECTED_LATEST_FLYWAY_VERSION = "10";
+    private static final String EXPECTED_LATEST_FLYWAY_VERSION = "11";
     private static final String VALID_PASSWORD = "Bootstrap password 2026";
     private static final Duration APPLICATION_READY_TIMEOUT = Duration.ofSeconds(120);
     private static final Duration BLOCKED_REQUEST_TIMEOUT = Duration.ofSeconds(20);
@@ -233,6 +233,10 @@ final class BootstrapRegistrationConcurrencyIT {
                 "select pg_get_constraintdef(oid) like '%[AEIMQUYcgkosw048]%' "
                         + "from pg_constraint where conrelid = 'calendar'::regclass "
                         + "and conname = 'calendar_public_token_check'"));
+        assertTrue(queryBoolean(
+                "select convalidated and pg_get_constraintdef(oid) like '%7 days%' "
+                        + "from pg_constraint where conrelid = 'app_invitation'::regclass "
+                        + "and conname = 'app_invitation_maximum_lifetime_check'"));
     }
 
     private long queryLong(String sql) throws SQLException {

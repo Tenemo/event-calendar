@@ -3,6 +3,7 @@ package app.calendar;
 import app.event.CalendarEvent;
 import app.event.CalendarEventRow;
 import app.event.CalendarEventService;
+import app.event.EventTimeInput;
 import app.membership.CalendarAccessService;
 import app.membership.CalendarRole;
 import app.security.CurrentUser;
@@ -23,7 +24,6 @@ import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -125,13 +125,13 @@ public class CalendarView implements Serializable {
                     eventTitle,
                     eventDescription,
                     eventLocation,
-                    toSubmittedTime(eventStartTime, eventStartDate),
-                    toSubmittedTime(eventEndTime, eventEndDate),
-                    eventAllDay);
+                    eventTimeInput(),
+                    calendarVersion,
+                    timeZone);
             reloadEvents(actingUser);
             resetEventForm();
             addMessage(FacesMessage.SEVERITY_INFO, "Event created.", "The event is now on the calendar.");
-        } catch (AuthorizationException | ValidationException exception) {
+        } catch (AuthorizationException | ConflictException | ValidationException exception) {
             addMessage(FacesMessage.SEVERITY_ERROR, "Event could not be created.", exception.getMessage());
         }
     }
@@ -167,9 +167,9 @@ public class CalendarView implements Serializable {
                     eventTitle,
                     eventDescription,
                     eventLocation,
-                    toSubmittedTime(eventStartTime, eventStartDate),
-                    toSubmittedTime(eventEndTime, eventEndDate),
-                    eventAllDay);
+                    eventTimeInput(),
+                    calendarVersion,
+                    timeZone);
             reloadEvents(actingUser);
             resetEventForm();
             addMessage(FacesMessage.SEVERITY_INFO, "Event updated.", "Your changes were saved.");
@@ -253,11 +253,10 @@ public class CalendarView implements Serializable {
         return inclusiveEndDate;
     }
 
-    private OffsetDateTime toSubmittedTime(LocalDateTime timedValue, LocalDate allDayDate) {
-        if (eventAllDay) {
-            return calendarTimeService.toStoredStartOfDay(allDayDate, timeZone);
-        }
-        return calendarTimeService.toStoredTime(timedValue, timeZone);
+    private EventTimeInput eventTimeInput() {
+        return eventAllDay
+                ? new EventTimeInput.AllDay(eventStartDate, eventEndDate)
+                : new EventTimeInput.Timed(eventStartTime, eventEndTime);
     }
 
     private void reloadEvents(ApplicationUser actingUser) {

@@ -15,13 +15,13 @@ import jakarta.servlet.http.HttpServletResponseWrapper;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.security.Principal;
-import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
 public class SessionCookieRefreshFilter implements Filter {
-    static final int SESSION_COOKIE_LIFETIME_SECONDS = Math.toIntExact(Duration.ofDays(30).toSeconds());
+    static final int SESSION_COOKIE_LIFETIME_SECONDS =
+            AuthenticatedSessionSecurity.AUTHENTICATED_SESSION_LIFETIME_SECONDS;
 
     private static final String SESSION_COOKIE_NAME = "JSESSIONID";
 

@@ -28,8 +28,12 @@ public class DatabaseIdentityStore implements IdentityStore {
     @Inject
     private LoginRequestSource loginRequestSource;
 
+    @Inject
+    private PasswordValidationState passwordValidationState;
+
     @Override
     public CredentialValidationResult validate(Credential credential) {
+        passwordValidationState.clear();
         if (!(credential instanceof UsernamePasswordCredential usernamePasswordCredential)) {
             return CredentialValidationResult.NOT_VALIDATED_RESULT;
         }
@@ -55,8 +59,11 @@ public class DatabaseIdentityStore implements IdentityStore {
     }
 
     private CredentialValidationResult validatePassword(ApplicationUser user, String password) {
-        if (passwordService.verifyPassword(password, user.getPasswordHash())) {
-            return validUser(user);
+        String validatedUsername = user.getUsername();
+        String validatedPasswordHash = user.getPasswordHash();
+        long validatedPasswordVersion = user.getPasswordVersion();
+        if (passwordService.verifyPassword(password, validatedPasswordHash)) {
+            return validUser(validatedUsername, validatedPasswordVersion);
         }
         return CredentialValidationResult.INVALID_RESULT;
     }
@@ -66,8 +73,9 @@ public class DatabaseIdentityStore implements IdentityStore {
         return CredentialValidationResult.INVALID_RESULT;
     }
 
-    private CredentialValidationResult validUser(ApplicationUser user) {
-        return new CredentialValidationResult(user.getUsername(), Set.of("USER"));
+    private CredentialValidationResult validUser(String username, long validatedPasswordVersion) {
+        passwordValidationState.recordSuccessfulValidation(username, validatedPasswordVersion);
+        return new CredentialValidationResult(username, Set.of("USER"));
     }
 
     @Override

@@ -9,7 +9,7 @@ import java.time.OffsetDateTime;
 
 @ApplicationScoped
 public class InvitationPolicy {
-    private static final Duration DEFAULT_VALIDITY = Duration.ofDays(7);
+    private static final Duration VALIDITY = Duration.ofDays(7);
 
     public void requireValidScope(Calendar calendar, CalendarRole role) {
         if (calendar == null && role == null) {
@@ -31,8 +31,11 @@ public class InvitationPolicy {
         }
     }
 
-    public OffsetDateTime resolveExpiration(OffsetDateTime requestedExpiration, OffsetDateTime createdAt) {
-        return requestedExpiration == null ? createdAt.plus(DEFAULT_VALIDITY) : requestedExpiration;
+    public OffsetDateTime expirationFor(OffsetDateTime createdAt) {
+        if (createdAt == null) {
+            throw new IllegalArgumentException("Invitation creation time is required.");
+        }
+        return createdAt.plus(VALIDITY);
     }
 
     public InvitationStatus status(

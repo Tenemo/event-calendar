@@ -49,6 +49,21 @@ final class CalendarEventRowTest {
     }
 
     @Test
+    void skippedExclusiveBoundaryStillDisplaysTheLastRealIncludedDate() {
+        CalendarEvent event = event(
+                "2011-12-29T00:00:00-10:00",
+                "2011-12-31T00:00:00+14:00",
+                true,
+                null);
+
+        CalendarEventRow row = CalendarEventRow.from(event, "Pacific/Apia", calendarTimeService);
+
+        assertAll(
+                () -> assertEquals(LocalDate.parse("2011-12-29"), row.getInclusiveEndDate()),
+                () -> assertEquals("All day", row.getTimeLabel()));
+    }
+
+    @Test
     void timedEventDisplaysCalendarTimeZoneAndLocation() {
         CalendarEvent event = event(
                 "2026-07-20T08:00:00Z",

@@ -139,6 +139,22 @@ final class LoginAttemptThrottleTest {
     }
 
     @Test
+    void saturationFailsClosedWhenEveryTrackedStateIsActivelyBlocked() {
+        MutableClock clock = new MutableClock(TEST_START);
+        LoginAttemptThrottle throttle = throttle(clock, 1, 1, 1, 1);
+
+        throttle.recordFailedAuthentication("first-person", "198.51.100.10");
+
+        assertFalse(throttle.isAuthenticationAllowed("unseen-person", "203.0.113.20"));
+        clock.advance(Duration.ofMinutes(5));
+
+        assertAll(
+                () -> assertTrue(throttle.isAuthenticationAllowed("unseen-person", "203.0.113.20")),
+                () -> assertEquals(0, throttle.trackedUsernameAndSourceCount()),
+                () -> assertEquals(0, throttle.trackedSourceCount()));
+    }
+
+    @Test
     void oversizedIdentifiersUseBoundedTrackingKeys() {
         LoginAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 5, 20, 10, 10);
 

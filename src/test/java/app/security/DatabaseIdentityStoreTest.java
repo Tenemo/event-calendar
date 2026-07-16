@@ -11,7 +11,13 @@ import app.user.UserService;
 import jakarta.security.enterprise.credential.UsernamePasswordCredential;
 import jakarta.security.enterprise.identitystore.CredentialValidationResult;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
 final class DatabaseIdentityStoreTest {
@@ -34,20 +40,73 @@ final class DatabaseIdentityStoreTest {
         ApplicationUser user = new ApplicationUser();
         user.setUsername("piotr");
         user.setPasswordHash("stored-user-hash");
+        user.setPasswordVersion(7);
         user.setActive(true);
         RecordingPasswordService passwordService = new RecordingPasswordService(true);
-        DatabaseIdentityStore identityStore = identityStore(new FixedUserService(Optional.of(user)), passwordService);
+        PasswordValidationState passwordValidationState = new PasswordValidationState();
+        DatabaseIdentityStore identityStore = identityStore(
+                new FixedUserService(Optional.of(user)),
+                passwordService,
+                new LoginAttemptThrottle(),
+                new MutableLoginRequestSource("192.0.2.1"),
+                passwordValidationState);
 
         CredentialValidationResult result = identityStore.validate(new UsernamePasswordCredential("Piotr", "correct-password"));
+        OptionalLong validatedPasswordVersion = passwordValidationState.consumeValidatedPasswordVersion(
+                result.getCallerPrincipal());
 
         assertAll(
                 () -> assertEquals(CredentialValidationResult.Status.VALID, result.getStatus()),
                 () -> assertEquals("piotr", result.getCallerPrincipal().getName()),
+                () -> assertEquals(7, validatedPasswordVersion.orElseThrow()),
                 () -> assertTrue(result.getCallerGroups().contains("USER")),
                 () -> assertEquals(Set.of("USER"), result.getCallerGroups()),
                 () -> assertEquals(1, passwordService.verificationCount),
                 () -> assertEquals("correct-password", passwordService.lastPassword),
                 () -> assertEquals("stored-user-hash", passwordService.lastStoredHash));
+    }
+
+    @Test
+    void concurrentPasswordChangeCannotStampAnOldPasswordLoginWithTheNewVersion() throws Exception {
+        ApplicationUser user = new ApplicationUser();
+        user.setUsername("piotr");
+        user.setPasswordHash("old-password-hash");
+        user.setPasswordVersion(12);
+        user.setActive(true);
+        CountDownLatch verificationStarted = new CountDownLatch(1);
+        CountDownLatch continueVerification = new CountDownLatch(1);
+        BlockingPasswordService passwordService = new BlockingPasswordService(
+                verificationStarted,
+                continueVerification);
+        PasswordValidationState passwordValidationState = new PasswordValidationState();
+        DatabaseIdentityStore identityStore = identityStore(
+                new FixedUserService(Optional.of(user)),
+                passwordService,
+                new LoginAttemptThrottle(),
+                new MutableLoginRequestSource("192.0.2.1"),
+                passwordValidationState);
+        ExecutorService authenticationExecutor = Executors.newSingleThreadExecutor();
+
+        try {
+            Future<CredentialValidationResult> pendingAuthentication = authenticationExecutor.submit(
+                    () -> identityStore.validate(new UsernamePasswordCredential("piotr", "old-password")));
+            assertTrue(verificationStarted.await(5, TimeUnit.SECONDS));
+
+            user.setPasswordHash("new-password-hash");
+            user.setPasswordVersion(13);
+            continueVerification.countDown();
+
+            CredentialValidationResult result = pendingAuthentication.get(5, TimeUnit.SECONDS);
+            OptionalLong validatedPasswordVersion = passwordValidationState.consumeValidatedPasswordVersion(
+                    result.getCallerPrincipal());
+            assertAll(
+                    () -> assertEquals("old-password-hash", passwordService.validatedPasswordHash),
+                    () -> assertEquals(12, validatedPasswordVersion.orElseThrow()),
+                    () -> assertEquals(13, user.getPasswordVersion()));
+        } finally {
+            continueVerification.countDown();
+            authenticationExecutor.shutdownNow();
+        }
     }
 
     @Test
@@ -199,7 +258,8 @@ final class DatabaseIdentityStoreTest {
                 userService,
                 passwordService,
                 new LoginAttemptThrottle(),
-                new MutableLoginRequestSource("192.0.2.1"));
+                new MutableLoginRequestSource("192.0.2.1"),
+                new PasswordValidationState());
     }
 
     private static DatabaseIdentityStore identityStore(
@@ -207,11 +267,26 @@ final class DatabaseIdentityStoreTest {
             PasswordService passwordService,
             LoginAttemptThrottle loginAttemptThrottle,
             LoginRequestSource loginRequestSource) {
+        return identityStore(
+                userService,
+                passwordService,
+                loginAttemptThrottle,
+                loginRequestSource,
+                new PasswordValidationState());
+    }
+
+    private static DatabaseIdentityStore identityStore(
+            UserService userService,
+            PasswordService passwordService,
+            LoginAttemptThrottle loginAttemptThrottle,
+            LoginRequestSource loginRequestSource,
+            PasswordValidationState passwordValidationState) {
         DatabaseIdentityStore identityStore = new DatabaseIdentityStore();
         setField(identityStore, "userService", userService);
         setField(identityStore, "passwordService", passwordService);
         setField(identityStore, "loginAttemptThrottle", loginAttemptThrottle);
         setField(identityStore, "loginRequestSource", loginRequestSource);
+        setField(identityStore, "passwordValidationState", passwordValidationState);
         return identityStore;
     }
 
@@ -244,6 +319,34 @@ final class DatabaseIdentityStoreTest {
             lastPassword = password;
             lastStoredHash = storedHash;
             return verificationResult;
+        }
+    }
+
+    private static final class BlockingPasswordService extends PasswordService {
+        private final CountDownLatch verificationStarted;
+        private final CountDownLatch continueVerification;
+        private String validatedPasswordHash;
+
+        private BlockingPasswordService(
+                CountDownLatch verificationStarted,
+                CountDownLatch continueVerification) {
+            this.verificationStarted = verificationStarted;
+            this.continueVerification = continueVerification;
+        }
+
+        @Override
+        public boolean verifyPassword(String password, String storedHash) {
+            validatedPasswordHash = storedHash;
+            verificationStarted.countDown();
+            try {
+                if (!continueVerification.await(5, TimeUnit.SECONDS)) {
+                    throw new AssertionError("Password verification was not resumed.");
+                }
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("Password verification was interrupted.", exception);
+            }
+            return true;
         }
     }
 

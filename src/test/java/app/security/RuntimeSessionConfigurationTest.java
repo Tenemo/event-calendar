@@ -18,7 +18,7 @@ final class RuntimeSessionConfigurationTest {
             "src", "main", "webapp", "WEB-INF", "web.xml");
 
     @Test
-    void sessionsUseHardenedCookiesAndThirtyDayLifetimes() throws Exception {
+    void anonymousSessionsAreShortLivedAndDoNotReceivePersistentCookies() throws Exception {
         DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
         documentBuilderFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
         Element httpSession = (Element) documentBuilderFactory
@@ -31,8 +31,8 @@ final class RuntimeSessionConfigurationTest {
                 () -> assertEquals("true", httpSession.getAttribute("cookieHttpOnly")),
                 () -> assertEquals("true", httpSession.getAttribute("cookieSecure")),
                 () -> assertEquals("Lax", httpSession.getAttribute("cookieSameSite")),
-                () -> assertEquals("720h", httpSession.getAttribute("cookieMaxAge")),
-                () -> assertEquals("720h", httpSession.getAttribute("invalidationTimeout")),
+                () -> assertEquals("", httpSession.getAttribute("cookieMaxAge")),
+                () -> assertEquals("30m", httpSession.getAttribute("invalidationTimeout")),
                 () -> assertEquals("false", httpSession.getAttribute("urlRewritingEnabled")));
     }
 

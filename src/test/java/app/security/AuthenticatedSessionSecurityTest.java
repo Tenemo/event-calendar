@@ -120,7 +120,7 @@ final class AuthenticatedSessionSecurityTest {
         ApplicationUser user = new ApplicationUser();
         user.setPasswordVersion(7);
 
-        AuthenticatedSessionSecurity.establishAuthenticatedSession(request, user);
+        AuthenticatedSessionSecurity.establishAuthenticatedSession(request, 7);
 
         assertAll(
                 () -> assertEquals(1, sessionIdentifierChanges.get()),
@@ -129,6 +129,33 @@ final class AuthenticatedSessionSecurityTest {
 
         user.setPasswordVersion(8);
         assertFalse(AuthenticatedSessionSecurity.hasCurrentPasswordVersion(request, user));
+    }
+
+    @Test
+    void extendsOnlyTheSessionThatSuccessfullyAuthenticates() {
+        AtomicInteger configuredMaximumInactiveInterval = new AtomicInteger();
+        HttpSession session = (HttpSession) Proxy.newProxyInstance(
+                HttpSession.class.getClassLoader(),
+                new Class<?>[] {HttpSession.class},
+                (proxy, method, arguments) -> {
+                    if (method.getName().equals("setMaxInactiveInterval")) {
+                        configuredMaximumInactiveInterval.set((Integer) arguments[0]);
+                    }
+                    return defaultValue(method.getReturnType());
+                });
+        HttpServletRequest request = (HttpServletRequest) Proxy.newProxyInstance(
+                HttpServletRequest.class.getClassLoader(),
+                new Class<?>[] {HttpServletRequest.class},
+                (proxy, method, arguments) -> switch (method.getName()) {
+                    case "getSession" -> session;
+                    case "changeSessionId" -> "rotated-session-identifier";
+                    default -> defaultValue(method.getReturnType());
+                });
+        AuthenticatedSessionSecurity.establishAuthenticatedSession(request, 0);
+
+        assertEquals(
+                AuthenticatedSessionSecurity.AUTHENTICATED_SESSION_LIFETIME_SECONDS,
+                configuredMaximumInactiveInterval.get());
     }
 
     private HttpServletRequest request(

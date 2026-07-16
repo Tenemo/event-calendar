@@ -66,7 +66,7 @@ Copy `.env.example` to `.env` for local development. Do not commit `.env`.
 
 ## Database migrations
 
-Flyway runs during application startup and owns the database schema. The application fails startup when a migration cannot be applied. The current schema is migration version 10. Migration 8 removes existing read-only memberships rather than promoting them to editor access and restricts calendar memberships to `EDITOR` and `ADMIN`. Migration 9 adds the password version used to invalidate older authenticated sessions after a password change. Migration 10 replaces every existing calendar bearer token with the compact format, so deploying it invalidates every previously shared calendar URL once. Host-installed PostgreSQL client programs are not required.
+Flyway runs during application startup and owns the database schema. The application fails startup when a migration cannot be applied. The current schema is migration version 11. Migration 8 removes existing read-only memberships rather than promoting them to editor access and restricts calendar memberships to `EDITOR` and `ADMIN`. Migration 9 adds the password version used to invalidate older authenticated sessions after a password change. Migration 10 replaces every existing calendar bearer token with the compact format, so deploying it invalidates every previously shared calendar URL once. Migration 11 caps every existing invitation at seven days after creation and adds a database constraint that prevents longer lifetimes. Host-installed PostgreSQL client programs are not required.
 
 Start and inspect the local database with:
 
@@ -91,7 +91,7 @@ mise run install-playwright
 mise run e2e
 ```
 
-The automated suite contains 141 unit tests and 19 primary browser scenarios covering registration, login, logout, password changes and session revocation, calendar creation, event creation/editing/deletion, compact canonical calendar links, public-access disabling, link regeneration, invitation acceptance, editor removal, last-admin protection, validation, request throttling, and anonymous read-only behavior. One additional isolated browser scenario builds the production image and verifies bootstrap-registration rollback and concurrency against a separate application container and tmpfs PostgreSQL database on non-default ports.
+The automated suite covers registration, login, logout, password changes and session revocation, calendar creation, event creation/editing/deletion, compact canonical calendar links, public-access disabling, link regeneration, invitation acceptance, editor removal, last-admin protection, validation, request throttling, and anonymous read-only behavior. An additional isolated browser scenario builds the production image and verifies bootstrap-registration rollback and concurrency against a separate application container and tmpfs PostgreSQL database on non-default ports.
 
 Run only the isolated bootstrap-registration verification with:
 
@@ -157,7 +157,7 @@ Use one Railway project with a PostgreSQL service named `Postgres` and a web ser
 
 1. Provision a PostgreSQL 17 service named `Postgres`, attach a persistent volume at `/var/lib/postgresql/data`, and create `shared-calendar-web` in the same project and environment.
 2. Deploy this repository root. Railway detects `railway.json` and the root `Dockerfile`.
-3. Keep the `numReplicas` value in `railway.json` at one. Authenticated cookies and inactivity timeouts roll for 30 days, but the underlying HTTP sessions remain in memory.
+3. Keep the `numReplicas` value in `railway.json` at one. Authenticated cookies and inactivity timeouts roll for 30 days, anonymous sessions expire after 30 minutes of inactivity, and all underlying HTTP sessions remain in memory.
 4. Let Railway inject `PORT`; the container binds it on all interfaces.
 5. Add the PostgreSQL references and application variables below.
 6. Generate a Railway service domain and verify `/health` before configuring DNS.
@@ -195,7 +195,7 @@ Set `APP_BOOTSTRAP_INVITE_TOKEN` temporarily to a generated high-entropy secret 
 
 After deployment, verify `/health`, registration, login, password change, public links, invitations, role changes, and event persistence. Redeploy, confirm that accounts and calendar data persist, then sign in again because HTTP sessions are intentionally in memory. Inspect logs to confirm that passwords, database credentials, public tokens, and invitation tokens are absent. Railway's deployment health check is not continuous monitoring, so configure an external HTTPS uptime check for `https://calendar.social/health` before relying on the service.
 
-Railway protects its network below the application layer, but it does not provide an application-layer WAF. The application rejects malformed calendar paths before database access, limits each client source to 300 valid-looking calendar-link requests per minute, permits at most 16 such requests to execute concurrently, and bounds source tracking to 10,000 entries. These controls make online token iteration impractical from one source and shed excess application work without disrupting a busy shared network; they cannot absorb a volumetric or large distributed attack before traffic reaches Railway. For stronger public-internet protection, proxy `calendar.social` through a service such as Cloudflare with application-layer rate limiting and bot/WAF rules, then remove Railway's generated public domain so it cannot bypass that edge. Netlify is not required.
+Railway protects its network below the application layer, but it does not provide an application-layer WAF. The application rejects malformed calendar paths before database access, limits each client source to 300 valid-looking calendar-link requests per minute, permits at most 16 such requests to execute concurrently, and bounds source tracking to 10,000 entries. Both calendar-link and login throttles use Railway's documented `X-Real-IP` address only when Railway's automatically provided `RAILWAY_ENVIRONMENT_ID` marks the deployment and the immediate peer is in Railway's documented `100.0.0.0/8` proxy range; elsewhere they ignore that header and use the direct TCP peer. Missing, malformed, ambiguous, or untrusted client-address headers fall back to that peer. These controls make online token iteration impractical from one source and shed excess application work without disrupting a busy shared network; they cannot absorb a volumetric or large distributed attack before traffic reaches Railway. For stronger public-internet protection, proxy `calendar.social` through a service such as Cloudflare with application-layer rate limiting and bot/WAF rules, then remove Railway's generated public domain so it cannot bypass that edge. Netlify is not required.
 
 ## Registration
 
@@ -209,9 +209,9 @@ After the first account is created, clear `APP_BOOTSTRAP_INVITE_TOKEN` and resta
 
 Passwords must be between 8 and 512 characters, contain at least one uppercase letter and one digit, be nonblank, and differ from the username. They are stored as PBKDF2-HMAC-SHA256 hashes with 600,000 iterations, a 32-byte salt, and a 32-byte derived key. Plaintext passwords are never stored.
 
-Five failed sign-in attempts for one normalized username from one client source within 15 minutes block that username/source pair for 15 minutes. Twenty-five failures from one source in the same window block further attempts from that source for 15 minutes, which limits username spraying without letting one remote client lock the account for other sources. Missing and existing usernames follow the same policy and return the same generic failure.
+Five failed sign-in attempts for one normalized username from one client source within 15 minutes block that username/source pair for 15 minutes. Twenty-five failures from one source in the same window block further attempts from that source for 15 minutes, which limits username spraying without letting one remote client lock the account for other sources. Missing and existing usernames follow the same policy and return the same generic failure. Tracking is bounded; if every slot is occupied by an active block, authentication enters a 15-minute fail-closed saturation cooldown instead of allowing untracked attempts.
 
-Authenticated sessions use an unconditionally Secure, HTTP-only, SameSite `Lax` cookie. Authenticated application and calendar requests refresh the persistent cookie's rolling 30-day lifetime, and the server invalidates a session after 30 days of inactivity. A server restart or redeploy clears in-memory sessions and requires reauthentication, while accounts and calendar data remain in PostgreSQL.
+Anonymous sessions receive browser-session cookies and expire on the server after 30 minutes of inactivity. Only successful authentication extends a server session to 30 days and allows the application to issue an unconditionally Secure, HTTP-only, SameSite `Lax` persistent cookie. Authenticated application and calendar requests refresh both the cookie and the 30-day inactivity window. A server restart or redeploy clears in-memory sessions and requires reauthentication, while accounts and calendar data remain in PostgreSQL.
 
 ## Password changes
 
@@ -234,7 +234,7 @@ Removing an editor disables their membership and removes the calendar from their
 
 Timed events are entered in the calendar's IANA time zone and stored with their actual UTC offsets. Nonexistent or ambiguous local times at daylight-saving transitions are rejected instead of being guessed.
 
-For all-day events, the first and last dates shown in the form are both inclusive. Persistence uses a start-inclusive, end-exclusive range from the first day's calendar-local start to the calendar-local start of the day after the last date. This preserves the intended civil dates across short, long, skipped, and repeated days, and changing a calendar's time zone renormalizes existing all-day boundaries without changing the displayed dates.
+For all-day events, the first and last dates shown in the form are both inclusive. The service receives those civil dates directly and persistence uses a start-inclusive, end-exclusive range from the first day's calendar-local start to the calendar-local start of the day after the last date. This preserves the intended civil dates across short, long, skipped, and repeated days. Changing a calendar's time zone renormalizes existing all-day boundaries without changing the displayed dates; an event form opened before any concurrent calendar-settings change is rejected with a reload message instead of interpreting its values in a different time zone.
 
 ## Calendar links and public access
 
@@ -250,7 +250,7 @@ Any active editor or admin can use **Regenerate link** on the calendar page. Reg
 
 Signed-in users can create registration invitations. Calendar editors and admins can create editor invitations that grant `EDITOR` membership on a selected calendar. There is no read-only membership invitation; share the calendar URL for read-only access.
 
-Invitation links are single-use bearer secrets and expire after seven days. Their creator can revoke them while unused; a calendar admin can also list and revoke unused editor invitations for that calendar. Every invitation stops working if its creator's account becomes inactive, and an editor invitation also stops working if its creator loses permission to edit that calendar. Acceptance revalidates those permissions and serializes concurrent claims, so one invitation can be consumed by exactly one account. A new user registers through the link; an existing user signs in and explicitly accepts it. Tokens are not written to application logs.
+Invitation links are single-use bearer secrets and expire exactly seven days after creation; callers cannot request a longer lifetime, and the database rejects one. Their creator can revoke them while unused; a calendar admin can also list and revoke unused editor invitations for that calendar. Every invitation stops working if its creator's account becomes inactive, and an editor invitation also stops working if its creator loses permission to edit that calendar. Acceptance revalidates those permissions and serializes concurrent claims, so one invitation can be consumed by exactly one account. A new user registers through the link; an existing user signs in and explicitly accepts it. Tokens are not written to application logs.
 
 ## Backup and restore
 

@@ -18,10 +18,12 @@ import app.membership.CalendarMember;
 import app.membership.CalendarRole;
 import app.security.TokenService;
 import app.testsupport.ServiceTestSupport.EntityManagerStub;
+import app.testsupport.ServiceTestSupport.FindLock;
 import app.user.ApplicationUser;
 import app.util.AuthorizationException;
 import app.util.ConflictException;
 import app.util.ValidationException;
+import jakarta.persistence.LockModeType;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -113,7 +115,33 @@ final class CalendarServiceTest {
                         "New_123-xY0",
                         regeneratedCalendar.getPublicToken()),
                 () -> assertEquals(List.of("settings_updated", "public_token_regenerated"), auditService.actions),
+                () -> assertEquals(
+                        List.of(
+                                new FindLock(Calendar.class, calendar.getId(), LockModeType.PESSIMISTIC_WRITE),
+                                new FindLock(Calendar.class, calendar.getId(), LockModeType.PESSIMISTIC_WRITE)),
+                        entityManagerStub.findLocks()),
                 () -> assertEquals(2, entityManagerStub.flushCount()));
+    }
+
+    @Test
+    void eventMutationsHoldASharedCalendarLockWhileInterpretingCivilTimes() {
+        ApplicationUser creator = activeUser(42L);
+        Calendar calendar = activeCalendar(80L, creator);
+        EntityManagerStub entityManagerStub = entityManagerStub()
+                .find(Calendar.class, calendar.getId(), calendar);
+        CalendarService calendarService = new CalendarService();
+        setField(calendarService, "entityManager", entityManagerStub.entityManager());
+
+        Calendar loadedCalendar = calendarService.requireActiveCalendarForEventMutation(calendar.getId());
+
+        assertAll(
+                () -> assertEquals(calendar, loadedCalendar),
+                () -> assertEquals(
+                        List.of(new FindLock(
+                                Calendar.class,
+                                calendar.getId(),
+                                LockModeType.PESSIMISTIC_READ)),
+                        entityManagerStub.findLocks()));
     }
 
     @Test
@@ -157,6 +185,39 @@ final class CalendarServiceTest {
                 () -> assertEquals(originalTimedStart, timedEvent.getStartTime()),
                 () -> assertEquals(originalTimedEnd, timedEvent.getEndTime()),
                 () -> assertEquals(1, entityManagerStub.flushCount()));
+    }
+
+    @Test
+    void changingTimeZonePreservesAnAllDayEventBeforeASkippedCivilDate() {
+        ApplicationUser actingUser = activeUser(42L);
+        Calendar calendar = activeCalendar(80L, actingUser);
+        calendar.setTimeZone("Pacific/Apia");
+        CalendarEvent allDayEvent = calendarEvent(
+                calendar,
+                true,
+                "2011-12-29T00:00:00-10:00",
+                "2011-12-31T00:00:00+14:00");
+        EntityManagerStub entityManagerStub = entityManagerStub()
+                .find(Calendar.class, calendar.getId(), calendar)
+                .resultList("calendarEvent.allDay = true", List.of(allDayEvent));
+        CalendarService calendarService = configuredSettingsService(entityManagerStub);
+
+        calendarService.updateCalendarSettings(
+                actingUser,
+                calendar.getId(),
+                calendar.getName(),
+                calendar.getDescription(),
+                "Europe/Warsaw",
+                calendar.isPublicAccessEnabled(),
+                calendar.getVersion());
+
+        assertAll(
+                () -> assertEquals(
+                        OffsetDateTime.parse("2011-12-29T00:00:00+01:00"),
+                        allDayEvent.getStartTime()),
+                () -> assertEquals(
+                        OffsetDateTime.parse("2011-12-30T00:00:00+01:00"),
+                        allDayEvent.getEndTime()));
     }
 
     @Test

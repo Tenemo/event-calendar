@@ -92,7 +92,8 @@ final class SharedCalendarEndToEndIT {
         try (BrowserContext browserContext = browser.newContext()) {
             Page page = newPage(browserContext, browserMessages);
 
-            page.navigate(route("/login"));
+            Response anonymousLoginResponse = page.navigate(route("/login"));
+            assertAnonymousSessionCookie(anonymousLoginResponse);
             assertEquals("Sign in", page.locator("h1").textContent().trim());
             page.locator("input[id$='username']").fill(ownerUsername);
             page.locator("input[id$='password']").fill(TEST_PASSWORD + "-wrong");
@@ -413,12 +414,28 @@ final class SharedCalendarEndToEndIT {
             String originalCalendarLink = page.url();
             assertCanonicalCalendarRoute(page, Long.toString(findCalendarId(calendarName)));
             enterEvent(page, eventTitle, "River", "2026-08-20 10:00", "2026-08-20 12:00", false);
+
+            List<String> staleRegenerationBrowserMessages = new ArrayList<>();
+            Page staleRegenerationPage = newPage(browserContext, staleRegenerationBrowserMessages);
+            staleRegenerationPage.navigate(originalCalendarLink);
+            assertBodyContains(staleRegenerationPage, "Regenerate link");
+
             calendarSettingsLink(page).click();
             page.locator("textarea[id$='calendarDescription']").fill(calendarDescription);
             page.locator("button:has-text('Save settings')").click();
             assertBodyContains(page, "Calendar settings saved.");
             page.locator("a:has-text('Back to calendar')").click();
             assertEquals(originalCalendarLink, page.url());
+
+            staleRegenerationPage.locator("button:has-text('Regenerate link')").click();
+            staleRegenerationPage.locator("button:has-text('Yes')").click();
+            assertBodyContains(staleRegenerationPage, "Calendar link could not be regenerated.");
+            assertBodyContains(
+                    staleRegenerationPage,
+                    "This calendar changed after you opened it. Reload the page and try again.");
+            assertEquals(originalCalendarLink, staleRegenerationPage.url());
+            assertNoBrowserMessages(staleRegenerationBrowserMessages);
+            staleRegenerationPage.close();
 
             try (BrowserContext publicBrowserContext = browser.newContext()) {
                 List<String> publicBrowserMessages = new ArrayList<>();
@@ -699,11 +716,20 @@ final class SharedCalendarEndToEndIT {
         String expiredInvitationLink;
         String usedInvitationLink;
         String inactiveCreatorInvitationLink;
+        assertInvitationLifetimeConstraintRejectsLongerInvitation(ownerUsername);
 
         try (BrowserContext ownerContext = browser.newContext()) {
             Page ownerPage = ownerContext.newPage();
             signIn(ownerPage, ownerUsername, TEST_PASSWORD);
             availableInvitationLink = createRegistrationInvitation(ownerPage);
+            assertEquals(
+                    Duration.ofDays(7).toSeconds(),
+                    queryLong(
+                            "select extract(epoch from (expires_at - created_at))::bigint "
+                                    + "from app_invitation where created_by_user_id = "
+                                    + "(select id from app_user where username = ?) "
+                                    + "order by id desc limit 1",
+                            ownerUsername));
             revokedInvitationLink = createRegistrationInvitation(ownerPage);
             invitationRow(ownerPage, revokedInvitationLink).locator("button:has-text('Revoke')").click();
             assertBodyContains(ownerPage, "Invitation revoked.");
@@ -1378,6 +1404,7 @@ final class SharedCalendarEndToEndIT {
         String calendarName = "Concurrent calendar " + uniqueSuffix;
         String eventTitle = "Concurrent event " + uniqueSuffix;
         String deletionEventTitle = "Concurrent deletion " + uniqueSuffix;
+        String staleTimeZoneEventTitle = "Stale time zone " + uniqueSuffix;
         seedUser(ownerUsername);
         String calendarId;
 
@@ -1405,6 +1432,26 @@ final class SharedCalendarEndToEndIT {
             firstPage.navigate(calendarLink(calendarId));
             secondPage.navigate(calendarLink(calendarId));
             staleDeletePage.navigate(calendarLink(calendarId));
+
+            firstPage.locator("input[id$='eventTitle']").fill(staleTimeZoneEventTitle);
+            firstPage.locator(".checkbox-field .ui-chkbox-box").click();
+            assertThat(firstPage.getByLabel("All-day event")).isChecked();
+            firstPage.locator("input[id$='eventStartDate_input']").fill("2026-07-16");
+            firstPage.locator("input[id$='eventEndDate_input']").fill("2026-07-16");
+            secondPage.navigate(route("/app/calendar-settings?id=" + calendarId));
+            secondPage.locator("input[id$='timeZone']").fill("Pacific/Honolulu");
+            secondPage.locator("button:has-text('Save settings')").click();
+            assertBodyContains(secondPage, "Calendar settings saved.");
+            firstPage.locator("button:has-text('Create event')").click();
+            assertBodyContains(
+                    firstPage,
+                    "This calendar changed after you opened the event form. Reload the page and try again.");
+            assertEquals(
+                    0,
+                    queryLong("select count(*) from calendar_event where title = ?", staleTimeZoneEventTitle));
+            firstPage.reload();
+            secondPage.navigate(calendarLink(calendarId));
+
             firstPage.locator("article", new Page.LocatorOptions().setHasText(eventTitle))
                     .locator("button:has-text('Edit')")
                     .click();
@@ -1599,6 +1646,7 @@ final class SharedCalendarEndToEndIT {
             Page page = newPage(browserContext, browserMessages);
             com.microsoft.playwright.Response response = page.navigate(route("/AAAAAAAAAAA"));
             assertEquals(404, response.status());
+            assertAnonymousSessionCookie(response);
             assertEquals("Calendar link unavailable - Shared calendar", page.title());
             assertEquals("Calendar link unavailable", page.locator("h1").textContent().trim());
             assertEquals("noindex, nofollow", page.locator("meta[name='robots']").getAttribute("content"));
@@ -1958,9 +2006,11 @@ final class SharedCalendarEndToEndIT {
                 PreparedStatement statement = connection.prepareStatement(
                         "insert into app_invitation "
                                 + "(invite_token, calendar_id, role_name, created_by_user_id, expires_at, created_at) "
-                                + "select ?, null, null, id, now() + interval '7 days', "
-                                + "now() - (? * interval '1 second') "
-                                + "from app_user where username = ?")) {
+                                + "select ?, null, null, app_user.id, "
+                                + "fixture.created_at + interval '7 days', fixture.created_at "
+                                + "from app_user cross join "
+                                + "(select now() - (? * interval '1 second') as created_at) fixture "
+                                + "where app_user.username = ?")) {
             for (int invitationIndex = 0; invitationIndex < invitationCount; invitationIndex++) {
                 statement.setString(1, "pagination-test-" + UUID.randomUUID().toString().replace("-", ""));
                 statement.setInt(2, invitationIndex);
@@ -1969,6 +2019,34 @@ final class SharedCalendarEndToEndIT {
             }
             for (int updateCount : statement.executeBatch()) {
                 assertEquals(1, updateCount, "Expected each paginated invitation fixture to be inserted.");
+            }
+        }
+    }
+
+    private void assertInvitationLifetimeConstraintRejectsLongerInvitation(String creatorUsername)
+            throws SQLException {
+        String jdbcUrl = "jdbc:postgresql://"
+                + firstNonBlank(System.getenv(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE), "localhost")
+                + ":"
+                + firstNonBlank(System.getenv(POSTGRESQL_PORT_ENVIRONMENT_VARIABLE), "5432")
+                + "/"
+                + firstNonBlank(System.getenv(POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE), "calendar");
+        try (Connection connection = DriverManager.getConnection(
+                        jdbcUrl,
+                        firstNonBlank(System.getenv(POSTGRESQL_USER_ENVIRONMENT_VARIABLE), "calendar"),
+                        firstNonBlank(System.getenv(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE), "calendar"));
+                PreparedStatement statement = connection.prepareStatement(
+                        "insert into app_invitation "
+                                + "(invite_token, calendar_id, role_name, created_by_user_id, expires_at, created_at) "
+                                + "select ?, null, null, id, now() + interval '8 days', now() "
+                                + "from app_user where username = ?")) {
+            statement.setString(1, "overlong-test-" + UUID.randomUUID().toString().replace("-", ""));
+            statement.setString(2, creatorUsername);
+            try {
+                statement.executeUpdate();
+                fail("The database accepted an invitation whose lifetime exceeded seven days.");
+            } catch (SQLException exception) {
+                assertEquals("23514", exception.getSQLState());
             }
         }
     }
@@ -2155,6 +2233,19 @@ final class SharedCalendarEndToEndIT {
                 sessionCookieHeader.contains("Max-Age=2592000")
                         || sessionCookieHeader.contains("Expires="),
                 "Refreshed session cookie did not have a persistent 30-day lifetime.");
+    }
+
+    private void assertAnonymousSessionCookie(Response response) {
+        String sessionCookieHeader = response.headerValues("set-cookie").stream()
+                .filter(header -> header.contains("JSESSIONID="))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Anonymous request did not receive a session cookie."));
+        assertTrue(sessionCookieHeader.contains("Path=/"));
+        assertTrue(sessionCookieHeader.contains("Secure"));
+        assertTrue(sessionCookieHeader.contains("HttpOnly"));
+        assertTrue(sessionCookieHeader.contains("SameSite=Lax"));
+        assertFalse(sessionCookieHeader.contains("Max-Age="));
+        assertFalse(sessionCookieHeader.contains("Expires="));
     }
 
     private String requiredSessionCookieValue(BrowserContext browserContext) {

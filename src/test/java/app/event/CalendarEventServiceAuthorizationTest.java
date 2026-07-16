@@ -12,6 +12,7 @@ import app.membership.CalendarAccessService;
 import app.testsupport.ServiceTestSupport.EntityManagerStub;
 import app.user.ApplicationUser;
 import app.util.AuthorizationException;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import org.junit.jupiter.api.Test;
 
@@ -21,11 +22,19 @@ final class CalendarEventServiceAuthorizationTest {
         CalendarEventService eventService = new CalendarEventService();
         setField(eventService, "calendarAccessService", new RejectingAccessService());
 
-        OffsetDateTime startTime = OffsetDateTime.parse("2026-07-08T12:00:00Z");
+        LocalDateTime startTime = LocalDateTime.parse("2026-07-08T12:00:00");
 
         assertThrows(
                 AuthorizationException.class,
-                () -> eventService.createEvent(activeUser(), 10L, "Kayaking", null, null, startTime, startTime.plusHours(1), false));
+                () -> eventService.createEvent(
+                        activeUser(),
+                        10L,
+                        "Kayaking",
+                        null,
+                        null,
+                        new EventTimeInput.Timed(startTime, startTime.plusHours(1)),
+                        0,
+                        "Europe/Warsaw"));
     }
 
     @Test
@@ -52,9 +61,11 @@ final class CalendarEventServiceAuthorizationTest {
                         "Unauthorized change",
                         null,
                         null,
-                        event.getStartTime(),
-                        event.getEndTime(),
-                        false));
+                        new EventTimeInput.Timed(
+                                LocalDateTime.parse("2026-07-08T12:00:00"),
+                                LocalDateTime.parse("2026-07-08T13:00:00")),
+                        calendar.getVersion(),
+                        "Europe/Warsaw"));
         assertThrows(
                 AuthorizationException.class,
                 () -> eventService.deleteEvent(activeUser(), event.getId(), event.getVersion()));
