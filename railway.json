@@ -5,11 +5,12 @@
     "dockerfilePath": "Dockerfile",
     "watchPatterns": [
       ".mvn/**",
+      ".dockerignore",
       "Dockerfile",
       "mvnw",
       "pom.xml",
       "railway.json",
-      "src/**"
+      "src/main/**"
     ]
   },
   "deploy": {

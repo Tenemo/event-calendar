@@ -36,15 +36,15 @@ public class InvitationService {
     private static final String VISIBLE_INVITATION_PREDICATE =
             "invitation.createdByUser.id = :actingUserId "
                     + "or exists ("
-                    + "select calendarMember.calendar.id from CalendarMember calendarMember "
-                    + "where calendarMember.calendar = calendar "
-                    + "and calendarMember.user.id = :actingUserId "
-                    + "and calendarMember.role = :adminRole "
-                    + "and calendarMember.active = true "
-                    + "and calendarMember.user.active = true "
-                    + "and calendarMember.calendar.active = true)";
+                    + "select calendarMembership.calendar.id from CalendarMembership calendarMembership "
+                    + "where calendarMembership.calendar = calendar "
+                    + "and calendarMembership.user.id = :actingUserId "
+                    + "and calendarMembership.role = :adminRole "
+                    + "and calendarMembership.active = true "
+                    + "and calendarMembership.user.active = true "
+                    + "and calendarMembership.calendar.active = true)";
 
-    @PersistenceContext(unitName = "calendarPU")
+    @PersistenceContext(unitName = "calendarPersistenceUnit")
     private EntityManager entityManager;
 
     @Inject
@@ -77,7 +77,8 @@ public class InvitationService {
     public Invitation createCalendarEditorInvitation(ApplicationUser actingUser, Long calendarId) {
         requireActiveUser(actingUser);
         calendarAccessService.requireCanEdit(actingUser, calendarId);
-        Calendar calendar = calendarService.requireActiveCalendar(calendarId);
+        Calendar calendar = calendarService.requireActiveCalendarForChildMutation(calendarId);
+        calendarAccessService.requireCanEdit(actingUser, calendarId);
         Invitation invitation = createInvitation(actingUser, calendar, CalendarRole.EDITOR);
         auditService.record(actingUser, calendar, "app_invitation", invitation.getId(), "created", "Calendar editor invitation created.");
         return invitation;
@@ -132,7 +133,7 @@ public class InvitationService {
                 invitation.setRevokedAt(currentTime);
                 auditService.record(actingUser, invitation.getCalendar(), "app_invitation", invitation.getId(), "revoked", "Invitation revoked.");
             }
-            case USED -> throw new ValidationException("Invitation has already been used.");
+            case ACCEPTED -> throw new ValidationException("Invitation has already been accepted.");
             case EXPIRED -> throw new ValidationException("Invitation is expired.");
             case REVOKED -> {
                 // Revocation is idempotent for an already-revoked invitation.
@@ -144,7 +145,7 @@ public class InvitationService {
         return resolveAdmission(invitationToken, false);
     }
 
-    public RegistrationAdmission requireRegistrationAdmission(String invitationToken) {
+    public RegistrationAdmission claimRegistrationAdmission(String invitationToken) {
         return resolveAdmission(invitationToken, true);
     }
 
@@ -367,6 +368,7 @@ public class InvitationService {
             return;
         }
         if (invitation.getCalendar() != null) {
+            calendarService.requireActiveCalendarForChildMutation(invitation.getCalendar().getId());
             calendarAccessService.requireCanAdminister(actingUser, invitation.getCalendar().getId());
             return;
         }
@@ -381,7 +383,7 @@ public class InvitationService {
 
     private String generateUniqueInvitationToken() {
         for (int attempt = 0; attempt < MAXIMUM_TOKEN_GENERATION_ATTEMPTS; attempt++) {
-            String token = tokenService.generateToken();
+            String token = tokenService.generateInvitationToken();
             Long existingCount = entityManager
                     .createQuery(
                             "select count(invitation) from Invitation invitation "

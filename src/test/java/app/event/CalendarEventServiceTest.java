@@ -244,21 +244,18 @@ final class CalendarEventServiceTest {
     }
 
     @Test
-    void editorRangeQueriesUseStrictOverlapBoundariesForExclusiveStoredEnds() {
+    void memberQueriesStayCalendarScopedAndOrderedByStartTime() {
         EntityManagerStub entityManagerStub = entityManagerStub().resultList(
-                "calendarEvent.endTime > :rangeStartTime "
-                        + "and calendarEvent.startTime < :rangeEndTime",
+                "where calendarEvent.calendar.id = :calendarId "
+                        + "order by calendarEvent.startTime",
                 List.of());
         CalendarEventService eventService = new CalendarEventService();
         setField(eventService, "entityManager", entityManagerStub.entityManager());
         setField(eventService, "calendarAccessService", new AllowingAccessService());
-        OffsetDateTime exclusiveEventEnd = OffsetDateTime.parse("2026-07-25T00:00:00+02:00");
 
-        List<CalendarEvent> events = eventService.findEditorEvents(
+        List<CalendarEvent> events = eventService.findEventsForMember(
                 activeUser(100L),
-                200L,
-                exclusiveEventEnd,
-                exclusiveEventEnd.plusDays(1));
+                200L);
 
         assertEquals(List.of(), events);
     }
@@ -380,7 +377,7 @@ final class CalendarEventServiceTest {
         setField(eventService, "calendarAccessService", new AllowingAccessService());
         setField(eventService, "calendarService", new FixedCalendarService(calendar));
         setField(eventService, "calendarTimeService", new CalendarTimeService());
-        setField(eventService, "auditService", new NoopAuditService());
+        setField(eventService, "auditService", new NoOperationAuditService());
         return eventService;
     }
 
@@ -396,7 +393,7 @@ final class CalendarEventServiceTest {
         setField(eventService, "calendarAccessService", new AllowingAccessService());
         setField(eventService, "calendarService", new FixedCalendarService(calendar));
         setField(eventService, "calendarTimeService", new CalendarTimeService());
-        setField(eventService, "auditService", new NoopAuditService());
+        setField(eventService, "auditService", new NoOperationAuditService());
         return eventService;
     }
 
@@ -428,7 +425,7 @@ final class CalendarEventServiceTest {
         Calendar calendar = new Calendar();
         setEntityId(calendar, id);
         calendar.setName("Kayaking");
-        calendar.setPublicToken("public-token-123456789012345678901234567890");
+        calendar.setCalendarLinkToken("Abc_123-xY0");
         calendar.setPublicAccessEnabled(true);
         calendar.setTimeZone("Europe/Warsaw");
         calendar.setActive(true);
@@ -458,7 +455,7 @@ final class CalendarEventServiceTest {
         }
 
         @Override
-        public Calendar requireActiveCalendarForEventMutation(Long calendarId) {
+        public Calendar requireActiveCalendarForChildMutation(Long calendarId) {
             return calendar;
         }
     }
@@ -476,7 +473,7 @@ final class CalendarEventServiceTest {
         }
     }
 
-    private static final class NoopAuditService extends AuditService {
+    private static final class NoOperationAuditService extends AuditService {
         @Override
         public void record(ApplicationUser actingUser, Calendar calendar, String entityType, Long entityId, String action, String details) {
         }

@@ -12,7 +12,7 @@ import java.util.Optional;
 
 @Stateless
 public class CalendarAccessService {
-    @PersistenceContext(unitName = "calendarPU")
+    @PersistenceContext(unitName = "calendarPersistenceUnit")
     private EntityManager entityManager;
 
     public Optional<CalendarRole> findActiveRole(ApplicationUser user, Long calendarId) {
@@ -23,12 +23,12 @@ public class CalendarAccessService {
         try {
             CalendarRole role = entityManager
                     .createQuery(
-                            "select calendarMember.role from CalendarMember calendarMember "
-                                    + "where calendarMember.user.id = :userId "
-                                    + "and calendarMember.calendar.id = :calendarId "
-                                    + "and calendarMember.active = true "
-                                    + "and calendarMember.user.active = true "
-                                    + "and calendarMember.calendar.active = true",
+                            "select calendarMembership.role from CalendarMembership calendarMembership "
+                                    + "where calendarMembership.user.id = :userId "
+                                    + "and calendarMembership.calendar.id = :calendarId "
+                                    + "and calendarMembership.active = true "
+                                    + "and calendarMembership.user.active = true "
+                                    + "and calendarMembership.calendar.active = true",
                             CalendarRole.class)
                     .setParameter("userId", user.getId())
                     .setParameter("calendarId", calendarId)
@@ -39,16 +39,16 @@ public class CalendarAccessService {
         }
     }
 
-    public Calendar requirePublicReadableCalendar(String publicToken) {
-        Calendar calendar = requireActiveCalendarByPublicToken(publicToken);
+    public Calendar requirePublicReadableCalendar(String calendarLinkToken) {
+        Calendar calendar = requireActiveCalendarByCalendarLinkToken(calendarLinkToken);
         if (!calendar.isPublicAccessEnabled()) {
             throw new NotFoundException("Calendar was not found.");
         }
         return calendar;
     }
 
-    public Calendar requireCalendarReadableByToken(ApplicationUser user, String publicToken) {
-        Calendar calendar = requireActiveCalendarByPublicToken(publicToken);
+    public Calendar requireCalendarReadableByLinkToken(ApplicationUser user, String calendarLinkToken) {
+        Calendar calendar = requireActiveCalendarByCalendarLinkToken(calendarLinkToken);
         if (calendar.isPublicAccessEnabled() || findActiveRole(user, calendar.getId()).isPresent()) {
             return calendar;
         }
@@ -68,8 +68,8 @@ public class CalendarAccessService {
         }
     }
 
-    private Calendar requireActiveCalendarByPublicToken(String publicToken) {
-        if (publicToken == null || publicToken.isBlank()) {
+    private Calendar requireActiveCalendarByCalendarLinkToken(String calendarLinkToken) {
+        if (calendarLinkToken == null || calendarLinkToken.isBlank()) {
             throw new NotFoundException("Calendar was not found.");
         }
 
@@ -77,10 +77,10 @@ public class CalendarAccessService {
             return entityManager
                     .createQuery(
                             "select calendarEntity from Calendar calendarEntity "
-                                    + "where calendarEntity.publicToken = :publicToken "
+                                    + "where calendarEntity.calendarLinkToken = :calendarLinkToken "
                                     + "and calendarEntity.active = true",
                             Calendar.class)
-                    .setParameter("publicToken", publicToken.trim())
+                    .setParameter("calendarLinkToken", calendarLinkToken.trim())
                     .getSingleResult();
         } catch (NoResultException exception) {
             throw new NotFoundException("Calendar was not found.");

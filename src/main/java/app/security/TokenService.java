@@ -1,6 +1,6 @@
 package app.security;
 
-import app.calendar.CalendarPublicToken;
+import app.calendar.CalendarLinkToken;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.security.SecureRandom;
 import java.util.Base64;
@@ -11,13 +11,13 @@ public class TokenService {
 
     private final SecureRandom secureRandom = new SecureRandom();
 
-    public String generateToken() {
+    public String generateInvitationToken() {
         byte[] tokenBytes = new byte[TOKEN_BYTES];
         secureRandom.nextBytes(tokenBytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
     }
 
-    public String generateCalendarPublicToken() {
-        return CalendarPublicToken.generate(secureRandom);
+    public String generateCalendarLinkToken() {
+        return CalendarLinkToken.generate(secureRandom);
     }
 }

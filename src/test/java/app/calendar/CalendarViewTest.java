@@ -18,8 +18,8 @@ final class CalendarViewTest {
         calendarView.changeEventAllDayMode();
 
         assertAll(
-                () -> assertEquals(LocalDate.parse("2026-07-20"), calendarView.getEventStartDate()),
-                () -> assertEquals(LocalDate.parse("2026-07-20"), calendarView.getEventEndDate()));
+                () -> assertEquals(LocalDate.parse("2026-07-20"), calendarView.getEventFirstDay()),
+                () -> assertEquals(LocalDate.parse("2026-07-20"), calendarView.getEventLastDay()));
     }
 
     @Test
@@ -32,15 +32,15 @@ final class CalendarViewTest {
         calendarView.changeEventAllDayMode();
 
         assertAll(
-                () -> assertEquals(LocalDate.parse("2026-07-20"), calendarView.getEventStartDate()),
-                () -> assertEquals(LocalDate.parse("2026-07-21"), calendarView.getEventEndDate()));
+                () -> assertEquals(LocalDate.parse("2026-07-20"), calendarView.getEventFirstDay()),
+                () -> assertEquals(LocalDate.parse("2026-07-21"), calendarView.getEventLastDay()));
     }
 
     @Test
     void switchingFromAllDayToTimedUsesTheExclusiveMidnightAfterTheLastDay() {
         CalendarView calendarView = new CalendarView();
-        calendarView.setEventStartDate(LocalDate.parse("2026-07-22"));
-        calendarView.setEventEndDate(LocalDate.parse("2026-07-24"));
+        calendarView.setEventFirstDay(LocalDate.parse("2026-07-22"));
+        calendarView.setEventLastDay(LocalDate.parse("2026-07-24"));
         calendarView.setEventAllDay(true);
         calendarView.setEventAllDaySelection(false);
 

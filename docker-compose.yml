@@ -1,3 +1,7 @@
+x-application-health-timeout: &application-health-timeout 5s
+x-application-health-command: &application-health-command
+  ["CMD-SHELL", "response=\"$$(curl --fail --silent http://localhost:9080/health)\" && [ \"$$response\" = \"ok\" ]"]
+
 services:
   postgres:
     image: postgres:17
@@ -37,9 +41,9 @@ services:
     ports:
       - "${PORT:-9080}:9080"
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:9080/health"]
+      test: *application-health-command
       interval: 10s
-      timeout: 5s
+      timeout: *application-health-timeout
       retries: 12
       start_period: 30s
 
@@ -75,6 +79,49 @@ services:
       timeout: 5s
       retries: 30
 
+  postgres-e2e-verification:
+    profiles: [e2e-verification]
+    image: postgres:17
+    environment:
+      POSTGRES_DB: calendar_e2e_verification
+      POSTGRES_USER: calendar_e2e_verification
+      POSTGRES_PASSWORD: calendar_e2e_verification
+    ports:
+      - "127.0.0.1:${E2E_VERIFICATION_DATABASE_PORT:-55433}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U calendar_e2e_verification -d calendar_e2e_verification"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  web-e2e-verification:
+    profiles: [e2e-verification]
+    image: shared-calendar:local
+    depends_on:
+      postgres-e2e-verification:
+        condition: service_healthy
+    environment:
+      PORT: 9080
+      HTTPS_PORT: 9443
+      PGHOST: postgres-e2e-verification
+      PGPORT: 5432
+      PGDATABASE: calendar_e2e_verification
+      PGUSER: calendar_e2e_verification
+      PGPASSWORD: calendar_e2e_verification
+      APP_TIMEZONE: Europe/Warsaw
+      APP_BASE_URL: ${E2E_VERIFICATION_BASE_URL:-http://localhost:9082}
+      APP_BOOTSTRAP_INVITE_TOKEN: ""
+    ports:
+      - "127.0.0.1:${E2E_VERIFICATION_APPLICATION_PORT:-9082}:9080"
+    healthcheck:
+      test: *application-health-command
+      interval: 2s
+      timeout: *application-health-timeout
+      retries: 30
+      start_period: 30s
+
   web-bootstrap-verification:
     profiles: [bootstrap-verification]
     image: shared-calendar:local
@@ -95,9 +142,9 @@ services:
     ports:
       - "127.0.0.1:${BOOTSTRAP_VERIFICATION_APPLICATION_PORT:-9081}:9080"
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:9080/health"]
+      test: *application-health-command
       interval: 2s
-      timeout: 5s
+      timeout: *application-health-timeout
       retries: 30
       start_period: 30s
 

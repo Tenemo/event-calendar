@@ -17,14 +17,15 @@
             <div class="section-header compact-heading">
                 <div>
                     <p class="eyebrow">Calendar administration</p>
-                    <h1>Settings</h1>
+                    <h1 id="settingsHeading" tabindex="-1">Settings</h1>
                 </div>
                 <h:outputLink value="#{calendarSettingsView.calendarLink}"
                               styleClass="button-link secondary-link">Back to calendar</h:outputLink>
             </div>
 
             <div class="settings-grid">
-                <p:panel header="Calendar details" styleClass="surface-panel">
+                <p:panel styleClass="surface-panel" pt:aria-labelledby="calendarDetailsHeading">
+                    <h2 id="calendarDetailsHeading" class="panel-heading">Calendar details</h2>
                     <h:form styleClass="stacked-form">
                         <p:outputLabel for="calendarName" value="Name"/>
                         <p:inputText id="calendarName"
@@ -42,9 +43,11 @@
                         <p:outputLabel for="timeZone" value="Time zone"/>
                         <p:inputText id="timeZone"
                                      value="#{calendarSettingsView.timeZone}"
+                                     pt:aria-describedby="timeZoneHelp"
                                      pt:maxlength="80"
                                      required="true"
                                      requiredMessage="Time zone is required."/>
+                        <p id="timeZoneHelp" class="field-help">Use an IANA region such as Europe/Warsaw or America/New_York.</p>
 
                         <div class="checkbox-field">
                             <p:selectBooleanCheckbox id="publicAccess" value="#{calendarSettingsView.publicAccessEnabled}"/>
@@ -55,14 +58,16 @@
                                          action="#{calendarSettingsView.save}"
                                          ajax="true"
                                          process="@form"
-                                         update=":messages :settingsContent"/>
+                                         update=":messages :settingsContent"
+                                         oncomplete="focusAfterSuccessfulAjax(args, 'settingsHeading');"/>
                     </h:form>
                 </p:panel>
 
-                <p:panel header="Public access" styleClass="surface-panel">
+                <p:panel styleClass="surface-panel" pt:aria-labelledby="publicAccessHeading">
+                    <h2 id="publicAccessHeading" class="panel-heading">Public access</h2>
                     <div class="stacked-form">
                         <p class="status-line">
-                            <span class="status-dot #{calendarSettingsView.publicAccessEnabled ? 'enabled' : 'disabled'}"></span>
+                            <span class="status-dot #{calendarSettingsView.publicAccessEnabled ? 'enabled' : 'disabled'}" aria-hidden="true"></span>
                             #{calendarSettingsView.publicAccessEnabled ? 'Public access enabled' : 'Public access disabled'}
                         </p>
                         <p>When enabled, anyone with the calendar URL can read its events without signing in.</p>

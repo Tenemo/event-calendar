@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -14,7 +15,7 @@ import app.audit.AuditService;
 import app.config.CalendarConfiguration;
 import app.event.CalendarEvent;
 import app.membership.CalendarAccessService;
-import app.membership.CalendarMember;
+import app.membership.CalendarMembership;
 import app.membership.CalendarRole;
 import app.security.TokenService;
 import app.testsupport.ServiceTestSupport.EntityManagerStub;
@@ -40,22 +41,22 @@ final class CalendarServiceTest {
         CalendarService calendarService = new CalendarService();
         setField(calendarService, "entityManager", entityManagerStub.entityManager());
         setField(calendarService, "tokenService", new FixedTokenService("Abc_123-xY0"));
-        setField(calendarService, "auditService", new NoopAuditService());
+        setField(calendarService, "auditService", new NoOperationAuditService());
         setField(calendarService, "calendarTimeService", new CalendarTimeService());
         setField(calendarService, "calendarConfiguration", calendarConfiguration("Europe/Warsaw"));
 
-        Calendar calendar = calendarService.createCalendar(creator, " Kayaking ", " River weekend ");
+        Calendar calendar = calendarService.createCalendar(creator, " Kayaking ");
 
         Object persistedMembership = entityManagerStub.persistedObjects().stream()
-                .filter(CalendarMember.class::isInstance)
+                .filter(CalendarMembership.class::isInstance)
                 .findFirst()
                 .orElseThrow();
-        CalendarMember creatorMembership = assertInstanceOf(CalendarMember.class, persistedMembership);
+        CalendarMembership creatorMembership = assertInstanceOf(CalendarMembership.class, persistedMembership);
 
         assertAll(
                 () -> assertEquals("Kayaking", calendar.getName()),
-                () -> assertEquals("River weekend", calendar.getDescription()),
-                () -> assertEquals("Abc_123-xY0", calendar.getPublicToken()),
+                () -> assertNull(calendar.getDescription()),
+                () -> assertEquals("Abc_123-xY0", calendar.getCalendarLinkToken()),
                 () -> assertEquals(ZoneOffset.UTC, calendar.getCreatedAt().getOffset()),
                 () -> assertEquals(ZoneOffset.UTC, calendar.getUpdatedAt().getOffset()),
                 () -> assertTrue(calendar.isPublicAccessEnabled()),
@@ -65,7 +66,7 @@ final class CalendarServiceTest {
                 () -> assertEquals(ZoneOffset.UTC, creatorMembership.getUpdatedAt().getOffset()),
                 () -> assertEquals(calendar, creatorMembership.getCalendar()),
                 () -> assertEquals(creator, creatorMembership.getUser()),
-                () -> assertEquals(1, entityManagerStub.persistedObjects().stream().filter(CalendarMember.class::isInstance).count()),
+                () -> assertEquals(1, entityManagerStub.persistedObjects().stream().filter(CalendarMembership.class::isInstance).count()),
                 () -> assertEquals(1, entityManagerStub.flushCount()));
     }
 
@@ -102,7 +103,7 @@ final class CalendarServiceTest {
                 "Europe/London",
                 false,
                 calendar.getVersion());
-        Calendar regeneratedCalendar = calendarService.regeneratePublicToken(
+        Calendar regeneratedCalendar = calendarService.regenerateCalendarLink(
                 actingUser, calendar.getId(), calendar.getVersion());
 
         assertAll(
@@ -113,7 +114,7 @@ final class CalendarServiceTest {
                 () -> assertEquals(calendar, regeneratedCalendar),
                 () -> assertEquals(
                         "New_123-xY0",
-                        regeneratedCalendar.getPublicToken()),
+                        regeneratedCalendar.getCalendarLinkToken()),
                 () -> assertEquals(List.of("settings_updated", "public_token_regenerated"), auditService.actions),
                 () -> assertEquals(
                         List.of(
@@ -132,7 +133,7 @@ final class CalendarServiceTest {
         CalendarService calendarService = new CalendarService();
         setField(calendarService, "entityManager", entityManagerStub.entityManager());
 
-        Calendar loadedCalendar = calendarService.requireActiveCalendarForEventMutation(calendar.getId());
+        Calendar loadedCalendar = calendarService.requireActiveCalendarForChildMutation(calendar.getId());
 
         assertAll(
                 () -> assertEquals(calendar, loadedCalendar),
@@ -253,7 +254,49 @@ final class CalendarServiceTest {
                                 activeUser(42L), 80L, "Changed", null, "Europe/Warsaw", true, 0)),
                 () -> assertThrows(
                         AuthorizationException.class,
-                        () -> calendarService.regeneratePublicToken(activeUser(42L), 80L, 0)));
+                        () -> calendarService.regenerateCalendarLink(activeUser(42L), 80L, 0)));
+    }
+
+    @Test
+    void roleDependentCalendarMutationsRecheckPermissionAfterTakingTheCalendarLock() {
+        ApplicationUser actingUser = activeUser(42L);
+        Calendar settingsCalendar = activeCalendar(80L, actingUser);
+        CalendarService settingsService = configuredSettingsService(
+                entityManagerStub().find(Calendar.class, settingsCalendar.getId(), settingsCalendar));
+        setField(settingsService, "calendarAccessService", new AdministrationRevokedAfterInitialCheckAccessService());
+
+        AuthorizationException settingsException = assertThrows(
+                AuthorizationException.class,
+                () -> settingsService.updateCalendarSettings(
+                        actingUser,
+                        settingsCalendar.getId(),
+                        "Changed",
+                        null,
+                        "Europe/London",
+                        false,
+                        settingsCalendar.getVersion()));
+
+        Calendar tokenCalendar = activeCalendar(81L, actingUser);
+        CalendarService tokenService = configuredSettingsService(
+                entityManagerStub().find(Calendar.class, tokenCalendar.getId(), tokenCalendar));
+        setField(tokenService, "calendarAccessService", new EditAccessRevokedAfterInitialCheckAccessService());
+
+        AuthorizationException tokenException = assertThrows(
+                AuthorizationException.class,
+                () -> tokenService.regenerateCalendarLink(
+                        actingUser,
+                        tokenCalendar.getId(),
+                        tokenCalendar.getVersion()));
+
+        assertAll(
+                () -> assertEquals("Admin access is required.", settingsException.getMessage()),
+                () -> assertEquals("Editor access is required.", tokenException.getMessage()),
+                () -> assertEquals("Kayaking", settingsCalendar.getName()),
+                () -> assertEquals("Europe/Warsaw", settingsCalendar.getTimeZone()),
+                () -> assertTrue(settingsCalendar.isPublicAccessEnabled()),
+                () -> assertEquals(
+                        "Abc_123-xY0",
+                        tokenCalendar.getCalendarLinkToken()));
     }
 
     @Test
@@ -278,11 +321,11 @@ final class CalendarServiceTest {
                                 calendar.getVersion() + 1)),
                 () -> assertThrows(
                         ConflictException.class,
-                        () -> calendarService.regeneratePublicToken(
+                        () -> calendarService.regenerateCalendarLink(
                                 actingUser, calendar.getId(), calendar.getVersion() + 1)),
                 () -> assertEquals("Kayaking", calendar.getName()),
                 () -> assertTrue(calendar.isPublicAccessEnabled()),
-                () -> assertEquals("public-token-123456789012345678901234567890", calendar.getPublicToken()),
+                () -> assertEquals("Abc_123-xY0", calendar.getCalendarLinkToken()),
                 () -> assertEquals(0, entityManagerStub.flushCount()));
     }
 
@@ -290,7 +333,7 @@ final class CalendarServiceTest {
         Calendar calendar = new Calendar();
         setEntityId(calendar, id);
         calendar.setName("Kayaking");
-        calendar.setPublicToken("public-token-123456789012345678901234567890");
+        calendar.setCalendarLinkToken("Abc_123-xY0");
         calendar.setTimeZone("Europe/Warsaw");
         calendar.setPublicAccessEnabled(true);
         calendar.setActive(true);
@@ -315,7 +358,7 @@ final class CalendarServiceTest {
     private static CalendarService configuredSettingsService(EntityManagerStub entityManagerStub) {
         CalendarService calendarService = new CalendarService();
         setField(calendarService, "entityManager", entityManagerStub.entityManager());
-        setField(calendarService, "auditService", new NoopAuditService());
+        setField(calendarService, "auditService", new NoOperationAuditService());
         setField(calendarService, "calendarAccessService", new AllowingAccessService());
         setField(calendarService, "calendarTimeService", new CalendarTimeService());
         return calendarService;
@@ -344,12 +387,12 @@ final class CalendarServiceTest {
         }
 
         @Override
-        public String generateCalendarPublicToken() {
+        public String generateCalendarLinkToken() {
             return token;
         }
     }
 
-    private static final class NoopAuditService extends AuditService {
+    private static final class NoOperationAuditService extends AuditService {
         @Override
         public void record(ApplicationUser actingUser, Calendar calendar, String entityType, Long entityId, String action, String details) {
         }
@@ -374,6 +417,30 @@ final class CalendarServiceTest {
         @Override
         public void requireCanAdminister(ApplicationUser user, Long calendarId) {
             throw new AuthorizationException("Admin access is required.");
+        }
+    }
+
+    private static final class AdministrationRevokedAfterInitialCheckAccessService extends CalendarAccessService {
+        private int administrationChecks;
+
+        @Override
+        public void requireCanAdminister(ApplicationUser user, Long calendarId) {
+            administrationChecks++;
+            if (administrationChecks > 1) {
+                throw new AuthorizationException("Admin access is required.");
+            }
+        }
+    }
+
+    private static final class EditAccessRevokedAfterInitialCheckAccessService extends CalendarAccessService {
+        private int editChecks;
+
+        @Override
+        public void requireCanEdit(ApplicationUser user, Long calendarId) {
+            editChecks++;
+            if (editChecks > 1) {
+                throw new AuthorizationException("Editor access is required.");
+            }
         }
     }
 

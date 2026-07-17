@@ -32,7 +32,7 @@ public class CalendarSettingsView implements Serializable {
     private String description;
     private String timeZone;
     private boolean publicAccessEnabled;
-    private String publicToken;
+    private String calendarLinkToken;
     private Integer version;
     private boolean available;
 
@@ -65,7 +65,7 @@ public class CalendarSettingsView implements Serializable {
     }
 
     public String getCalendarLink() {
-        return applicationUrlService.linkTo("/" + publicToken);
+        return applicationUrlService.linkTo("/" + calendarLinkToken);
     }
 
     private void copyCalendar(Calendar calendar) {
@@ -73,7 +73,7 @@ public class CalendarSettingsView implements Serializable {
         description = calendar.getDescription();
         timeZone = calendar.getTimeZone();
         publicAccessEnabled = calendar.isPublicAccessEnabled();
-        publicToken = calendar.getPublicToken();
+        calendarLinkToken = calendar.getCalendarLinkToken();
         version = calendar.getVersion();
     }
 

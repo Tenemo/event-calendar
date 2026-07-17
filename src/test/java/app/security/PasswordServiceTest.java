@@ -11,6 +11,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.testsupport.TestPasswordServices.RecordingPasswordHash;
 import app.util.ValidationException;
+import jakarta.security.enterprise.identitystore.Pbkdf2PasswordHash;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 final class PasswordServiceTest {
@@ -43,7 +45,7 @@ final class PasswordServiceTest {
     }
 
     @Test
-    void rejectsNonJakartaSecurityHashesWithoutVerification() {
+    void delegatesStoredHashParsingToJakartaSecurityAndMapsMalformedHashesToFailure() {
         RecordingPasswordHash passwordHash = new RecordingPasswordHash();
         PasswordService passwordService = passwordService(passwordHash);
 
@@ -57,7 +59,16 @@ final class PasswordServiceTest {
                 () -> assertFalse(passwordService.verifyPassword(
                         "correct horse battery staple",
                         "not-a-supported-hash")),
-                () -> assertEquals(0, passwordHash.verificationCount()));
+                () -> assertEquals(3, passwordHash.verificationCount()));
+    }
+
+    @Test
+    void mapsProviderParsingFailuresForMalformedDatabaseHashesToGenericFailure() {
+        PasswordService passwordService = passwordService(new MalformedHashRejectingPasswordHash());
+
+        assertFalse(passwordService.verifyPassword(
+                "correct horse battery staple",
+                "malformed-database-hash"));
     }
 
     @Test
@@ -149,5 +160,21 @@ final class PasswordServiceTest {
                 ValidationException.class,
                 () -> passwordService.hashPassword(username, password));
         assertEquals(expectedMessage, exception.getMessage());
+    }
+
+    private static final class MalformedHashRejectingPasswordHash implements Pbkdf2PasswordHash {
+        @Override
+        public void initialize(Map<String, String> parameters) {
+        }
+
+        @Override
+        public String generate(char[] passwordCharacters) {
+            throw new UnsupportedOperationException("Hash generation is not used by this test.");
+        }
+
+        @Override
+        public boolean verify(char[] passwordCharacters, String hashedPassword) {
+            throw new IllegalArgumentException("Malformed password hash.");
+        }
     }
 }

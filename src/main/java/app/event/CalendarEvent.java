@@ -120,16 +120,8 @@ public class CalendarEvent {
         this.allDay = allDay;
     }
 
-    public ApplicationUser getCreatedByUser() {
-        return createdByUser;
-    }
-
     public void setCreatedByUser(ApplicationUser createdByUser) {
         this.createdByUser = createdByUser;
-    }
-
-    public ApplicationUser getUpdatedByUser() {
-        return updatedByUser;
     }
 
     public void setUpdatedByUser(ApplicationUser updatedByUser) {

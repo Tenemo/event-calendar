@@ -28,7 +28,7 @@
         <file name="${shared.resource.dir}/postgresql/postgresql.jar"/>
     </library>
 
-    <dataSource id="CalendarDS" jndiName="jdbc/CalendarDS">
+    <dataSource id="CalendarDataSource" jndiName="jdbc/CalendarDataSource">
         <connectionManager connectionTimeout="2s"/>
         <jdbcDriver libraryRef="postgresqlDriver"/>
         <properties.postgresql serverName="${PGHOST}"

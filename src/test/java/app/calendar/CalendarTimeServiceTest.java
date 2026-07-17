@@ -45,7 +45,42 @@ final class CalendarTimeServiceTest {
                                 LocalDateTime.parse("2026-10-25T02:30:00"),
                                 "Europe/Warsaw")),
                 () -> assertThrows(ValidationException.class, () -> calendarTimeService.normalizeTimeZone("Mars/Olympus")),
+                () -> assertThrows(ValidationException.class, () -> calendarTimeService.normalizeTimeZone("+01:00")),
+                () -> assertThrows(ValidationException.class, () -> calendarTimeService.normalizeTimeZone("UTC+01:00")),
+                () -> assertThrows(ValidationException.class, () -> calendarTimeService.normalizeTimeZone("Z")),
                 () -> assertThrows(ValidationException.class, () -> calendarTimeService.normalizeTimeZone("   ")));
+    }
+
+    @Test
+    void acceptsSupportedRegionIdentifiersAndUtc() {
+        assertAll(
+                () -> assertEquals("Europe/Warsaw", calendarTimeService.normalizeTimeZone(" Europe/Warsaw ")),
+                () -> assertEquals("America/New_York", calendarTimeService.normalizeTimeZone("America/New_York")),
+                () -> assertEquals("UTC", calendarTimeService.normalizeTimeZone("UTC")));
+    }
+
+    @Test
+    void convertsInclusiveAllDayDatesIntoOneExclusiveStoredRange() {
+        CalendarTimeService.StoredAllDayRange storedRange = calendarTimeService.toStoredAllDayRange(
+                LocalDate.parse("2026-03-28"),
+                LocalDate.parse("2026-03-29"),
+                "Europe/Warsaw");
+
+        assertAll(
+                () -> assertEquals(OffsetDateTime.parse("2026-03-28T00:00:00+01:00"), storedRange.startTime()),
+                () -> assertEquals(OffsetDateTime.parse("2026-03-30T00:00:00+02:00"), storedRange.endTime()),
+                () -> assertThrows(
+                        ValidationException.class,
+                        () -> calendarTimeService.toStoredAllDayRange(
+                                LocalDate.parse("2011-12-29"),
+                                LocalDate.parse("2011-12-30"),
+                                "Pacific/Apia")),
+                () -> assertThrows(
+                        ValidationException.class,
+                        () -> calendarTimeService.toStoredAllDayRange(
+                                LocalDate.parse("2026-03-29"),
+                                LocalDate.parse("2026-03-28"),
+                                "Europe/Warsaw")));
     }
 
     @Test

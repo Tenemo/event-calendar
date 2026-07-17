@@ -17,11 +17,11 @@ import jakarta.servlet.http.HttpServletResponseWrapper;
 import java.io.IOException;
 
 public class CalendarRouteFilter implements Filter {
-    public static final String CALENDAR_TOKEN_REQUEST_ATTRIBUTE = "calendarToken";
+    public static final String CALENDAR_LINK_TOKEN_REQUEST_ATTRIBUTE = "calendarLinkToken";
     public static final String NOT_FOUND_REQUEST_ATTRIBUTE = "calendarNotFound";
     public static final String CALENDAR_REQUEST_ATTRIBUTE = "calendar";
 
-    private static final String CALENDAR_TEMPLATE_PATH = "/public-calendar.xhtml";
+    private static final String CALENDAR_TEMPLATE_PATH = "/calendar.xhtml";
     private static final String RATE_LIMIT_MESSAGE = "Too many calendar link requests. Try again later.";
 
     @Inject
@@ -42,15 +42,19 @@ public class CalendarRouteFilter implements Filter {
             ServletResponse servletResponse,
             FilterChain filterChain) throws IOException, ServletException {
         if (!(servletRequest instanceof HttpServletRequest request)
-                || !(servletResponse instanceof HttpServletResponse response)
-                || !"GET".equals(request.getMethod())) {
+                || !(servletResponse instanceof HttpServletResponse response)) {
             filterChain.doFilter(servletRequest, servletResponse);
             return;
         }
 
-        String calendarToken = CalendarPublicToken.fromRequestPath(
+        if (isLegacyCalendarRoute(request)) {
+            response.sendError(HttpServletResponse.SC_NOT_FOUND);
+            return;
+        }
+
+        String calendarLinkToken = CalendarLinkToken.fromRequestPath(
                 request.getContextPath(), request.getRequestURI());
-        if (calendarToken == null) {
+        if (calendarLinkToken == null) {
             filterChain.doFilter(servletRequest, servletResponse);
             return;
         }
@@ -61,20 +65,34 @@ public class CalendarRouteFilter implements Filter {
                 sendRateLimitResponse(response, admission.getRetryAfterSeconds());
                 return;
             }
-            forwardCalendar(request, response, calendarToken);
+            if (!"GET".equals(request.getMethod())) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+            forwardCalendar(request, response, calendarLinkToken);
         }
+    }
+
+    private static boolean isLegacyCalendarRoute(HttpServletRequest request) {
+        String contextPath = request.getContextPath();
+        String requestUri = request.getRequestURI();
+        if (contextPath == null || requestUri == null || !requestUri.startsWith(contextPath)) {
+            return false;
+        }
+        String applicationPath = requestUri.substring(contextPath.length());
+        return applicationPath.equals("/calendar") || applicationPath.startsWith("/calendar/");
     }
 
     private void forwardCalendar(
             HttpServletRequest request,
             HttpServletResponse response,
-            String calendarToken) throws IOException, ServletException {
-        request.setAttribute(CALENDAR_TOKEN_REQUEST_ATTRIBUTE, calendarToken);
+            String calendarLinkToken) throws IOException, ServletException {
+        request.setAttribute(CALENDAR_LINK_TOKEN_REQUEST_ATTRIBUTE, calendarLinkToken);
         RequestDispatcher requestDispatcher = request.getRequestDispatcher(CALENDAR_TEMPLATE_PATH);
         Calendar calendar;
         try {
-            calendar = calendarAccessService.requireCalendarReadableByToken(
-                    currentUser.find().orElse(null), calendarToken);
+            calendar = calendarAccessService.requireCalendarReadableByLinkToken(
+                    currentUser.find().orElse(null), calendarLinkToken);
         } catch (NotFoundException exception) {
             request.setAttribute(NOT_FOUND_REQUEST_ATTRIBUTE, true);
             requestDispatcher.forward(request, new FixedStatusResponse(response, HttpServletResponse.SC_NOT_FOUND));

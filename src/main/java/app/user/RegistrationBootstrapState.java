@@ -18,10 +18,6 @@ public class RegistrationBootstrapState {
     @Column(name = "consumed_at")
     private OffsetDateTime consumedAt;
 
-    public Short getSingletonId() {
-        return singletonId;
-    }
-
     public OffsetDateTime getConsumedAt() {
         return consumedAt;
     }

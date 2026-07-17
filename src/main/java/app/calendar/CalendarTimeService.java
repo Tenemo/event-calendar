@@ -2,7 +2,6 @@ package app.calendar;
 
 import app.util.ValidationException;
 import jakarta.enterprise.context.ApplicationScoped;
-import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -10,20 +9,44 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.Set;
 
 @ApplicationScoped
 public class CalendarTimeService {
+    private static final Set<String> SUPPORTED_TIME_ZONES = ZoneId.getAvailableZoneIds();
+
     public String normalizeTimeZone(String timeZone) {
         if (timeZone == null || timeZone.isBlank()) {
             throw new ValidationException("Time zone is required.");
         }
 
         String normalizedTimeZone = timeZone.trim();
-        try {
-            return ZoneId.of(normalizedTimeZone).getId();
-        } catch (DateTimeException exception) {
+        if (!SUPPORTED_TIME_ZONES.contains(normalizedTimeZone)) {
             throw new ValidationException("Time zone must be a valid region such as Europe/Warsaw.");
         }
+        return normalizedTimeZone;
+    }
+
+    public StoredAllDayRange toStoredAllDayRange(
+            LocalDate firstDay,
+            LocalDate lastDay,
+            String timeZone) {
+        if (firstDay == null) {
+            throw new ValidationException("Event first day is required.");
+        }
+        if (lastDay == null) {
+            throw new ValidationException("Event last day is required.");
+        }
+        if (lastDay.isBefore(firstDay)) {
+            throw new ValidationException("Event last day must be on or after the first day.");
+        }
+
+        OffsetDateTime storedStartTime = toStoredStartOfDay(firstDay, timeZone);
+        if (!lastDay.equals(firstDay)) {
+            toStoredStartOfDay(lastDay, timeZone);
+        }
+        OffsetDateTime storedEndTime = toStoredExclusiveDayBoundary(lastDay.plusDays(1), timeZone);
+        return new StoredAllDayRange(storedStartTime, storedEndTime);
     }
 
     public OffsetDateTime toStoredTime(LocalDateTime localDateTime, String timeZone) {
@@ -77,5 +100,8 @@ public class CalendarTimeService {
         }
         ZoneId zoneId = ZoneId.of(normalizeTimeZone(timeZone));
         return storedTime.atZoneSameInstant(zoneId).toLocalDateTime();
+    }
+
+    public record StoredAllDayRange(OffsetDateTime startTime, OffsetDateTime endTime) {
     }
 }

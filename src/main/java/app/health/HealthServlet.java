@@ -14,7 +14,7 @@ import javax.sql.DataSource;
 public class HealthServlet extends HttpServlet {
     static final int DATABASE_VALIDATION_TIMEOUT_SECONDS = 2;
 
-    @Resource(lookup = "jdbc/CalendarDS")
+    @Resource(lookup = "jdbc/CalendarDataSource")
     private DataSource dataSource;
 
     @Override

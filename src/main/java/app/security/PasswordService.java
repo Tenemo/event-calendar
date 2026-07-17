@@ -14,6 +14,12 @@ import java.util.Map;
 public class PasswordService {
     static final String PASSWORD_HASH_ALGORITHM = "PBKDF2WithHmacSHA256";
     static final int PASSWORD_HASH_ITERATIONS = 600_000;
+    private static final String DUMMY_PASSWORD_HASH =
+            PASSWORD_HASH_ALGORITHM
+                    + ":"
+                    + PASSWORD_HASH_ITERATIONS
+                    + ":AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=:"
+                    + "1CWgpzdZaXuiv+M7nJjALTxRC5d19dsMY6jY4Nm9n0E=";
     private static final int PASSWORD_HASH_SALT_BYTES = 32;
     private static final int PASSWORD_HASH_KEY_BYTES = 32;
     public static final int MINIMUM_PASSWORD_LENGTH = 8;
@@ -87,13 +93,14 @@ public class PasswordService {
 
         char[] passwordCharacters = password.toCharArray();
         try {
-            if (isJakartaSecurityPasswordHash(storedHash)) {
-                return verifyJakartaSecurityPasswordHash(passwordCharacters, storedHash);
-            }
-            return false;
+            return verifyJakartaSecurityPasswordHash(passwordCharacters, storedHash);
         } finally {
             Arrays.fill(passwordCharacters, '\0');
         }
+    }
+
+    void verifyMissingUserPassword(String password) {
+        verifyPassword(password, DUMMY_PASSWORD_HASH);
     }
 
     private boolean verifyJakartaSecurityPasswordHash(char[] passwordCharacters, String storedHash) {
@@ -102,10 +109,6 @@ public class PasswordService {
         } catch (IllegalArgumentException exception) {
             return false;
         }
-    }
-
-    private boolean isJakartaSecurityPasswordHash(String storedHash) {
-        return storedHash.split(":", -1).length == 4;
     }
 
     private Pbkdf2PasswordHash configuredPasswordHash() {

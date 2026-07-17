@@ -12,7 +12,9 @@ final class CalendarRoleTest {
     void onlyAdminsCanAdministerCalendars() {
         assertAll(
                 () -> assertFalse(CalendarRole.EDITOR.canAdminister()),
-                () -> assertTrue(CalendarRole.ADMIN.canAdminister()));
+                () -> assertTrue(CalendarRole.ADMIN.canAdminister()),
+                () -> assertEquals("Editor", CalendarRole.EDITOR.getDisplayName()),
+                () -> assertEquals("Admin", CalendarRole.ADMIN.getDisplayName()));
     }
 
     @Test

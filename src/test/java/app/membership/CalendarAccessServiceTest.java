@@ -39,7 +39,7 @@ final class CalendarAccessServiceTest {
     @Test
     void missingMembershipRejectsEditorAccess() {
         EntityManagerStub entityManagerStub = entityManagerStub()
-                .singleResultNotFound("from CalendarMember");
+                .singleResultNotFound("from CalendarMembership");
         CalendarAccessService accessService = accessService(entityManagerStub);
 
         assertThrows(AuthorizationException.class, () -> accessService.requireCanEdit(activeUser(), 10L));
@@ -51,8 +51,8 @@ final class CalendarAccessServiceTest {
         CalendarAccessService accessService = accessService(
                 entityManagerStub().singleResult("from Calendar calendarEntity", calendar));
 
-        assertEquals(calendar, accessService.requireCalendarReadableByToken(null, calendar.getPublicToken()));
-        assertEquals(calendar, accessService.requirePublicReadableCalendar(calendar.getPublicToken()));
+        assertEquals(calendar, accessService.requireCalendarReadableByLinkToken(null, calendar.getCalendarLinkToken()));
+        assertEquals(calendar, accessService.requirePublicReadableCalendar(calendar.getCalendarLinkToken()));
     }
 
     @Test
@@ -60,27 +60,27 @@ final class CalendarAccessServiceTest {
         Calendar calendar = activeCalendar(false);
         CalendarAccessService memberAccessService = accessService(entityManagerStub()
                 .singleResult("from Calendar calendarEntity", calendar)
-                .singleResult("select calendarMember.role", CalendarRole.EDITOR));
+                .singleResult("select calendarMembership.role", CalendarRole.EDITOR));
         CalendarAccessService anonymousAccessService = accessService(
                 entityManagerStub().singleResult("from Calendar calendarEntity", calendar));
         CalendarAccessService unrelatedAccessService = accessService(entityManagerStub()
                 .singleResult("from Calendar calendarEntity", calendar)
-                .singleResultNotFound("select calendarMember.role"));
+                .singleResultNotFound("select calendarMembership.role"));
 
         assertAll(
                 () -> assertEquals(
                         calendar,
-                        memberAccessService.requireCalendarReadableByToken(activeUser(), calendar.getPublicToken())),
+                        memberAccessService.requireCalendarReadableByLinkToken(activeUser(), calendar.getCalendarLinkToken())),
                 () -> assertThrows(
                         NotFoundException.class,
-                        () -> anonymousAccessService.requireCalendarReadableByToken(null, calendar.getPublicToken())),
+                        () -> anonymousAccessService.requireCalendarReadableByLinkToken(null, calendar.getCalendarLinkToken())),
                 () -> assertThrows(
                         NotFoundException.class,
-                        () -> unrelatedAccessService.requireCalendarReadableByToken(
-                                activeUser(), calendar.getPublicToken())),
+                        () -> unrelatedAccessService.requireCalendarReadableByLinkToken(
+                                activeUser(), calendar.getCalendarLinkToken())),
                 () -> assertThrows(
                         NotFoundException.class,
-                        () -> anonymousAccessService.requirePublicReadableCalendar(calendar.getPublicToken())));
+                        () -> anonymousAccessService.requirePublicReadableCalendar(calendar.getCalendarLinkToken())));
     }
 
     @Test
@@ -89,15 +89,15 @@ final class CalendarAccessServiceTest {
                 entityManagerStub().singleResultNotFound("from Calendar calendarEntity"));
 
         assertAll(
-                () -> assertThrows(NotFoundException.class, () -> accessService.requireCalendarReadableByToken(null, null)),
-                () -> assertThrows(NotFoundException.class, () -> accessService.requireCalendarReadableByToken(null, "   ")),
+                () -> assertThrows(NotFoundException.class, () -> accessService.requireCalendarReadableByLinkToken(null, null)),
+                () -> assertThrows(NotFoundException.class, () -> accessService.requireCalendarReadableByLinkToken(null, "   ")),
                 () -> assertThrows(
                         NotFoundException.class,
-                        () -> accessService.requireCalendarReadableByToken(null, "unknown-token")));
+                        () -> accessService.requireCalendarReadableByLinkToken(null, "unknown-token")));
     }
 
     private static CalendarAccessService accessServiceReturningRole(CalendarRole role) {
-        return accessService(entityManagerStub().singleResult("select calendarMember.role", role));
+        return accessService(entityManagerStub().singleResult("select calendarMembership.role", role));
     }
 
     private static CalendarAccessService accessService(EntityManagerStub entityManagerStub) {
@@ -110,7 +110,7 @@ final class CalendarAccessServiceTest {
         Calendar calendar = new Calendar();
         setEntityId(calendar, 10L);
         calendar.setName("Kayaking");
-        calendar.setPublicToken("calendar-token-123456789012345678901234567890");
+        calendar.setCalendarLinkToken("calendar-token-123456789012345678901234567890");
         calendar.setPublicAccessEnabled(publicAccessEnabled);
         calendar.setActive(true);
         return calendar;

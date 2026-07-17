@@ -1,6 +1,6 @@
 :root {
     color-scheme: light;
-    font-family: Inter, "Segoe UI", Arial, sans-serif;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     background: #f7f8fb;
     color: #111827;
     --app-background: #f7f8fb;
@@ -9,8 +9,9 @@
     --text: #111827;
     --muted-text: #5b6472;
     --border: #dde3eb;
-    --primary: #2563eb;
-    --primary-strong: #1d4ed8;
+    --control-border: #8490a3;
+    --primary: #1d4ed8;
+    --primary-strong: #1e40af;
     --primary-soft: #eff6ff;
     --green: #059669;
     --green-soft: #ecfdf5;
@@ -18,7 +19,9 @@
     --subtle-surface: #fbfcfe;
     --control-radius: 0.45rem;
     --panel-radius: 0.5rem;
-    --focus-ring: rgba(37, 99, 235, 0.42);
+    --danger: #b91c1c;
+    --danger-strong: #991b1b;
+    --focus-ring: #0f3d9e;
     --shadow: 0 1px 3px rgba(17, 24, 39, 0.08);
 }
 
@@ -74,7 +77,7 @@ a {
     display: inline-block;
     color: var(--text);
     font-size: 1.1rem;
-    font-weight: 750;
+    font-weight: 700;
     text-decoration: none;
 }
 
@@ -105,7 +108,7 @@ a {
     cursor: pointer;
     font-family: inherit;
     font-size: 0.92rem;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1;
     text-decoration: none;
 }
@@ -218,7 +221,6 @@ button,
 }
 
 .preview-header h2,
-.event-item h2,
 .event-item h3 {
     margin: 0;
     font-size: 1rem;
@@ -234,6 +236,7 @@ button,
 }
 
 .lead-text {
+    display: block;
     margin: 1rem 0 0;
     max-width: 680px;
     font-size: 1.05rem;
@@ -285,6 +288,7 @@ button,
 
 .heading-meta {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.75rem;
     margin-bottom: 0.75rem;
@@ -296,8 +300,7 @@ button,
     margin: 0 0 0.5rem;
     color: var(--muted-text);
     font-size: 0.82rem;
-    font-weight: 750;
-    text-transform: uppercase;
+    font-weight: 700;
 }
 
 .button-link {
@@ -309,7 +312,7 @@ button,
 }
 
 .secondary-link {
-    border: 1px solid var(--border);
+    border: 1px solid var(--control-border);
     background: var(--surface);
 }
 
@@ -335,7 +338,7 @@ button,
     align-items: center;
     justify-content: center;
     min-height: 3.3rem;
-    border-radius: 0.45rem;
+    border-radius: var(--control-radius);
 }
 
 .month-grid span {
@@ -365,11 +368,8 @@ button,
     background: var(--green-soft);
     color: var(--green-strong);
     font-size: 0.82rem;
-    font-weight: 750;
+    font-weight: 700;
     line-height: 1.2;
-}
-
-.role-chip {
     padding: 0.45rem 0.7rem;
 }
 
@@ -522,7 +522,7 @@ button,
     border-radius: 999px;
     padding: 0.4rem 0.65rem;
     font-size: 0.82rem;
-    font-weight: 750;
+    font-weight: 700;
 }
 
 .status-label.active {
@@ -532,7 +532,7 @@ button,
 
 .status-label.inactive {
     background: #f3f4f6;
-    color: #6b7280;
+    color: #4b5563;
 }
 
 .not-found-state {
@@ -544,11 +544,6 @@ button,
     margin: 0;
     font-size: 2rem;
     letter-spacing: 0;
-}
-
-.public-calendar-page {
-    max-width: 54rem;
-    margin: 0 auto;
 }
 
 .event-item {
@@ -596,12 +591,28 @@ button,
     max-width: 100%;
 }
 
-.generated-invite {
+.generated-invitation {
     display: grid;
     gap: 0.5rem;
 }
 
-.generated-invite .ui-inputfield,
+.copy-control {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    align-items: start;
+}
+
+.copy-status {
+    grid-column: 1 / -1;
+    min-height: 1.25rem;
+    margin: 0;
+    color: var(--muted-text);
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
+.generated-invitation .ui-inputfield,
 .table-copy-field.ui-inputfield {
     width: 100%;
     font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
@@ -618,12 +629,25 @@ button,
     line-height: 1.45;
 }
 
+.panel-heading {
+    margin: 0 0 1rem;
+    color: var(--text);
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.3;
+}
+
+.panel-heading + .stacked-form {
+    margin-top: 0;
+}
+
 .table-scroll-region {
     width: 100%;
     min-width: 0;
     max-width: 100%;
     overflow-x: auto;
-    border: 1px solid var(--border);
+    border: 1px solid var(--control-border);
     border-radius: var(--panel-radius);
 }
 
@@ -642,14 +666,67 @@ button,
     min-width: 42rem !important;
 }
 
-.ui-panel.surface-panel .ui-panel-titlebar {
-    border-bottom: 1px solid var(--border);
+.ui-panel.surface-panel .ui-panel-content {
+    background: var(--surface);
+}
+
+body .ui-inputfield,
+body select,
+body .ui-selectonemenu,
+body .ui-chkbox .ui-chkbox-box {
+    border-color: var(--control-border);
+}
+
+body .ui-button {
+    border-color: var(--primary);
+    background: var(--primary);
+    color: #ffffff;
+}
+
+body .ui-button:not(.ui-state-disabled):hover {
+    border-color: var(--primary-strong);
+    background: var(--primary-strong);
+}
+
+body .ui-button.ui-button-outlined {
+    border-color: var(--primary);
+    background: var(--surface);
+    color: var(--primary-strong);
+}
+
+body .ui-button.ui-button-outlined:not(.ui-state-disabled):hover {
+    border-color: var(--primary-strong);
+    background: var(--primary-soft);
+    color: var(--primary-strong);
+}
+
+body .ui-button.ui-button-secondary.ui-button-outlined {
+    border-color: var(--control-border);
     background: var(--surface);
     color: var(--text);
 }
 
-.ui-panel.surface-panel .ui-panel-content {
+body .ui-button.ui-button-danger {
+    border-color: var(--danger);
+    background: var(--danger);
+    color: #ffffff;
+}
+
+body .ui-button.ui-button-danger:not(.ui-state-disabled):hover {
+    border-color: var(--danger-strong);
+    background: var(--danger-strong);
+}
+
+body .ui-button.ui-button-danger.ui-button-outlined {
+    border-color: var(--danger);
     background: var(--surface);
+    color: var(--danger);
+}
+
+body .ui-button.ui-button-danger.ui-button-outlined:not(.ui-state-disabled):hover {
+    border-color: var(--danger-strong);
+    background: #fef2f2;
+    color: var(--danger-strong);
 }
 
 .preview-empty-state {
@@ -668,7 +745,7 @@ button,
 .settings-grid > *,
 .event-item > *,
 .heading-meta,
-.generated-invite,
+.generated-invitation,
 .inline-role-form,
 .surface-table td,
 .surface-table th {
@@ -684,7 +761,7 @@ button,
 .event-copy p,
 .event-description,
 .secondary-line,
-.generated-invite,
+.generated-invitation,
 .table-copy-field,
 .surface-table td,
 .surface-table a {
@@ -754,6 +831,12 @@ button,
 
     .month-grid b {
         min-height: 2.5rem;
+    }
+}
+
+@media (max-height: 48rem) {
+    .event-editor {
+        position: static;
     }
 }
 

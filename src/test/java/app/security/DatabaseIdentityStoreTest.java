@@ -10,6 +10,10 @@ import app.user.ApplicationUser;
 import app.user.UserService;
 import jakarta.security.enterprise.credential.UsernamePasswordCredential;
 import jakarta.security.enterprise.identitystore.CredentialValidationResult;
+import jakarta.servlet.http.HttpServletRequest;
+import java.lang.reflect.Proxy;
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
@@ -22,6 +26,23 @@ import org.junit.jupiter.api.Test;
 
 final class DatabaseIdentityStoreTest {
     @Test
+    void authenticationSourceUsesTheSharedDeploymentAwareResolver() {
+        HttpServletRequest request = (HttpServletRequest) Proxy.newProxyInstance(
+                HttpServletRequest.class.getClassLoader(),
+                new Class<?>[] {HttpServletRequest.class},
+                (proxy, method, arguments) -> switch (method.getName()) {
+                    case "getRemoteAddr" -> "203.0.113.25";
+                    case "getHeaders" -> Collections.enumeration(List.of("198.51.100.18"));
+                    default -> throw new AssertionError("Unsupported request method: " + method.getName());
+                });
+        DatabaseIdentityStore identityStore = new DatabaseIdentityStore();
+        setField(identityStore, "request", request);
+        setField(identityStore, "clientRequestSourceResolver", new ClientRequestSourceResolver(null));
+
+        assertEquals("203.0.113.25", identityStore.sourceIdentifier());
+    }
+
+    @Test
     void missingUsersStillRunPasswordVerificationAgainstDummyHash() {
         RecordingPasswordService passwordService = new RecordingPasswordService(false);
         DatabaseIdentityStore identityStore = identityStore(new FixedUserService(Optional.empty()), passwordService);
@@ -32,7 +53,11 @@ final class DatabaseIdentityStoreTest {
                 () -> assertEquals(CredentialValidationResult.Status.INVALID, result.getStatus()),
                 () -> assertEquals(1, passwordService.verificationCount),
                 () -> assertEquals("wrong-password", passwordService.lastPassword),
-                () -> assertTrue(passwordService.lastStoredHash.startsWith("PBKDF2WithHmacSHA256:600000:")));
+                () -> assertTrue(passwordService.lastStoredHash.startsWith(
+                        PasswordService.PASSWORD_HASH_ALGORITHM
+                                + ":"
+                                + PasswordService.PASSWORD_HASH_ITERATIONS
+                                + ":")));
     }
 
     @Test
@@ -48,7 +73,7 @@ final class DatabaseIdentityStoreTest {
                 new FixedUserService(Optional.of(user)),
                 passwordService,
                 new LoginAttemptThrottle(),
-                new MutableLoginRequestSource("192.0.2.1"),
+                new MutableRequestSource("192.0.2.1"),
                 passwordValidationState);
 
         CredentialValidationResult result = identityStore.validate(new UsernamePasswordCredential("Piotr", "correct-password"));
@@ -83,7 +108,7 @@ final class DatabaseIdentityStoreTest {
                 new FixedUserService(Optional.of(user)),
                 passwordService,
                 new LoginAttemptThrottle(),
-                new MutableLoginRequestSource("192.0.2.1"),
+                new MutableRequestSource("192.0.2.1"),
                 passwordValidationState);
         ExecutorService authenticationExecutor = Executors.newSingleThreadExecutor();
 
@@ -160,12 +185,12 @@ final class DatabaseIdentityStoreTest {
         user.setPasswordHash("stored-user-hash");
         user.setActive(true);
         RecordingPasswordService passwordService = new RecordingPasswordService(false);
-        MutableLoginRequestSource loginRequestSource = new MutableLoginRequestSource("198.51.100.10");
+        MutableRequestSource requestSource = new MutableRequestSource("198.51.100.10");
         DatabaseIdentityStore identityStore = identityStore(
                 new FixedUserService(Optional.of(user)),
                 passwordService,
                 new LoginAttemptThrottle(),
-                loginRequestSource);
+                requestSource);
 
         for (int failedAttemptIndex = 0;
                 failedAttemptIndex < LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE;
@@ -174,11 +199,11 @@ final class DatabaseIdentityStoreTest {
         }
 
         passwordService.verificationResult = true;
-        loginRequestSource.sourceIdentifier = "203.0.113.20";
+        requestSource.sourceIdentifier = "203.0.113.20";
         CredentialValidationResult legitimateResult = identityStore.validate(
                 new UsernamePasswordCredential("piotr", "correct-password"));
 
-        loginRequestSource.sourceIdentifier = "198.51.100.10";
+        requestSource.sourceIdentifier = "198.51.100.10";
         CredentialValidationResult hostileSourceResult = identityStore.validate(
                 new UsernamePasswordCredential("piotr", "correct-password"));
 
@@ -218,7 +243,11 @@ final class DatabaseIdentityStoreTest {
                         LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE,
                         missingUserPasswordService.verificationCount),
                 () -> assertFalse(existingUserPasswordService.lastStoredHash.startsWith("PBKDF2WithHmacSHA256:")),
-                () -> assertTrue(missingUserPasswordService.lastStoredHash.startsWith("PBKDF2WithHmacSHA256:")));
+                () -> assertTrue(missingUserPasswordService.lastStoredHash.startsWith(
+                        PasswordService.PASSWORD_HASH_ALGORITHM
+                                + ":"
+                                + PasswordService.PASSWORD_HASH_ITERATIONS
+                                + ":")));
     }
 
     @Test
@@ -258,7 +287,7 @@ final class DatabaseIdentityStoreTest {
                 userService,
                 passwordService,
                 new LoginAttemptThrottle(),
-                new MutableLoginRequestSource("192.0.2.1"),
+                new MutableRequestSource("192.0.2.1"),
                 new PasswordValidationState());
     }
 
@@ -266,12 +295,12 @@ final class DatabaseIdentityStoreTest {
             UserService userService,
             PasswordService passwordService,
             LoginAttemptThrottle loginAttemptThrottle,
-            LoginRequestSource loginRequestSource) {
+            MutableRequestSource requestSource) {
         return identityStore(
                 userService,
                 passwordService,
                 loginAttemptThrottle,
-                loginRequestSource,
+                requestSource,
                 new PasswordValidationState());
     }
 
@@ -279,13 +308,17 @@ final class DatabaseIdentityStoreTest {
             UserService userService,
             PasswordService passwordService,
             LoginAttemptThrottle loginAttemptThrottle,
-            LoginRequestSource loginRequestSource,
+            MutableRequestSource requestSource,
             PasswordValidationState passwordValidationState) {
-        DatabaseIdentityStore identityStore = new DatabaseIdentityStore();
+        DatabaseIdentityStore identityStore = new DatabaseIdentityStore() {
+            @Override
+            String sourceIdentifier() {
+                return requestSource.sourceIdentifier;
+            }
+        };
         setField(identityStore, "userService", userService);
         setField(identityStore, "passwordService", passwordService);
         setField(identityStore, "loginAttemptThrottle", loginAttemptThrottle);
-        setField(identityStore, "loginRequestSource", loginRequestSource);
         setField(identityStore, "passwordValidationState", passwordValidationState);
         return identityStore;
     }
@@ -350,16 +383,12 @@ final class DatabaseIdentityStoreTest {
         }
     }
 
-    private static final class MutableLoginRequestSource extends LoginRequestSource {
+    private static final class MutableRequestSource {
         private String sourceIdentifier;
 
-        private MutableLoginRequestSource(String sourceIdentifier) {
+        private MutableRequestSource(String sourceIdentifier) {
             this.sourceIdentifier = sourceIdentifier;
         }
 
-        @Override
-        public String getSourceIdentifier() {
-            return sourceIdentifier;
-        }
     }
 }

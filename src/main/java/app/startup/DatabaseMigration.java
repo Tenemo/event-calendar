@@ -16,7 +16,7 @@ import org.flywaydb.core.api.MigrationInfo;
 public class DatabaseMigration {
     private static final Logger LOGGER = Logger.getLogger(DatabaseMigration.class.getName());
 
-    @Resource(lookup = "jdbc/CalendarDS")
+    @Resource(lookup = "jdbc/CalendarDataSource")
     private DataSource dataSource;
 
     @PostConstruct
@@ -24,7 +24,7 @@ public class DatabaseMigration {
     public void migrate() {
         Flyway flyway = Flyway.configure()
                 .dataSource(dataSource)
-                .locations("classpath:db/migration", "classpath:db/callback")
+                .locations("classpath:db/migration")
                 .load();
         flyway.migrate();
 

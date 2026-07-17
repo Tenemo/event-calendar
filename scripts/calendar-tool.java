@@ -20,9 +20,11 @@ import java.util.Map;
 
 final class CalendarTool {
     private static final Path PROJECT_DIRECTORY = Path.of("").toAbsolutePath().normalize();
-    private static final Path LIBERTY_SHARED_POSTGRESQL_DIRECTORY =
-            PROJECT_DIRECTORY.resolve("target/liberty/wlp/usr/shared/resources/postgresql");
+    private static final String JAVA_COMMAND = Path.of(
+            System.getProperty("java.home"), "bin", isWindows() ? "java.exe" : "java").toString();
+    private static final String MAVEN_WRAPPER_COMMAND = "mvnw";
     private static final String APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE = "APP_BASE_URL";
+    private static final String BROWSER_ENVIRONMENT_VARIABLE = "BROWSER";
     private static final String PORT_ENVIRONMENT_VARIABLE = "PORT";
     private static final String POSTGRESQL_HOST_ENVIRONMENT_VARIABLE = "PGHOST";
     private static final String POSTGRESQL_PORT_ENVIRONMENT_VARIABLE = "PGPORT";
@@ -52,13 +54,26 @@ final class CalendarTool {
             "BOOTSTRAP_VERIFICATION_INVITATION_TOKEN";
     private static final String BOOTSTRAP_VERIFICATION_BASE_URL_ENVIRONMENT_VARIABLE =
             "BOOTSTRAP_VERIFICATION_BASE_URL";
+    private static final String E2E_VERIFICATION_APPLICATION_SERVICE_NAME = "web-e2e-verification";
+    private static final String E2E_VERIFICATION_DATABASE_SERVICE_NAME = "postgres-e2e-verification";
+    private static final String E2E_VERIFICATION_PROFILE = "e2e-verification";
+    private static final String E2E_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE =
+            "E2E_VERIFICATION_APPLICATION_PORT";
+    private static final String E2E_VERIFICATION_DATABASE_PORT_ENVIRONMENT_VARIABLE =
+            "E2E_VERIFICATION_DATABASE_PORT";
+    private static final String E2E_VERIFICATION_BASE_URL_ENVIRONMENT_VARIABLE =
+            "E2E_VERIFICATION_BASE_URL";
     private static final String DEFAULT_BOOTSTRAP_VERIFICATION_APPLICATION_PORT = "9081";
     private static final String DEFAULT_BOOTSTRAP_VERIFICATION_DATABASE_PORT = "55432";
+    private static final String DEFAULT_E2E_VERIFICATION_APPLICATION_PORT = "9082";
+    private static final String DEFAULT_E2E_VERIFICATION_DATABASE_PORT = "55433";
+    private static final String E2E_VERIFICATION_DATABASE_NAME = "calendar_e2e_verification";
+    private static final String E2E_VERIFICATION_DATABASE_USER = "calendar_e2e_verification";
+    private static final String E2E_VERIFICATION_DATABASE_PASSWORD = "calendar_e2e_verification";
     private static final String DEFAULT_BOOTSTRAP_VERIFICATION_INVITATION_TOKEN =
             "bootstrap-verification-only-token-00000000000000000000000000000000";
     private static final String POSTGRESQL_CLIENT_IMAGE = "postgres:17";
-    private static final String APPLICATION_IMAGE_NAME = "shared-calendar:local";
-    private static final String EXEC_MAVEN_PLUGIN_VERSION = "3.6.3";
+    private static final String EXPECTED_FLYWAY_VERSION = "12";
     private static final DateTimeFormatter BACKUP_TIMESTAMP_FORMAT =
             DateTimeFormatter.ofPattern("uuuuMMdd-HHmmss").withZone(ZoneOffset.UTC);
     private static final Duration APPLICATION_READY_TIMEOUT = Duration.ofSeconds(120);
@@ -75,14 +90,6 @@ final class CalendarTool {
         }
 
         switch (arguments[0]) {
-            case "check-toolchain" -> {
-                requireArgumentCount(arguments, 1);
-                checkToolchain();
-            }
-            case "prepare-liberty-dev" -> {
-                requireArgumentCount(arguments, 1);
-                prepareLibertyDev();
-            }
             case "setup" -> {
                 requireArgumentCount(arguments, 1);
                 setup();
@@ -99,10 +106,6 @@ final class CalendarTool {
                 requireArgumentCount(arguments, 1);
                 packageApplication();
             }
-            case "install-playwright" -> {
-                requireArgumentCount(arguments, 1);
-                installPlaywrightBrowsers();
-            }
             case "e2e" -> {
                 requireArgumentCount(arguments, 1);
                 runEndToEndTests();
@@ -118,10 +121,6 @@ final class CalendarTool {
             case "verify-local" -> {
                 requireArgumentCount(arguments, 1);
                 verifyLocal();
-            }
-            case "verify-running-app" -> {
-                requireArgumentCount(arguments, 1);
-                verifyRunningApplication();
             }
             case "docker-build" -> {
                 requireArgumentCount(arguments, 1);
@@ -152,16 +151,11 @@ final class CalendarTool {
     }
 
     private static void setup() throws IOException, InterruptedException {
-        checkToolchain();
-        prepareLibertyDev();
-    }
-
-    private static void checkToolchain() throws IOException, InterruptedException {
         System.out.println("Java runtime:");
-        runCommand("Java runtime check", "java", "-version");
+        runCommand("Java runtime check", JAVA_COMMAND, "-version");
 
         System.out.println("Maven:");
-        runCommand("Maven check", "mvn", "--version");
+        runCommand("Maven Wrapper check", MAVEN_WRAPPER_COMMAND, "--version");
 
         System.out.println("Docker:");
         runCommand("Docker check", "docker", "--version");
@@ -171,32 +165,36 @@ final class CalendarTool {
         runCommand("mise check", "mise", "--version");
     }
 
-    private static void prepareLibertyDev() throws IOException, InterruptedException {
-        runCommand("Stale development output cleanup", "mvn", "-q", "clean");
-        Files.createDirectories(LIBERTY_SHARED_POSTGRESQL_DIRECTORY);
-        runCommand("Liberty resource preparation", "mvn", "-q", "generate-resources");
-    }
-
     private static void startDatabase() throws IOException, InterruptedException {
         runCommand("PostgreSQL startup", "docker", "compose", "up", "-d", DATABASE_SERVICE_NAME);
         waitForDatabase();
     }
 
     private static void startDevelopmentServer() throws IOException, InterruptedException {
-        prepareLibertyDev();
-        runCommand("Open Liberty dev mode", "mvn", "liberty:dev");
+        runCommand(
+                "Open Liberty dev mode",
+                MAVEN_WRAPPER_COMMAND,
+                "-Pliberty-dev",
+                "generate-resources",
+                "liberty:dev");
     }
 
     private static void packageApplication() throws IOException, InterruptedException {
-        runCommand("Clean application package build", "mvn", "clean", "package");
+        runCommand("Clean application package build", MAVEN_WRAPPER_COMMAND, "clean", "package");
     }
 
     private static void buildDockerImage() throws IOException, InterruptedException {
-        runCommand("Production image build", "docker", "build", "--tag", APPLICATION_IMAGE_NAME, ".");
+        runCommand(
+                "Production image build",
+                "docker",
+                "compose",
+                "--profile",
+                "application",
+                "build",
+                "web");
     }
 
     private static void startDockerApplication() throws IOException, InterruptedException {
-        startDatabase();
         runCommand(
                 "Production container startup",
                 "docker",
@@ -296,6 +294,7 @@ final class CalendarTool {
         }
 
         if (usesLocalComposeDatabase()) {
+            requireLocalApplicationStoppedBeforeRestore();
             validateLocalBackupArchive(backupPath, DATABASE_SERVICE_NAME);
             restoreIntoComposeDatabase(
                     backupPath,
@@ -304,6 +303,8 @@ final class CalendarTool {
                     databaseName(),
                     true);
         } else {
+            System.err.println(
+                    "Remote application state cannot be detected. Ensure every application instance is stopped before restoring.");
             validateRemoteBackupArchive(backupPath);
             runCommandWithInput(
                     "Remote PostgreSQL restore",
@@ -338,10 +339,12 @@ final class CalendarTool {
 
         startDatabase();
         String sourceFingerprint = databaseFingerprint(DATABASE_SERVICE_NAME, databaseUser(), databaseName());
-        Path backupPath = backupPostgres("target/backups/restore-verification.dump");
-        boolean verificationServiceStarted = false;
+        Path backupPath = backupPostgres(".build/verification/restore-verification.dump");
+        boolean startupAttempted = false;
+        Throwable primaryFailure = null;
 
         try {
+            startupAttempted = true;
             runCommand(
                     "Restore verification database startup",
                     "docker",
@@ -352,7 +355,6 @@ final class CalendarTool {
                     "-d",
                     "--force-recreate",
                     RESTORE_VERIFICATION_DATABASE_SERVICE_NAME);
-            verificationServiceStarted = true;
             waitForComposeDatabase(
                     RESTORE_VERIFICATION_DATABASE_SERVICE_NAME,
                     RESTORE_VERIFICATION_DATABASE_USER,
@@ -376,20 +378,62 @@ final class CalendarTool {
             }
 
             System.out.println("Backup and restore verification passed with matching schema and row counts.");
+        } catch (IOException | InterruptedException | RuntimeException | Error exception) {
+            primaryFailure = exception;
+            throw exception;
         } finally {
-            if (verificationServiceStarted) {
-                int stopExitCode = runCommandForExitCode(
-                        true,
-                        "docker",
-                        "compose",
-                        "--profile",
-                        "restore-verification",
-                        "stop",
-                        RESTORE_VERIFICATION_DATABASE_SERVICE_NAME);
-                if (stopExitCode != 0) {
-                    System.err.println("Restore verification database did not stop cleanly.");
+            try {
+                if (startupAttempted) {
+                    cleanUpComposeServices(
+                            "Restore verification database cleanup",
+                            primaryFailure,
+                            Map.of(),
+                            "restore-verification",
+                            RESTORE_VERIFICATION_DATABASE_SERVICE_NAME);
                 }
+            } finally {
+                Files.deleteIfExists(backupPath);
             }
+        }
+    }
+
+    private static void requireLocalApplicationStoppedBeforeRestore() throws IOException, InterruptedException {
+        String runningComposeServices = runCommandAndCapture(
+                "Local application state check",
+                "docker",
+                "compose",
+                "--profile",
+                "application",
+                "ps",
+                "--services",
+                "--status",
+                "running",
+                "web").trim();
+        if (!runningComposeServices.isEmpty()) {
+            throw new IllegalStateException(
+                    "Stop the local Docker Compose web service before restoring PostgreSQL.");
+        }
+
+        URI localHealthUri = URI.create("http://localhost:" + applicationPort() + "/health");
+        if (applicationEndpointResponds(localHealthUri)) {
+            throw new IllegalStateException(
+                    "Stop the local application responding at " + localHealthUri + " before restoring PostgreSQL.");
+        }
+    }
+
+    private static boolean applicationEndpointResponds(URI healthUri) throws InterruptedException {
+        HttpClient httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(2))
+                .build();
+        HttpRequest request = HttpRequest.newBuilder(healthUri)
+                .timeout(Duration.ofSeconds(3))
+                .GET()
+                .build();
+        try {
+            httpClient.send(request, HttpResponse.BodyHandlers.discarding());
+            return true;
+        } catch (IOException exception) {
+            return false;
         }
     }
 
@@ -537,28 +581,112 @@ final class CalendarTool {
     }
 
     private static void installPlaywrightBrowsers() throws IOException, InterruptedException {
+        String browserName = configuredBrowserName();
+        String installationArguments = isLinux()
+                ? "install --with-deps " + browserName
+                : "install " + browserName;
         runCommand(
                 "Playwright browser installation",
-                "mvn",
+                MAVEN_WRAPPER_COMMAND,
                 "-q",
                 "-Dexec.classpathScope=test",
                 "-Dexec.mainClass=com.microsoft.playwright.CLI",
-                "-Dexec.args=install",
-                "org.codehaus.mojo:exec-maven-plugin:" + EXEC_MAVEN_PLUGIN_VERSION + ":java");
+                "-Dexec.args=" + installationArguments,
+                "exec:java");
     }
 
     private static void runEndToEndTests() throws IOException, InterruptedException {
         installPlaywrightBrowsers();
-        runCommand("Playwright end-to-end tests", "mvn", "verify", "-Pe2e");
-        verifyBootstrapRegistrationConcurrency(false);
+        buildDockerImage();
+        verifySharedCalendarEndToEnd();
+        verifyBootstrapRegistrationConcurrency(false, false);
     }
 
     private static void verifyBootstrapRegistrationConcurrency(boolean installBrowser)
             throws IOException, InterruptedException {
+        verifyBootstrapRegistrationConcurrency(installBrowser, true);
+    }
+
+    private static void verifySharedCalendarEndToEnd() throws IOException, InterruptedException {
+        String applicationPort = environmentValueOrDefault(
+                E2E_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE,
+                DEFAULT_E2E_VERIFICATION_APPLICATION_PORT);
+        String databasePort = environmentValueOrDefault(
+                E2E_VERIFICATION_DATABASE_PORT_ENVIRONMENT_VARIABLE,
+                DEFAULT_E2E_VERIFICATION_DATABASE_PORT);
+        String applicationBaseUrl = "http://localhost:" + applicationPort;
+        Map<String, String> verificationEnvironment = new HashMap<>();
+        verificationEnvironment.put(E2E_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE, applicationPort);
+        verificationEnvironment.put(E2E_VERIFICATION_DATABASE_PORT_ENVIRONMENT_VARIABLE, databasePort);
+        verificationEnvironment.put(E2E_VERIFICATION_BASE_URL_ENVIRONMENT_VARIABLE, applicationBaseUrl);
+        verificationEnvironment.put(APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE, applicationBaseUrl);
+        verificationEnvironment.put(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE, "localhost");
+        verificationEnvironment.put(POSTGRESQL_PORT_ENVIRONMENT_VARIABLE, databasePort);
+        verificationEnvironment.put(POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE, E2E_VERIFICATION_DATABASE_NAME);
+        verificationEnvironment.put(POSTGRESQL_USER_ENVIRONMENT_VARIABLE, E2E_VERIFICATION_DATABASE_USER);
+        verificationEnvironment.put(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE, E2E_VERIFICATION_DATABASE_PASSWORD);
+        verificationEnvironment.put(BROWSER_ENVIRONMENT_VARIABLE, configuredBrowserName());
+
+        boolean startupAttempted = false;
+        Throwable primaryFailure = null;
+        try {
+            startupAttempted = true;
+            runCommandWithEnvironment(
+                    "End-to-end verification application startup",
+                    verificationEnvironment,
+                    "docker",
+                    "compose",
+                    "--profile",
+                    E2E_VERIFICATION_PROFILE,
+                    "up",
+                    "-d",
+                    "--force-recreate",
+                    "--no-build",
+                    E2E_VERIFICATION_DATABASE_SERVICE_NAME,
+                    E2E_VERIFICATION_APPLICATION_SERVICE_NAME);
+            waitForApplication(URI.create(applicationBaseUrl + "/health"));
+            checkComposeDatabaseSchema(
+                    E2E_VERIFICATION_DATABASE_SERVICE_NAME,
+                    E2E_VERIFICATION_DATABASE_USER,
+                    E2E_VERIFICATION_DATABASE_NAME);
+            runCommandWithEnvironment(
+                    "Playwright end-to-end tests",
+                    verificationEnvironment,
+                    MAVEN_WRAPPER_COMMAND,
+                    "-Pe2e",
+                    "test-compile",
+                    "failsafe:integration-test",
+                    "failsafe:verify");
+        } catch (IOException | InterruptedException | RuntimeException | Error exception) {
+            primaryFailure = exception;
+            showComposeLogs(
+                    primaryFailure,
+                    verificationEnvironment,
+                    E2E_VERIFICATION_PROFILE,
+                    E2E_VERIFICATION_APPLICATION_SERVICE_NAME,
+                    E2E_VERIFICATION_DATABASE_SERVICE_NAME);
+            throw exception;
+        } finally {
+            if (startupAttempted) {
+                cleanUpComposeServices(
+                        "End-to-end verification service cleanup",
+                        primaryFailure,
+                        verificationEnvironment,
+                        E2E_VERIFICATION_PROFILE,
+                        E2E_VERIFICATION_APPLICATION_SERVICE_NAME,
+                        E2E_VERIFICATION_DATABASE_SERVICE_NAME);
+            }
+        }
+    }
+
+    private static void verifyBootstrapRegistrationConcurrency(boolean installBrowser, boolean buildImage)
+            throws IOException, InterruptedException {
         if (installBrowser) {
             installPlaywrightBrowsers();
         }
-        buildDockerImage();
+        if (buildImage) {
+            buildDockerImage();
+        }
 
         String applicationPort = environmentValueOrDefault(
                 BOOTSTRAP_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE,
@@ -584,6 +712,7 @@ final class CalendarTool {
                 applicationBaseUrl);
 
         boolean startupAttempted = false;
+        Throwable primaryFailure = null;
         try {
             startupAttempted = true;
             runCommandWithEnvironment(
@@ -600,45 +729,36 @@ final class CalendarTool {
                     BOOTSTRAP_VERIFICATION_DATABASE_SERVICE_NAME,
                     BOOTSTRAP_VERIFICATION_APPLICATION_SERVICE_NAME);
             waitForApplication(URI.create(applicationBaseUrl + "/health"));
+            checkComposeDatabaseSchema(
+                    BOOTSTRAP_VERIFICATION_DATABASE_SERVICE_NAME,
+                    "calendar_bootstrap_verification",
+                    "calendar_bootstrap_verification");
             runCommandWithEnvironment(
                     "Bootstrap registration concurrency verification",
                     verificationEnvironment,
-                    "mvn",
+                    MAVEN_WRAPPER_COMMAND,
                     "-Pbootstrap-concurrency-e2e",
                     "test-compile",
                     "failsafe:integration-test",
                     "failsafe:verify");
-        } catch (IOException | InterruptedException | RuntimeException exception) {
-            runCommandForExitCode(
-                    true,
+        } catch (IOException | InterruptedException | RuntimeException | Error exception) {
+            primaryFailure = exception;
+            showComposeLogs(
+                    primaryFailure,
                     verificationEnvironment,
-                    "docker",
-                    "compose",
-                    "--profile",
                     BOOTSTRAP_VERIFICATION_PROFILE,
-                    "logs",
-                    "--no-color",
                     BOOTSTRAP_VERIFICATION_APPLICATION_SERVICE_NAME,
                     BOOTSTRAP_VERIFICATION_DATABASE_SERVICE_NAME);
             throw exception;
         } finally {
             if (startupAttempted) {
-                int cleanupExitCode = runCommandForExitCode(
-                        true,
+                cleanUpComposeServices(
+                        "Bootstrap verification service cleanup",
+                        primaryFailure,
                         verificationEnvironment,
-                        "docker",
-                        "compose",
-                        "--profile",
                         BOOTSTRAP_VERIFICATION_PROFILE,
-                        "rm",
-                        "--force",
-                        "--stop",
                         BOOTSTRAP_VERIFICATION_APPLICATION_SERVICE_NAME,
                         BOOTSTRAP_VERIFICATION_DATABASE_SERVICE_NAME);
-                if (cleanupExitCode != 0) {
-                    throw new IllegalStateException(
-                            "Bootstrap verification services did not clean up successfully.");
-                }
             }
         }
     }
@@ -668,63 +788,45 @@ final class CalendarTool {
     }
 
     private static void verifyLocal() throws IOException, InterruptedException {
-        runCommand("Running application package build", "mvn", "package");
-        startDatabase();
-        verifyRunningApplication();
-    }
-
-    private static void verifyRunningApplication() throws IOException, InterruptedException {
         checkApplicationHealth();
-        checkDatabaseConnection();
         checkDatabaseSchema();
     }
 
-    private static void checkDatabaseConnection() throws IOException, InterruptedException {
-        runCommand(
-                "PostgreSQL connection check",
-                "docker",
-                "compose",
-                "exec",
-                "-T",
-                DATABASE_SERVICE_NAME,
-                "psql",
-                "-U",
-                databaseUser(),
-                "-d",
-                databaseName(),
-                "-c",
-                "select current_database(), current_user;");
+    private static void checkDatabaseSchema() throws IOException, InterruptedException {
+        checkComposeDatabaseSchema(DATABASE_SERVICE_NAME, databaseUser(), databaseName());
     }
 
-    private static void checkDatabaseSchema() throws IOException, InterruptedException {
-        runCommand(
-                "PostgreSQL table check",
+    private static void checkComposeDatabaseSchema(
+            String databaseServiceName,
+            String databaseUser,
+            String databaseName) throws IOException, InterruptedException {
+        String migrationState = runCommandAndCapture(
+                "Flyway schema verification",
                 "docker",
                 "compose",
                 "exec",
                 "-T",
-                DATABASE_SERVICE_NAME,
+                databaseServiceName,
                 "psql",
                 "-U",
-                databaseUser(),
+                databaseUser,
                 "-d",
-                databaseName(),
-                "-c",
-                "\\dt");
-        runCommand(
-                "Flyway migration history check",
-                "docker",
-                "compose",
-                "exec",
-                "-T",
-                DATABASE_SERVICE_NAME,
-                "psql",
-                "-U",
-                databaseUser(),
-                "-d",
-                databaseName(),
-                "-c",
-                "select installed_rank, version, description, success from flyway_schema_history order by installed_rank;");
+                databaseName,
+                "--tuples-only",
+                "--no-align",
+                "--set",
+                "ON_ERROR_STOP=1",
+                "--command",
+                "select (select count(*) from flyway_schema_history where not success)::text"
+                        + " || '|' || coalesce((select version from flyway_schema_history"
+                        + " where success and version is not null order by installed_rank desc limit 1), '');").trim();
+        String expectedMigrationState = "0|" + EXPECTED_FLYWAY_VERSION;
+        if (!expectedMigrationState.equals(migrationState)) {
+            throw new IllegalStateException(
+                    "Flyway schema verification expected no failed migrations and version "
+                            + EXPECTED_FLYWAY_VERSION + ", but got '" + migrationState + "'.");
+        }
+        System.out.println("Flyway schema is current at version " + EXPECTED_FLYWAY_VERSION + ".");
     }
 
     private static void waitForDatabase() throws IOException, InterruptedException {
@@ -785,11 +887,14 @@ final class CalendarTool {
         }
 
         int statusCode = response.statusCode();
-        if (statusCode < 200 || statusCode >= 300) {
-            throw new IllegalStateException("Health check failed with HTTP " + statusCode + ".");
+        String responseBody = response.body().trim();
+        if (statusCode != 200 || !responseBody.equals("ok")) {
+            throw new IllegalStateException(
+                    "Health check expected HTTP 200 with body 'ok', but got HTTP "
+                            + statusCode + " with body '" + responseBody + "'.");
         }
 
-        System.out.println("Health check returned HTTP " + statusCode + " from " + healthUri + ".");
+        System.out.println("Health check returned HTTP 200 with body 'ok' from " + healthUri + ".");
     }
 
     private static URI applicationHealthUri() {
@@ -798,6 +903,16 @@ final class CalendarTool {
                 APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE,
                 defaultApplicationBaseUrl);
         return URI.create(removeTrailingSlashes(applicationBaseUrl) + "/health");
+    }
+
+    private static String configuredBrowserName() {
+        String browserName = environmentValueOrDefault(BROWSER_ENVIRONMENT_VARIABLE, "chromium")
+                .toLowerCase(Locale.ROOT);
+        return switch (browserName) {
+            case "chromium", "firefox", "webkit" -> browserName;
+            default -> throw new IllegalArgumentException(
+                    "Unsupported Playwright browser '" + browserName + "'. Use chromium, firefox, or webkit.");
+        };
     }
 
     private static String applicationPort() {
@@ -836,6 +951,64 @@ final class CalendarTool {
         }
 
         return normalizedValue;
+    }
+
+    private static void showComposeLogs(
+            Throwable primaryFailure,
+            Map<String, String> environment,
+            String profile,
+            String... serviceNames) {
+        List<String> command = new ArrayList<>(List.of(
+                "docker",
+                "compose",
+                "--profile",
+                profile,
+                "logs",
+                "--no-color"));
+        command.addAll(List.of(serviceNames));
+        try {
+            int exitCode = runCommandForExitCode(
+                    true,
+                    environment,
+                    command.toArray(String[]::new));
+            if (exitCode != 0) {
+                primaryFailure.addSuppressed(new IllegalStateException(
+                        "Diagnostic logs failed with exit code " + exitCode + "."));
+            }
+        } catch (IOException | InterruptedException | RuntimeException exception) {
+            if (exception instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            primaryFailure.addSuppressed(exception);
+        }
+    }
+
+    private static void cleanUpComposeServices(
+            String description,
+            Throwable primaryFailure,
+            Map<String, String> environment,
+            String profile,
+            String... serviceNames) throws IOException, InterruptedException {
+        List<String> command = new ArrayList<>(List.of(
+                "docker",
+                "compose",
+                "--profile",
+                profile,
+                "rm",
+                "--force",
+                "--stop"));
+        command.addAll(List.of(serviceNames));
+        try {
+            runCommandWithEnvironment(description, environment, command.toArray(String[]::new));
+        } catch (IOException | InterruptedException | RuntimeException cleanupFailure) {
+            if (primaryFailure == null) {
+                throw cleanupFailure;
+            }
+            if (cleanupFailure instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            primaryFailure.addSuppressed(cleanupFailure);
+        }
     }
 
     private static void requireProjectDirectory() {
@@ -965,8 +1138,7 @@ final class CalendarTool {
         String executableName = isWindows() ? "java scripts\\calendar-tool.java" : "java scripts/calendar-tool.java";
         System.err.println("Usage: " + executableName + " <command> [arguments]");
         System.err.println(
-                "Commands: check-toolchain, prepare-liberty-dev, setup, db, dev, package, install-playwright, e2e, "
-                        + "verify-bootstrap-registration, wait-for-app, verify-local, verify-running-app, "
+                "Commands: setup, db, dev, package, e2e, verify-bootstrap-registration, verify-local, "
                         + "docker-build, docker-up, backup-postgres "
                         + "[output-file], restore-postgres <backup-file> <confirmed-database-name>, verify-backup-restore");
     }
@@ -975,9 +1147,13 @@ final class CalendarTool {
         return System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("win");
     }
 
+    private static boolean isLinux() {
+        return System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("linux");
+    }
+
     private static String platformExecutableName(String commandName) {
-        if (isWindows() && commandName.equals("mvn")) {
-            return "mvn.cmd";
+        if (commandName.equals(MAVEN_WRAPPER_COMMAND)) {
+            return isWindows() ? "mvnw.cmd" : "./mvnw";
         }
 
         return commandName;

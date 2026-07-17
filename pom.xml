@@ -9,7 +9,7 @@
     <packaging>war</packaging>
 
     <properties>
-        <maven.compiler.release>21</maven.compiler.release>
+        <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
@@ -23,6 +23,7 @@
         <maven.dependency.plugin.version>3.8.1</maven.dependency.plugin.version>
         <maven.failsafe.plugin.version>3.5.2</maven.failsafe.plugin.version>
         <exec.maven.plugin.version>3.6.3</exec.maven.plugin.version>
+        <liberty.postgresql.directory>${project.build.directory}/liberty-resources/postgresql</liberty.postgresql.directory>
     </properties>
 
     <dependencies>
@@ -75,6 +76,7 @@
     </dependencies>
 
     <build>
+        <directory>${project.basedir}/.build/package</directory>
         <finalName>shared-calendar</finalName>
 
         <plugins>
@@ -120,7 +122,7 @@
                                     <artifactId>postgresql</artifactId>
                                     <version>${postgresql.version}</version>
                                     <type>jar</type>
-                                    <outputDirectory>${project.build.directory}/liberty/wlp/usr/shared/resources/postgresql</outputDirectory>
+                                    <outputDirectory>${liberty.postgresql.directory}</outputDirectory>
                                     <destFileName>postgresql.jar</destFileName>
                                 </artifactItem>
                             </artifactItems>
@@ -146,6 +148,26 @@
     </build>
 
     <profiles>
+        <profile>
+            <id>liberty-dev</id>
+            <properties>
+                <liberty.postgresql.directory>${project.basedir}/.liberty/user/shared/resources/postgresql</liberty.postgresql.directory>
+            </properties>
+            <build>
+                <directory>${project.basedir}/.build/development</directory>
+                <plugins>
+                    <plugin>
+                        <groupId>io.openliberty.tools</groupId>
+                        <artifactId>liberty-maven-plugin</artifactId>
+                        <configuration>
+                            <runtimeInstallDirectory>${project.basedir}/.liberty/runtime</runtimeInstallDirectory>
+                            <userDirectory>${project.basedir}/.liberty/user</userDirectory>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
         <profile>
             <id>e2e</id>
             <build>

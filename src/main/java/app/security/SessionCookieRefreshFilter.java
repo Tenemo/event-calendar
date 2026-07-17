@@ -1,6 +1,7 @@
 package app.security;
 
-import app.calendar.CalendarPublicToken;
+import app.calendar.CalendarLinkToken;
+import app.calendar.CalendarRouteFilter;
 import jakarta.inject.Inject;
 import jakarta.servlet.Filter;
 import jakarta.servlet.FilterChain;
@@ -84,12 +85,15 @@ public class SessionCookieRefreshFilter implements Filter {
         String applicationPath = requestUri.substring(contextPath.length());
         return applicationPath.equals("/app")
                 || applicationPath.startsWith("/app/")
-                || applicationPath.equals("/public-calendar.xhtml")
+                || applicationPath.equals("/calendar.xhtml")
                 || isCanonicalCalendarRequest(request);
     }
 
     private boolean isCanonicalCalendarRequest(HttpServletRequest request) {
-        return CalendarPublicToken.fromRequestPath(request.getContextPath(), request.getRequestURI()) != null;
+        Object forwardedCalendarLinkToken =
+                request.getAttribute(CalendarRouteFilter.CALENDAR_LINK_TOKEN_REQUEST_ATTRIBUTE);
+        return (forwardedCalendarLinkToken instanceof String token && CalendarLinkToken.isValid(token))
+                || CalendarLinkToken.fromRequestPath(request.getContextPath(), request.getRequestURI()) != null;
     }
 
     private void refreshAuthenticatedSessionCookie(

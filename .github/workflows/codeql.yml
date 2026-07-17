@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   analyze:
-    name: code analysis
+    name: Code analysis
     runs-on: ubuntu-latest
 
     steps:

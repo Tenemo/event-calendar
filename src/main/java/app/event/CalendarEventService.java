@@ -6,6 +6,7 @@ import app.calendar.CalendarService;
 import app.calendar.CalendarTimeService;
 import app.membership.CalendarAccessService;
 import app.user.ApplicationUser;
+import app.util.AuthorizationException;
 import app.util.ConflictException;
 import app.util.NotFoundException;
 import app.util.ValidationException;
@@ -14,7 +15,6 @@ import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PersistenceContext;
-import jakarta.persistence.TypedQuery;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -27,7 +27,7 @@ public class CalendarEventService {
     private static final int MAXIMUM_EVENT_TITLE_LENGTH = 200;
     private static final int MAXIMUM_EVENT_LOCATION_LENGTH = 200;
 
-    @PersistenceContext(unitName = "calendarPU")
+    @PersistenceContext(unitName = "calendarPersistenceUnit")
     private EntityManager entityManager;
 
     @Inject
@@ -42,14 +42,14 @@ public class CalendarEventService {
     @Inject
     private AuditService auditService;
 
-    public List<CalendarEvent> findPublicEvents(String publicToken, OffsetDateTime rangeStartTime, OffsetDateTime rangeEndTime) {
-        Calendar calendar = calendarAccessService.requirePublicReadableCalendar(publicToken);
-        return findEvents(calendar.getId(), rangeStartTime, rangeEndTime);
+    public List<CalendarEvent> findPublicEvents(String calendarLinkToken) {
+        Calendar calendar = calendarAccessService.requirePublicReadableCalendar(calendarLinkToken);
+        return findEvents(calendar.getId());
     }
 
-    public List<CalendarEvent> findEditorEvents(ApplicationUser user, Long calendarId, OffsetDateTime rangeStartTime, OffsetDateTime rangeEndTime) {
+    public List<CalendarEvent> findEventsForMember(ApplicationUser user, Long calendarId) {
         calendarAccessService.requireCanEdit(user, calendarId);
-        return findEvents(calendarId, rangeStartTime, rangeEndTime);
+        return findEvents(calendarId);
     }
 
     public CalendarEvent createEvent(
@@ -73,7 +73,8 @@ public class CalendarEventService {
                 "Event location must be 200 characters or fewer.");
 
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-        Calendar calendar = calendarService.requireActiveCalendarForEventMutation(calendarId);
+        Calendar calendar = calendarService.requireActiveCalendarForChildMutation(calendarId);
+        calendarAccessService.requireCanEdit(actingUser, calendarId);
         requireExpectedCalendarState(calendar, expectedCalendarVersion, expectedCalendarTimeZone);
         EventTimeRange normalizedTimeRange = normalizeEventTimes(calendar, eventTimeInput);
         CalendarEvent event = new CalendarEvent();
@@ -104,9 +105,7 @@ public class CalendarEventService {
             EventTimeInput eventTimeInput,
             Integer expectedCalendarVersion,
             String expectedCalendarTimeZone) {
-        CalendarEvent event = requireEvent(eventId);
-        calendarAccessService.requireCanEdit(actingUser, event.getCalendar().getId());
-        requireExpectedVersion(event, expectedVersion);
+        CalendarEvent event = requireEditableEvent(actingUser, eventId);
         String normalizedTitle = normalizeRequiredText(
                 title,
                 "Event title is required.",
@@ -116,7 +115,9 @@ public class CalendarEventService {
                 location,
                 MAXIMUM_EVENT_LOCATION_LENGTH,
                 "Event location must be 200 characters or fewer.");
-        Calendar calendar = calendarService.requireActiveCalendarForEventMutation(event.getCalendar().getId());
+        Calendar calendar = calendarService.requireActiveCalendarForChildMutation(event.getCalendar().getId());
+        calendarAccessService.requireCanEdit(actingUser, calendar.getId());
+        requireExpectedVersion(event, expectedVersion);
         requireExpectedCalendarState(calendar, expectedCalendarVersion, expectedCalendarTimeZone);
         EventTimeRange normalizedTimeRange = normalizeEventTimes(calendar, eventTimeInput);
 
@@ -134,8 +135,9 @@ public class CalendarEventService {
     }
 
     public void deleteEvent(ApplicationUser actingUser, Long eventId, Integer expectedVersion) {
-        CalendarEvent event = requireEvent(eventId);
-        calendarAccessService.requireCanEdit(actingUser, event.getCalendar().getId());
+        CalendarEvent event = requireEditableEvent(actingUser, eventId);
+        Calendar calendar = calendarService.requireActiveCalendarForChildMutation(event.getCalendar().getId());
+        calendarAccessService.requireCanEdit(actingUser, calendar.getId());
         requireExpectedVersion(event, expectedVersion);
         auditService.record(actingUser, event.getCalendar(), "calendar_event", event.getId(), "deleted", "Event deleted.");
         entityManager.remove(event);
@@ -178,26 +180,10 @@ public class CalendarEventService {
             Calendar calendar,
             LocalDate firstDay,
             LocalDate lastDay) {
-        if (firstDay == null) {
-            throw new ValidationException("Event first day is required.");
-        }
-        if (lastDay == null) {
-            throw new ValidationException("Event last day is required.");
-        }
-
         String timeZone = calendar.getTimeZone();
-        if (lastDay.isBefore(firstDay)) {
-            throw new ValidationException("Event last day must be on or after the first day.");
-        }
-
-        OffsetDateTime storedStartTime = calendarTimeService.toStoredStartOfDay(firstDay, timeZone);
-        if (!lastDay.equals(firstDay)) {
-            calendarTimeService.toStoredStartOfDay(lastDay, timeZone);
-        }
-        OffsetDateTime storedEndTime = calendarTimeService.toStoredExclusiveDayBoundary(
-                lastDay.plusDays(1),
-                timeZone);
-        return new EventTimeRange(storedStartTime, storedEndTime);
+        CalendarTimeService.StoredAllDayRange storedRange =
+                calendarTimeService.toStoredAllDayRange(firstDay, lastDay, timeZone);
+        return new EventTimeRange(storedRange.startTime(), storedRange.endTime());
     }
 
     private void requireExpectedCalendarState(
@@ -222,27 +208,15 @@ public class CalendarEventService {
         return normalizedValue;
     }
 
-    private List<CalendarEvent> findEvents(Long calendarId, OffsetDateTime rangeStartTime, OffsetDateTime rangeEndTime) {
-        StringBuilder queryText = new StringBuilder(
-                "select calendarEvent from CalendarEvent calendarEvent "
-                        + "where calendarEvent.calendar.id = :calendarId ");
-        if (rangeStartTime != null) {
-            queryText.append("and calendarEvent.endTime > :rangeStartTime ");
-        }
-        if (rangeEndTime != null) {
-            queryText.append("and calendarEvent.startTime < :rangeEndTime ");
-        }
-        queryText.append("order by calendarEvent.startTime");
-
-        TypedQuery<CalendarEvent> query = entityManager.createQuery(queryText.toString(), CalendarEvent.class)
-                .setParameter("calendarId", calendarId);
-        if (rangeStartTime != null) {
-            query.setParameter("rangeStartTime", rangeStartTime);
-        }
-        if (rangeEndTime != null) {
-            query.setParameter("rangeEndTime", rangeEndTime);
-        }
-        return query.getResultList();
+    private List<CalendarEvent> findEvents(Long calendarId) {
+        return entityManager
+                .createQuery(
+                        "select calendarEvent from CalendarEvent calendarEvent "
+                                + "where calendarEvent.calendar.id = :calendarId "
+                                + "order by calendarEvent.startTime",
+                        CalendarEvent.class)
+                .setParameter("calendarId", calendarId)
+                .getResultList();
     }
 
     private CalendarEvent requireEvent(Long eventId) {
@@ -251,6 +225,16 @@ public class CalendarEventService {
             throw new NotFoundException("Event was not found.");
         }
         return event;
+    }
+
+    private CalendarEvent requireEditableEvent(ApplicationUser actingUser, Long eventId) {
+        CalendarEvent event = requireEvent(eventId);
+        try {
+            calendarAccessService.requireCanEdit(actingUser, event.getCalendar().getId());
+            return event;
+        } catch (AuthorizationException exception) {
+            throw new NotFoundException("Event was not found.");
+        }
     }
 
     private void requireExpectedVersion(CalendarEvent event, Integer expectedVersion) {

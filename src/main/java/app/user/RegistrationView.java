@@ -67,7 +67,7 @@ public class RegistrationView {
             Invitation invitation = invitationService.acceptInvitation(invitationToken, currentUser.require());
             String route = invitation.getCalendar() == null
                     ? "/app/calendars"
-                    : "/" + invitation.getCalendar().getPublicToken();
+                    : "/" + invitation.getCalendar().getCalendarLinkToken();
             FacesContext facesContext = FacesContext.getCurrentInstance();
             facesContext.getExternalContext().redirect(facesContext.getExternalContext().getRequestContextPath() + route);
             facesContext.responseComplete();

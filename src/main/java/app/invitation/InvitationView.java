@@ -3,10 +3,10 @@ package app.invitation;
 import app.calendar.CalendarMembershipSummary;
 import app.calendar.CalendarService;
 import app.config.ApplicationUrlService;
-import app.membership.CalendarRole;
 import app.security.CurrentUser;
 import app.user.ApplicationUser;
 import app.util.AuthorizationException;
+import app.util.NotFoundException;
 import app.util.ValidationException;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.RequestScoped;
@@ -49,7 +49,6 @@ public class InvitationView {
     public void load() {
         ApplicationUser actingUser = currentUser.require();
         editableCalendars = calendarService.findCalendarsForUser(actingUser).stream()
-                .filter(this::canCreateEditorInvitation)
                 .map(calendar -> new EditableCalendarOption(calendar.getCalendarId(), calendar.getCalendarName()))
                 .toList();
         invitations = new InvitationLazyDataModel(actingUser);
@@ -75,7 +74,7 @@ public class InvitationView {
             Invitation invitation = invitationService.createCalendarEditorInvitation(actingUser, selectedCalendarId);
             generatedInvitationLink = invitationLink(invitation.getInvitationToken());
             addMessage(FacesMessage.SEVERITY_INFO, "Editor invitation created.", "Share the generated link directly.");
-        } catch (AuthorizationException | ValidationException exception) {
+        } catch (AuthorizationException | NotFoundException | ValidationException exception) {
             addMessage(FacesMessage.SEVERITY_ERROR, "Invitation failed.", exception.getMessage());
         }
     }
@@ -85,7 +84,7 @@ public class InvitationView {
             ApplicationUser actingUser = currentUser.require();
             invitationService.revokeInvitation(actingUser, invitationId);
             addMessage(FacesMessage.SEVERITY_INFO, "Invitation revoked.", "The link can no longer be used.");
-        } catch (AuthorizationException | ValidationException exception) {
+        } catch (AuthorizationException | NotFoundException | ValidationException exception) {
             addMessage(FacesMessage.SEVERITY_ERROR, "Revoke failed.", exception.getMessage());
         }
     }
@@ -118,10 +117,6 @@ public class InvitationView {
         return generatedInvitationLink != null && !generatedInvitationLink.isBlank();
     }
 
-    private boolean canCreateEditorInvitation(CalendarMembershipSummary calendar) {
-        return calendar.getRole() == CalendarRole.EDITOR || calendar.getRole() == CalendarRole.ADMIN;
-    }
-
     private InvitationRow toRow(Invitation invitation, OffsetDateTime currentTime) {
         InvitationStatus status = invitationPolicy.status(
                 invitation.getRevokedAt(),
@@ -147,7 +142,7 @@ public class InvitationView {
     private String invitationStatus(InvitationStatus status) {
         return switch (status) {
             case AVAILABLE -> "Available";
-            case USED -> "Used";
+            case ACCEPTED -> "Accepted";
             case REVOKED -> "Revoked";
             case EXPIRED -> "Expired";
         };

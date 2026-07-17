@@ -30,6 +30,7 @@ replay_pid*
 
 # Build output
 target/
+.build/
 
 # Local tool and runtime output
 .mise.local.toml

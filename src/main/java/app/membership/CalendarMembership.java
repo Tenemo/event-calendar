@@ -16,8 +16,8 @@ import java.time.OffsetDateTime;
 
 @Entity
 @Table(name = "calendar_member")
-@IdClass(CalendarMemberId.class)
-public class CalendarMember {
+@IdClass(CalendarMembershipId.class)
+public class CalendarMembership {
     @Id
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "calendar_id", nullable = false)

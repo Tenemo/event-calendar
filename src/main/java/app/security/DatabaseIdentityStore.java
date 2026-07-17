@@ -8,14 +8,11 @@ import jakarta.security.enterprise.credential.Credential;
 import jakarta.security.enterprise.credential.UsernamePasswordCredential;
 import jakarta.security.enterprise.identitystore.CredentialValidationResult;
 import jakarta.security.enterprise.identitystore.IdentityStore;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.Set;
 
 @ApplicationScoped
 public class DatabaseIdentityStore implements IdentityStore {
-    private static final String DUMMY_PASSWORD_HASH =
-            "PBKDF2WithHmacSHA256:600000:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=:"
-                    + "1CWgpzdZaXuiv+M7nJjALTxRC5d19dsMY6jY4Nm9n0E=";
-
     @Inject
     private UserService userService;
 
@@ -26,7 +23,10 @@ public class DatabaseIdentityStore implements IdentityStore {
     private LoginAttemptThrottle loginAttemptThrottle;
 
     @Inject
-    private LoginRequestSource loginRequestSource;
+    private HttpServletRequest request;
+
+    @Inject
+    private ClientRequestSourceResolver clientRequestSourceResolver;
 
     @Inject
     private PasswordValidationState passwordValidationState;
@@ -40,7 +40,7 @@ public class DatabaseIdentityStore implements IdentityStore {
 
         String username = userService.normalizeUsername(usernamePasswordCredential.getCaller());
         String password = usernamePasswordCredential.getPasswordAsString();
-        String sourceIdentifier = loginRequestSource.getSourceIdentifier();
+        String sourceIdentifier = sourceIdentifier();
         synchronized (loginAttemptThrottle.validationLock(sourceIdentifier)) {
             if (!loginAttemptThrottle.isAuthenticationAllowed(username, sourceIdentifier)) {
                 return CredentialValidationResult.INVALID_RESULT;
@@ -68,8 +68,12 @@ public class DatabaseIdentityStore implements IdentityStore {
         return CredentialValidationResult.INVALID_RESULT;
     }
 
+    String sourceIdentifier() {
+        return clientRequestSourceResolver.resolve(request);
+    }
+
     private CredentialValidationResult validateMissingUserPassword(String password) {
-        passwordService.verifyPassword(password, DUMMY_PASSWORD_HASH);
+        passwordService.verifyMissingUserPassword(password);
         return CredentialValidationResult.INVALID_RESULT;
     }
 

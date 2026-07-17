@@ -3,9 +3,12 @@
 .idea
 .vscode
 target
+.build
+.liberty
 .env
 .env.*
 *.log
 temp
 implementation-documentation
 README.md
+src/test

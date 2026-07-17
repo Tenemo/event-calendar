@@ -55,7 +55,7 @@ final class SharedCalendarEndToEndIT {
     private static final String TEST_PASSWORD = "correct horse battery staple";
     private static final Duration APPLICATION_READY_TIMEOUT = Duration.ofSeconds(15);
     private static final Duration APPLICATION_READY_POLL_INTERVAL = Duration.ofMillis(500);
-    private static final int[] RESPONSIVE_WIDTHS = {320, 390, 768, 820, 1024, 1280};
+    private static final int[] RESPONSIVE_WIDTHS = {320, 390, 640, 768, 819, 820, 821, 1024, 1280};
 
     private Playwright playwright;
     private Browser browser;
@@ -109,7 +109,7 @@ final class SharedCalendarEndToEndIT {
             createCalendar(page, secondCalendarName);
             assertBodyContains(page, firstCalendarName);
             assertBodyContains(page, secondCalendarName);
-            assertBodyContains(page, "ADMIN");
+            assertBodyContains(page, "Admin");
 
             openCalendar(page, firstCalendarName);
             String calendarId = Long.toString(findCalendarId(firstCalendarName));
@@ -292,8 +292,8 @@ final class SharedCalendarEndToEndIT {
                     password);
             assertBodyContains(page, editorCalendarName);
             assertBodyContains(page, ownerCalendarName);
-            assertBodyContains(page, "EDITOR");
-            assertBodyContains(page, "ADMIN");
+            assertBodyContains(page, "Editor");
+            assertBodyContains(page, "Admin");
 
             page.navigate(editorInvitationLink);
             page.locator("button:has-text('Accept invitation')").click();
@@ -325,11 +325,11 @@ final class SharedCalendarEndToEndIT {
             assertBodyContains(page, "Event title is required.");
             assertCanonicalCalendarRoute(page, calendarId);
 
-            enterEvent(page, "Invalid event " + uniqueSuffix, null, "2026-07-20 12:00", "2026-07-20 10:00", false);
+            submitEventForm(page, "Invalid event " + uniqueSuffix, null, "2026-07-20 12:00", "2026-07-20 10:00", false);
             assertBodyContains(page, "Event end time must be after the start time.");
             assertEquals(0, page.locator("article", new Page.LocatorOptions().setHasText("Invalid event " + uniqueSuffix)).count());
 
-            enterEvent(page, eventTitle, "North landing", "2026-07-20 10:00", "2026-07-20 12:00", false);
+            createEvent(page, eventTitle, "North landing", "2026-07-20 10:00", "2026-07-20 12:00", false);
             assertBodyContains(page, eventTitle);
             assertBodyContains(page, "North landing");
             Locator eventRow = page.locator("article", new Page.LocatorOptions().setHasText(eventTitle));
@@ -346,8 +346,8 @@ final class SharedCalendarEndToEndIT {
             Locator allDayCheckbox = page.getByLabel("All-day event");
             page.locator(".checkbox-field .ui-chkbox-box").click();
             assertThat(allDayCheckbox).isChecked();
-            Locator firstDayInput = page.locator("input[id$='eventStartDate_input']");
-            Locator lastDayInput = page.locator("input[id$='eventEndDate_input']");
+            Locator firstDayInput = page.locator("input[id$='eventFirstDay_input']");
+            Locator lastDayInput = page.locator("input[id$='eventLastDay_input']");
             assertThat(firstDayInput).hasValue("2026-07-22");
             assertThat(lastDayInput).hasValue("2026-07-24");
             firstDayInput.fill("2026-07-23");
@@ -362,12 +362,10 @@ final class SharedCalendarEndToEndIT {
             assertThat(page.locator("article", new Page.LocatorOptions().setHasText(allDayEventTitle)))
                     .containsText("All day from Thu, Jul 23, 2026 to Sat, Jul 25, 2026");
 
-            enterEvent(page, deletedEventTitle, null, "2026-07-21 14:00", "2026-07-21 15:00", false);
+            createEvent(page, deletedEventTitle, null, "2026-07-21 14:00", "2026-07-21 15:00", false);
             Locator deletedEventRow = page.locator("article", new Page.LocatorOptions().setHasText(deletedEventTitle));
             deletedEventRow.locator("button:has-text('Delete')").click();
-            Locator confirmButton = page.locator("button:has-text('Yes')");
-            assertVisibleFocus(confirmButton);
-            confirmButton.click();
+            confirmationButton(page, "Delete event").click();
             assertBodyContains(page, "Event deleted.");
             assertEquals(0, page.locator("article", new Page.LocatorOptions().setHasText(deletedEventTitle)).count());
 
@@ -413,7 +411,7 @@ final class SharedCalendarEndToEndIT {
             openCalendar(page, calendarName);
             String originalCalendarLink = page.url();
             assertCanonicalCalendarRoute(page, Long.toString(findCalendarId(calendarName)));
-            enterEvent(page, eventTitle, "River", "2026-08-20 10:00", "2026-08-20 12:00", false);
+            createEvent(page, eventTitle, "River", "2026-08-20 10:00", "2026-08-20 12:00", false);
 
             List<String> staleRegenerationBrowserMessages = new ArrayList<>();
             Page staleRegenerationPage = newPage(browserContext, staleRegenerationBrowserMessages);
@@ -428,7 +426,7 @@ final class SharedCalendarEndToEndIT {
             assertEquals(originalCalendarLink, page.url());
 
             staleRegenerationPage.locator("button:has-text('Regenerate link')").click();
-            staleRegenerationPage.locator("button:has-text('Yes')").click();
+            confirmationButton(staleRegenerationPage, "Regenerate link").click();
             assertBodyContains(staleRegenerationPage, "Calendar link could not be regenerated.");
             assertBodyContains(
                     staleRegenerationPage,
@@ -456,7 +454,7 @@ final class SharedCalendarEndToEndIT {
             }
 
             page.locator("button:has-text('Regenerate link')").click();
-            page.locator("button:has-text('Yes')").click();
+            confirmationButton(page, "Regenerate link").click();
             page.waitForFunction("previousUrl => location.href !== previousUrl", originalCalendarLink);
             String regeneratedCalendarLink = page.url();
             assertNotEquals(originalCalendarLink, regeneratedCalendarLink);
@@ -468,7 +466,7 @@ final class SharedCalendarEndToEndIT {
                 assertEquals(404, oldLinkPage.navigate(originalCalendarLink).status());
                 assertBodyContains(oldLinkPage, "Calendar link unavailable");
                 assertBodyContains(oldLinkPage, "This calendar link no longer works.");
-                assertBodyContains(oldLinkPage, "Ask a calendar editor for the current link.");
+                assertBodyContains(oldLinkPage, "Ask a calendar member for the current link.");
                 assertOnlyExpectedNotFoundNavigationMessage(oldLinkBrowserMessages);
 
                 List<String> currentLinkBrowserMessages = new ArrayList<>();
@@ -500,7 +498,7 @@ final class SharedCalendarEndToEndIT {
             createCalendar(page, calendarName);
             openCalendar(page, calendarName);
             String sharedCalendarLink = page.url();
-            enterEvent(page, eventTitle, null, "2026-09-20 10:00", "2026-09-20 12:00", false);
+            createEvent(page, eventTitle, null, "2026-09-20 10:00", "2026-09-20 12:00", false);
             String firstInvitationLink = createEditorInvitation(page, calendarName);
             String secondInvitationLink = createEditorInvitation(page, calendarName);
             signOut(page);
@@ -552,23 +550,23 @@ final class SharedCalendarEndToEndIT {
             assertThat(firstMemberRow.locator("select")).hasValue("EDITOR");
 
             secondMemberRow.locator("button:has-text('Remove access')").click();
-            page.locator("button:has-text('Yes')").click();
+            confirmationButton(page, "Remove access").click();
             assertBodyContains(page, "Member access removed.");
             page.reload();
             secondMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(secondMemberUsername));
             assertThat(secondMemberRow).containsText("Inactive");
             secondMemberRow.locator("select").selectOption("EDITOR");
-            secondMemberRow.locator("button:has-text('Save role')").click();
-            assertBodyContains(page, "Member role saved.");
+            secondMemberRow.locator("button:has-text('Reactivate access')").click();
+            assertBodyContains(page, "Member access reactivated.");
             page.reload();
             secondMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(secondMemberUsername));
             assertThat(secondMemberRow).containsText("Active");
 
             firstMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(firstMemberUsername));
             firstMemberRow.locator("button:has-text('Remove access')").click();
-            page.locator("button:has-text('Yes')").click();
+            confirmationButton(page, "Remove access").click();
             assertBodyContains(page, "Member access removed.");
-            assertBodyContains(page, "Public-link access is unchanged.");
+            assertBodyContains(page, "Public access through the calendar link is unchanged.");
             page.reload();
             firstMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(firstMemberUsername));
             assertThat(firstMemberRow).containsText("Inactive");
@@ -617,7 +615,7 @@ final class SharedCalendarEndToEndIT {
             openCalendar(setupPage, calendarName);
             calendarId = Long.toString(findCalendarId(calendarName));
             calendarLink = setupPage.url();
-            enterEvent(setupPage, eventTitle, null, "2026-10-01 10:00", "2026-10-01 11:00", false);
+            createEvent(setupPage, eventTitle, null, "2026-10-01 10:00", "2026-10-01 11:00", false);
             String editorInvitationLink = createEditorInvitation(setupPage, calendarName);
             signOut(setupPage);
 
@@ -654,9 +652,9 @@ final class SharedCalendarEndToEndIT {
             signIn(editorPage, editorUsername, password);
             openCalendar(editorPage, calendarName);
             assertBodyContains(editorPage, eventTitle);
-            assertBodyContains(editorPage, "EDITOR");
+            assertBodyContains(editorPage, "Editor");
             assertThat(editorPage.locator("button:has-text('Create event')")).isVisible();
-            enterEvent(
+            createEvent(
                     editorPage,
                     "Editor event " + uniqueSuffix,
                     null,
@@ -668,7 +666,7 @@ final class SharedCalendarEndToEndIT {
             openCalendar(editorPage, calendarName);
             String editorOriginalLink = editorPage.url();
             editorPage.locator("button:has-text('Regenerate link')").click();
-            editorPage.locator("button:has-text('Yes')").click();
+            confirmationButton(editorPage, "Regenerate link").click();
             editorPage.waitForFunction("previousUrl => location.href !== previousUrl", editorOriginalLink);
             calendarLink = editorPage.url();
             editorPage.navigate(route("/app/calendar-settings?id=" + calendarId));
@@ -714,7 +712,7 @@ final class SharedCalendarEndToEndIT {
         String availableInvitationLink;
         String revokedInvitationLink;
         String expiredInvitationLink;
-        String usedInvitationLink;
+        String acceptedInvitationLink;
         String inactiveCreatorInvitationLink;
         assertInvitationLifetimeConstraintRejectsLongerInvitation(ownerUsername);
 
@@ -732,6 +730,7 @@ final class SharedCalendarEndToEndIT {
                             ownerUsername));
             revokedInvitationLink = createRegistrationInvitation(ownerPage);
             invitationRow(ownerPage, revokedInvitationLink).locator("button:has-text('Revoke')").click();
+            confirmationButton(ownerPage, "Revoke invitation").click();
             assertBodyContains(ownerPage, "Invitation revoked.");
             assertThat(invitationRow(ownerPage, revokedInvitationLink)).containsText("Revoked");
             assertEquals(0, invitationRow(ownerPage, revokedInvitationLink).locator("button:has-text('Revoke')").count());
@@ -743,20 +742,20 @@ final class SharedCalendarEndToEndIT {
             assertThat(invitationRow(ownerPage, availableInvitationLink)).containsText("Available");
             assertThat(invitationRow(ownerPage, availableInvitationLink).locator("button:has-text('Revoke')")).isVisible();
 
-            usedInvitationLink = createRegistrationInvitation(ownerPage);
+            acceptedInvitationLink = createRegistrationInvitation(ownerPage);
             try (BrowserContext registrationContext = browser.newContext()) {
                 Page registrationPage = registrationContext.newPage();
                 registerNewUser(
                         registrationPage,
-                        usedInvitationLink,
-                        "status-used-" + uniqueSuffix,
-                        "Used invitation " + uniqueSuffix,
-                        "Used calendar " + uniqueSuffix,
+                        acceptedInvitationLink,
+                        "status-accepted-" + uniqueSuffix,
+                        "Accepted invitation " + uniqueSuffix,
+                        "Accepted calendar " + uniqueSuffix,
                         password);
             }
             ownerPage.reload();
-            assertThat(invitationRow(ownerPage, usedInvitationLink)).containsText("Used");
-            assertEquals(0, invitationRow(ownerPage, usedInvitationLink).locator("button:has-text('Revoke')").count());
+            assertThat(invitationRow(ownerPage, acceptedInvitationLink)).containsText("Accepted");
+            assertEquals(0, invitationRow(ownerPage, acceptedInvitationLink).locator("button:has-text('Revoke')").count());
             inactiveCreatorInvitationLink = createRegistrationInvitation(ownerPage);
         }
 
@@ -856,14 +855,14 @@ final class SharedCalendarEndToEndIT {
             page.navigate(strongerRoleInvitationLink);
             page.locator("button:has-text('Accept invitation')").click();
             waitForCanonicalCalendarRoute(page);
-            assertBodyContains(page, "ADMIN");
+            assertBodyContains(page, "Admin");
             signOut(page);
 
             signIn(page, ownerUsername, TEST_PASSWORD);
             page.navigate(route("/app/calendar-members?id=" + calendarId));
             memberRow = page.locator("tr", new Page.LocatorOptions().setHasText(memberUsername));
             memberRow.locator("button:has-text('Remove access')").click();
-            page.locator("button:has-text('Yes')").click();
+            confirmationButton(page, "Remove access").click();
             assertBodyContains(page, "Member access removed.");
             String reactivationInvitationLink = createEditorInvitation(page, calendarName);
             signOut(page);
@@ -873,7 +872,7 @@ final class SharedCalendarEndToEndIT {
             page.locator("button:has-text('Accept invitation')").click();
             waitForCanonicalCalendarRoute(page);
             assertBodyContains(page, calendarName);
-            assertBodyContains(page, "EDITOR");
+            assertBodyContains(page, "Editor");
         }
     }
 
@@ -911,7 +910,7 @@ final class SharedCalendarEndToEndIT {
             ownerPage.navigate(route("/app/calendar-members?id=" + calendarId));
             Locator editorRow = ownerPage.locator("tr", new Page.LocatorOptions().setHasText(editorUsername));
             editorRow.locator("button:has-text('Remove access')").click();
-            ownerPage.locator("button:has-text('Yes')").click();
+            confirmationButton(ownerPage, "Remove access").click();
             assertBodyContains(ownerPage, "Member access removed.");
 
             ownerPage.navigate(route("/app/invitations"));
@@ -919,6 +918,7 @@ final class SharedCalendarEndToEndIT {
             Locator administratorRevocationRow = invitationRow(ownerPage, administratorRevocationLink);
             assertThat(administratorRevocationRow).isVisible();
             administratorRevocationRow.locator("button:has-text('Revoke')").click();
+            confirmationButton(ownerPage, "Revoke invitation").click();
             assertThat(invitationRow(ownerPage, administratorRevocationLink)).containsText("Revoked");
 
             editorPage.navigate(savedSelfInvitationLink);
@@ -972,8 +972,8 @@ final class SharedCalendarEndToEndIT {
             assertTrue(isCanonicalCalendarPath(secondPage.url()));
             assertBodyContains(firstPage, calendarName);
             assertBodyContains(secondPage, calendarName);
-            assertBodyContains(firstPage, "EDITOR");
-            assertBodyContains(secondPage, "EDITOR");
+            assertBodyContains(firstPage, "Editor");
+            assertBodyContains(secondPage, "Editor");
         }
     }
 
@@ -1033,7 +1033,7 @@ final class SharedCalendarEndToEndIT {
             String acceptedUsername = firstCandidateAccepted ? firstCandidateUsername : secondCandidateUsername;
             String rejectedUsername = firstCandidateAccepted ? secondCandidateUsername : firstCandidateUsername;
             assertBodyContains(acceptedPage, calendarName);
-            assertBodyContains(acceptedPage, "EDITOR");
+            assertBodyContains(acceptedPage, "Editor");
             assertBodyContains(rejectedPage, "Invitation is invalid or no longer available.");
 
             rejectedPage.navigate(route("/app/invitations"));
@@ -1051,7 +1051,7 @@ final class SharedCalendarEndToEndIT {
                     ownerPage.locator("tr", new Page.LocatorOptions().setHasText(rejectedUsername)).count(),
                     "The losing contender must not receive membership.");
             acceptedMemberRow.locator("button:has-text('Remove access')").click();
-            ownerPage.locator("button:has-text('Yes')").click();
+            confirmationButton(ownerPage, "Remove access").click();
             assertBodyContains(ownerPage, "Member access removed.");
 
             acceptedPage.reload();
@@ -1135,7 +1135,7 @@ final class SharedCalendarEndToEndIT {
             assertBodyContains(demotedAdminPage, "Calendar not found");
             demotedAdminPage.navigate(calendarLink(calendarId));
             assertBodyContains(demotedAdminPage, calendarName);
-            assertBodyContains(demotedAdminPage, "EDITOR");
+            assertBodyContains(demotedAdminPage, "Editor");
             assertThat(demotedAdminPage.locator("button:has-text('Create event')")).isVisible();
         }
     }
@@ -1156,7 +1156,7 @@ final class SharedCalendarEndToEndIT {
             openCalendar(ownerPage, calendarName);
             String sharedCalendarLink = ownerPage.url();
             String calendarId = Long.toString(findCalendarId(calendarName));
-            enterEvent(ownerPage, eventTitle, null, "2026-11-01 10:00", "2026-11-01 11:00", false);
+            createEvent(ownerPage, eventTitle, null, "2026-11-01 10:00", "2026-11-01 11:00", false);
             calendarSettingsLink(ownerPage).click();
 
             assertEquals(200, publicPage.navigate(sharedCalendarLink).status());
@@ -1352,7 +1352,7 @@ final class SharedCalendarEndToEndIT {
             page.locator("button:has-text('Create event')").click();
             assertBodyContains(page, "Event end time is required.");
 
-            enterEvent(page, "Equal times " + uniqueSuffix, null, "2026-12-01 10:00", "2026-12-01 10:00", false);
+            submitEventForm(page, "Equal times " + uniqueSuffix, null, "2026-12-01 10:00", "2026-12-01 10:00", false);
             assertBodyContains(page, "Event end time must be after the start time.");
 
             page.locator("input[id$='eventTitle']").fill("Clock gap " + uniqueSuffix);
@@ -1366,7 +1366,7 @@ final class SharedCalendarEndToEndIT {
             page.locator("button:has-text('Create event')").click();
             assertBodyContains(page, "The selected time occurs twice in the calendar time zone because of a clock change.");
 
-            enterEvent(page, eventTitle, "Boundary location", "2026-12-02 10:00", "2026-12-02 11:00", false);
+            createEvent(page, eventTitle, "Boundary location", "2026-12-02 10:00", "2026-12-02 11:00", false);
             Locator eventRow = page.locator("article", new Page.LocatorOptions().setHasText(eventTitle));
             eventRow.locator("button:has-text('Edit')").click();
             assertThat(page.locator("button:has-text('Save changes')")).isVisible();
@@ -1414,9 +1414,9 @@ final class SharedCalendarEndToEndIT {
             createCalendar(setupPage, calendarName);
             openCalendar(setupPage, calendarName);
             calendarId = Long.toString(findCalendarId(calendarName));
-            enterEvent(setupPage, eventTitle, null, "2026-12-10 10:00", "2026-12-10 11:00", false);
+            createEvent(setupPage, eventTitle, null, "2026-12-10 10:00", "2026-12-10 11:00", false);
             assertBodyContains(setupPage, eventTitle);
-            enterEvent(setupPage, deletionEventTitle, null, "2026-12-11 10:00", "2026-12-11 11:00", false);
+            createEvent(setupPage, deletionEventTitle, null, "2026-12-11 10:00", "2026-12-11 11:00", false);
             assertBodyContains(setupPage, deletionEventTitle);
         }
 
@@ -1436,8 +1436,8 @@ final class SharedCalendarEndToEndIT {
             firstPage.locator("input[id$='eventTitle']").fill(staleTimeZoneEventTitle);
             firstPage.locator(".checkbox-field .ui-chkbox-box").click();
             assertThat(firstPage.getByLabel("All-day event")).isChecked();
-            firstPage.locator("input[id$='eventStartDate_input']").fill("2026-07-16");
-            firstPage.locator("input[id$='eventEndDate_input']").fill("2026-07-16");
+            firstPage.locator("input[id$='eventFirstDay_input']").fill("2026-07-16");
+            firstPage.locator("input[id$='eventLastDay_input']").fill("2026-07-16");
             secondPage.navigate(route("/app/calendar-settings?id=" + calendarId));
             secondPage.locator("input[id$='timeZone']").fill("Pacific/Honolulu");
             secondPage.locator("button:has-text('Save settings')").click();
@@ -1484,7 +1484,7 @@ final class SharedCalendarEndToEndIT {
             Locator staleDeletionEventRow = staleDeletePage.locator(
                     "article", new Page.LocatorOptions().setHasText(deletionEventTitle));
             staleDeletionEventRow.locator("button:has-text('Delete')").click();
-            staleDeletePage.locator("button:has-text('Yes')").click();
+            confirmationButton(staleDeletePage, "Delete event").click();
             assertBodyContains(
                     staleDeletePage,
                     "This event changed after you opened it. Reload the page and try again.");
@@ -1518,9 +1518,14 @@ final class SharedCalendarEndToEndIT {
         String publicCalendarLink;
         String calendarId;
 
+        List<String> setupBrowserMessages = new ArrayList<>();
         try (BrowserContext setupContext = browser.newContext()) {
-            Page setupPage = setupContext.newPage();
+            Page setupPage = newPage(setupContext, setupBrowserMessages);
             signIn(setupPage, ownerUsername, TEST_PASSWORD);
+            setupPage.navigate(route("/"));
+            assertThat(setupPage.locator("#main-content a:has-text('My calendars')")).isVisible();
+            assertEquals(0, setupPage.locator("a:has-text('Sign in')").count());
+            setupPage.navigate(route("/app/calendars"));
             createCalendar(setupPage, longCalendarName);
             openCalendar(setupPage, longCalendarName);
             publicCalendarLink = setupPage.url();
@@ -1534,17 +1539,47 @@ final class SharedCalendarEndToEndIT {
                     "2026-12-20 11:00");
             createRegistrationInvitation(setupPage);
             createEditorInvitation(setupPage, longCalendarName);
+            setupPage.locator("button:has-text('Copy generated link')").click();
+            setupPage.waitForFunction(
+                    "() => document.querySelector('.generated-invitation .copy-status').textContent.trim().length > 0");
+            Locator generatedInvitationLink = setupPage.locator("input[id$='generatedInvitationLink']");
+            String copyStatus = setupPage.locator(".generated-invitation .copy-status").textContent().trim();
+            assertTrue(
+                    copyStatus.equals("Link copied.")
+                            || copyStatus.equals(
+                                    "Clipboard access is unavailable. Select the link and copy it manually."));
+            if (!copyStatus.equals("Link copied.")) {
+                assertEquals(
+                        true,
+                        generatedInvitationLink.evaluate(
+                                "element => element.selectionStart === 0 "
+                                        + "&& element.selectionEnd === element.value.length"),
+                        "The manual fallback should leave the entire invitation link selected.");
+            }
             setupPage.navigate(calendarLink(calendarId));
             Locator longEventRow = setupPage.locator("article", new Page.LocatorOptions().setHasText(longEventTitle));
-            longEventRow.locator("button:has-text('Delete')").click();
-            assertVisibleFocus(setupPage.locator("button:has-text('No')"));
+            Locator deleteEventButton = longEventRow.locator("button:has-text('Delete')");
+            deleteEventButton.click();
+            Locator confirmationDialog = visibleConfirmationDialog(setupPage);
+            Locator cancelConfirmationButton = confirmationButton(setupPage, "Cancel");
+            assertThat(cancelConfirmationButton).isFocused();
+            assertVisibleOutline(cancelConfirmationButton);
+            for (int tabPress = 0; tabPress < 4; tabPress++) {
+                setupPage.keyboard().press("Tab");
+                assertFocusRemainsWithin(confirmationDialog);
+            }
             setupPage.keyboard().press("Escape");
-            assertThat(setupPage.locator("button:has-text('Yes')")).isHidden();
+            assertThat(setupPage.locator(".ui-confirm-dialog")).isHidden();
+            assertThat(deleteEventButton).isFocused();
             assertBodyContains(setupPage, longEventTitle);
             calendarSettingsLink(setupPage).click();
+            assertThat(setupPage.locator("h2:has-text('Calendar details')")).isVisible();
+            assertThat(setupPage.locator("h2:has-text('Public access')")).isVisible();
+            assertEquals("timeZoneHelp", setupPage.locator("input[id$='timeZone']").getAttribute("aria-describedby"));
             Locator publicAccessCheckbox = setupPage.getByLabel("Enable public read-only access");
             publicAccessCheckbox.focus();
             assertVisibleOutline(setupPage.locator(".ui-chkbox-box"));
+            assertNoBrowserMessages(setupBrowserMessages);
         }
 
         try (BrowserContext semanticContext = browser.newContext()) {
@@ -1573,14 +1608,22 @@ final class SharedCalendarEndToEndIT {
             page.keyboard().press("Tab");
             assertEquals(true, signInButton.evaluate("element => document.activeElement === element"));
             assertVisibleOutline(signInButton);
+            assertTextContrast(signInButton, 4.5);
+            assertControlBoundaryContrast(usernameInput, 3.0);
+            assertRegionsHaveAccessibleNames(page);
             assertEquals(1, page.locator("h1").count());
             assertEquals("Sign in", page.locator("h1").textContent().trim());
             page.navigate(route("/register"));
             assertEquals(1, page.locator("h1").count());
             assertEquals("Create your calendar", page.locator("h1").textContent().trim());
+            assertEquals(
+                    "passwordRequirements",
+                    page.locator("input[id$='password']").getAttribute("aria-describedby"));
+            assertRegionsHaveAccessibleNames(page);
             page.navigate(route("/sign-in-error"));
             assertEquals(1, page.locator("h1").count());
             assertEquals("Sign-in error", page.locator("h1").textContent().trim());
+            assertRegionsHaveAccessibleNames(page);
             assertNoBrowserMessages(browserMessages);
         }
 
@@ -1596,13 +1639,12 @@ final class SharedCalendarEndToEndIT {
                 assertBodyContains(page, longEventLocation);
                 assertBodyContains(page, longEventDescription);
                 assertFalse(hasHorizontalOverflow(page), "Public page overflowed at " + viewportWidth + " pixels.");
-                assertHeaderPosition(page, viewportWidth);
 
                 signIn(page, ownerUsername, TEST_PASSWORD);
                 assertBodyContains(page, longCalendarName);
                 assertFalse(hasHorizontalOverflow(page), "Authenticated page overflowed at " + viewportWidth + " pixels.");
-                assertHeaderPosition(page, viewportWidth);
                 assertResponsiveTableRegion(page, "Calendars table", viewportWidth);
+                assertControlCanBeBroughtIntoView(page, page.locator("a:has-text('Open')").first(), viewportWidth, 900);
 
                 page.navigate(route("/app/account-settings"));
                 assertEquals("Account settings", page.locator("h1").textContent().trim());
@@ -1613,6 +1655,8 @@ final class SharedCalendarEndToEndIT {
                 assertBodyContains(page, longEventLocation);
                 assertBodyContains(page, longEventDescription);
                 assertFalse(hasHorizontalOverflow(page), "Calendar page overflowed at " + viewportWidth + " pixels.");
+                assertControlCanBeBroughtIntoView(
+                        page, page.locator("button:has-text('Create event')"), viewportWidth, 900);
 
                 page.navigate(route("/app/invitations"));
                 assertResponsiveTableRegion(page, "Invitations table", viewportWidth);
@@ -1626,16 +1670,41 @@ final class SharedCalendarEndToEndIT {
             }
         }
 
+        for (int viewportWidth : new int[] {1024, 1280}) {
+            List<String> browserMessages = new ArrayList<>();
+            Browser.NewContextOptions options = new Browser.NewContextOptions().setViewportSize(viewportWidth, 600);
+            try (BrowserContext browserContext = browser.newContext(options)) {
+                Page page = newPage(browserContext, browserMessages);
+                signIn(page, ownerUsername, TEST_PASSWORD);
+                page.navigate(calendarLink(calendarId));
+                assertControlCanBeBroughtIntoView(
+                        page, page.locator("input[id$='eventTitle']"), viewportWidth, 600);
+                assertControlCanBeBroughtIntoView(
+                        page, page.locator("button:has-text('Create event')"), viewportWidth, 600);
+                assertFalse(hasHorizontalOverflow(page), "Calendar page overflowed in a short viewport.");
+                assertNoBrowserMessages(browserMessages);
+            }
+        }
+
+        List<String> reducedMotionBrowserMessages = new ArrayList<>();
         try (BrowserContext reducedMotionContext = browser.newContext(
                 new Browser.NewContextOptions().setReducedMotion(ReducedMotion.REDUCE))) {
-            Page reducedMotionPage = reducedMotionContext.newPage();
-            reducedMotionPage.navigate(route("/"));
+            Page reducedMotionPage = newPage(reducedMotionContext, reducedMotionBrowserMessages);
+            signIn(reducedMotionPage, ownerUsername, TEST_PASSWORD);
+            reducedMotionPage.navigate(calendarLink(calendarId));
             assertEquals(true, reducedMotionPage.evaluate("matchMedia('(prefers-reduced-motion: reduce)').matches"));
+            Locator eventRow = reducedMotionPage.locator(
+                    "article", new Page.LocatorOptions().setHasText(longEventTitle));
+            eventRow.locator("button:has-text('Delete')").click();
+            Locator reducedMotionConfirmationButton = confirmationButton(reducedMotionPage, "Delete event");
+            assertThat(reducedMotionConfirmationButton).isVisible();
             assertEquals(
                     true,
-                    reducedMotionPage.locator(".skip-link").evaluate(
+                    reducedMotionConfirmationButton.evaluate(
                             "element => getComputedStyle(element).animationName === 'none' "
                                     + "&& getComputedStyle(element).transitionDuration === '0s'"));
+            reducedMotionPage.keyboard().press("Escape");
+            assertNoBrowserMessages(reducedMotionBrowserMessages);
         }
     }
 
@@ -1651,7 +1720,7 @@ final class SharedCalendarEndToEndIT {
             assertEquals("Calendar link unavailable", page.locator("h1").textContent().trim());
             assertEquals("noindex, nofollow", page.locator("meta[name='robots']").getAttribute("content"));
             assertBodyContains(page, "This calendar link no longer works.");
-            assertBodyContains(page, "Ask a calendar editor for the current link.");
+            assertBodyContains(page, "Ask a calendar member for the current link.");
             assertFalse(hasHorizontalOverflow(page));
             assertOnlyExpectedNotFoundNavigationMessage(browserMessages);
 
@@ -1757,7 +1826,18 @@ final class SharedCalendarEndToEndIT {
         waitForCanonicalCalendarRoute(page);
     }
 
-    private void enterEvent(
+    private void createEvent(
+            Page page,
+            String title,
+            String location,
+            String startTime,
+            String endTime,
+            boolean allDay) {
+        submitEventForm(page, title, location, startTime, endTime, allDay);
+        assertBodyContains(page, title);
+    }
+
+    private void submitEventForm(
             Page page,
             String title,
             String location,
@@ -1772,8 +1852,8 @@ final class SharedCalendarEndToEndIT {
             Locator allDayCheckbox = page.getByLabel("All-day event");
             page.locator(".checkbox-field .ui-chkbox-box").click();
             assertThat(allDayCheckbox).isChecked();
-            Locator firstDayInput = page.locator("input[id$='eventStartDate_input']");
-            Locator lastDayInput = page.locator("input[id$='eventEndDate_input']");
+            Locator firstDayInput = page.locator("input[id$='eventFirstDay_input']");
+            Locator lastDayInput = page.locator("input[id$='eventLastDay_input']");
             assertThat(firstDayInput).isVisible();
             assertThat(lastDayInput).isVisible();
             firstDayInput.fill(startTime.substring(0, 10));
@@ -1860,6 +1940,22 @@ final class SharedCalendarEndToEndIT {
         assertVisibleOutline(locator);
     }
 
+    private Locator visibleConfirmationDialog(Page page) {
+        return page.locator(".ui-confirm-dialog:visible");
+    }
+
+    private Locator confirmationButton(Page page, String buttonLabel) {
+        return visibleConfirmationDialog(page)
+                .locator("button", new Locator.LocatorOptions().setHasText(buttonLabel));
+    }
+
+    private void assertFocusRemainsWithin(Locator container) {
+        assertEquals(
+                true,
+                container.evaluate("element => element.contains(document.activeElement)"),
+                "Keyboard focus should remain inside the confirmation dialog.");
+    }
+
     private void pressTabUntilFocused(Page page, Locator target, int maximumTabPresses) {
         for (int tabPress = 0; tabPress < maximumTabPresses; tabPress++) {
             page.keyboard().press("Tab");
@@ -1877,11 +1973,95 @@ final class SharedCalendarEndToEndIT {
                         "element => { const style = getComputedStyle(element); "
                                 + "return style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0; }"),
                 "The focused control should have a visible outline.");
+        assertMinimumContrast(locator, "outlineColor", true, 3.0, "focus outline");
     }
 
-    private void assertHeaderPosition(Page page, int viewportWidth) {
-        String position = (String) page.locator(".app-header").evaluate("element => getComputedStyle(element).position");
-        assertEquals(viewportWidth <= 820 ? "static" : "sticky", position);
+    private void assertTextContrast(Locator locator, double minimumContrastRatio) {
+        assertMinimumContrast(locator, "color", false, minimumContrastRatio, "text");
+    }
+
+    private void assertControlBoundaryContrast(Locator locator, double minimumContrastRatio) {
+        assertMinimumContrast(locator, "borderTopColor", false, minimumContrastRatio, "control boundary");
+    }
+
+    private void assertMinimumContrast(
+            Locator locator,
+            String foregroundProperty,
+            boolean compareWithParentBackground,
+            double minimumContrastRatio,
+            String contrastPurpose) {
+        double measuredContrastRatio = ((Number) locator.evaluate(
+                        "(element, settings) => {"
+                                + "const parseColor = value => {"
+                                + "const channels = value.match(/[\\d.]+/g).map(Number);"
+                                + "return [channels[0], channels[1], channels[2], channels.length > 3 ? channels[3] : 1];"
+                                + "};"
+                                + "const luminance = color => {"
+                                + "const channels = color.slice(0, 3).map(channel => {"
+                                + "const normalized = channel / 255;"
+                                + "return normalized <= 0.03928 ? normalized / 12.92 : Math.pow((normalized + 0.055) / 1.055, 2.4);"
+                                + "});"
+                                + "return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];"
+                                + "};"
+                                + "const style = getComputedStyle(element);"
+                                + "const foreground = parseColor(style[settings[0]]);"
+                                + "let backgroundElement = settings[1] ? element.parentElement : element;"
+                                + "let background = [255, 255, 255, 0];"
+                                + "while (backgroundElement) {"
+                                + "background = parseColor(getComputedStyle(backgroundElement).backgroundColor);"
+                                + "if (background[3] > 0) break;"
+                                + "backgroundElement = backgroundElement.parentElement;"
+                                + "}"
+                                + "const foregroundLuminance = luminance(foreground);"
+                                + "const backgroundLuminance = luminance(background);"
+                                + "const lighter = Math.max(foregroundLuminance, backgroundLuminance);"
+                                + "const darker = Math.min(foregroundLuminance, backgroundLuminance);"
+                                + "return (lighter + 0.05) / (darker + 0.05);"
+                                + "}",
+                        List.of(foregroundProperty, compareWithParentBackground)))
+                .doubleValue();
+        assertTrue(
+                measuredContrastRatio >= minimumContrastRatio,
+                () -> "Expected " + contrastPurpose + " contrast of at least " + minimumContrastRatio
+                        + ":1, but measured " + measuredContrastRatio + ":1.");
+    }
+
+    private void assertRegionsHaveAccessibleNames(Page page) {
+        Locator regions = page.locator("[role='region']");
+        for (int regionIndex = 0; regionIndex < regions.count(); regionIndex++) {
+            Locator region = regions.nth(regionIndex);
+            String accessibleLabel = region.getAttribute("aria-label");
+            String labelledBy = region.getAttribute("aria-labelledby");
+            assertTrue(
+                    accessibleLabel != null && !accessibleLabel.isBlank()
+                            || labelledBy != null && !labelledBy.isBlank(),
+                    "Every region should have an accessible name.");
+            if (labelledBy != null && !labelledBy.isBlank()) {
+                assertTrue(
+                        page.locator("[id='" + labelledBy + "']").count() > 0,
+                        () -> "The region label target '" + labelledBy + "' should exist.");
+            }
+        }
+    }
+
+    private void assertControlCanBeBroughtIntoView(
+            Page page, Locator control, int viewportWidth, int viewportHeight) {
+        control.scrollIntoViewIfNeeded();
+        assertThat(control).isVisible();
+        assertEquals(
+                true,
+                control.evaluate(
+                        "(element, viewport) => {"
+                                + "const bounds = element.getBoundingClientRect();"
+                                + "const centerX = Math.max(0, Math.min(viewport[0] - 1, bounds.left + bounds.width / 2));"
+                                + "const centerY = Math.max(0, Math.min(viewport[1] - 1, bounds.top + bounds.height / 2));"
+                                + "const elementAtCenter = document.elementFromPoint(centerX, centerY);"
+                                + "return bounds.left >= 0 && bounds.right <= viewport[0] "
+                                + "&& bounds.top >= 0 && bounds.bottom <= viewport[1] "
+                                + "&& elementAtCenter && (element.contains(elementAtCenter) || elementAtCenter.contains(element));"
+                                + "}",
+                        List.of(viewportWidth, viewportHeight)),
+                "The control should be fully visible and unobscured after scrolling it into view.");
     }
 
     private void assertResponsiveTableRegion(Page page, String accessibleLabel, int viewportWidth) {
@@ -1889,11 +2069,18 @@ final class SharedCalendarEndToEndIT {
         tableRegion.focus();
         assertEquals(true, tableRegion.evaluate("element => document.activeElement === element"));
         assertVisibleOutline(tableRegion);
-        if (viewportWidth <= 390) {
-            assertEquals(
-                    true,
-                    tableRegion.evaluate("element => element.scrollWidth > element.clientWidth"),
-                    accessibleLabel + " should scroll horizontally within its labeled region on small screens.");
+        boolean hasInternalOverflow = Boolean.TRUE.equals(
+                tableRegion.evaluate("element => element.scrollWidth > element.clientWidth"));
+        if (hasInternalOverflow) {
+            tableRegion.evaluate("element => element.scrollLeft = 0");
+            page.keyboard().press("ArrowRight");
+            page.waitForFunction(
+                    "element => element.scrollLeft > 0",
+                    tableRegion.elementHandle(),
+                    new Page.WaitForFunctionOptions().setTimeout(5_000));
+            assertTrue(
+                    ((Number) tableRegion.evaluate("element => element.scrollLeft")).doubleValue() > 0,
+                    accessibleLabel + " should be keyboard-scrollable at " + viewportWidth + " pixels.");
         }
     }
 
@@ -1902,6 +2089,19 @@ final class SharedCalendarEndToEndIT {
         page.onConsoleMessage(message -> {
             if (message.type().equals("error") || message.type().equals("warning")) {
                 browserMessages.add(message.type() + ": " + message.text());
+            }
+        });
+        page.onPageError(error -> browserMessages.add("page error: " + error));
+        page.onRequestFailed(request -> {
+            if (!request.resourceType().equals("document")) {
+                browserMessages.add("failed " + request.method() + " " + request.resourceType() + " request: "
+                        + request.url() + " (" + request.failure() + ") while the page was at " + page.url());
+            }
+        });
+        page.onResponse(response -> {
+            if (response.status() >= 400 && !response.request().resourceType().equals("document")) {
+                browserMessages.add("HTTP " + response.status() + " for "
+                        + response.request().resourceType() + " resource: " + response.url());
             }
         });
         return page;
@@ -2204,6 +2404,11 @@ final class SharedCalendarEndToEndIT {
         try {
             assertThat(page.locator("body"))
                     .containsText(expectedText, new LocatorAssertions.ContainsTextOptions().setTimeout(5_000));
+            page.waitForFunction(
+                    "() => typeof PrimeFaces === 'undefined' || !PrimeFaces.ajax "
+                            + "|| (PrimeFaces.ajax.Queue.isEmpty() && PrimeFaces.ajax.Queue.xhrs.length === 0)",
+                    null,
+                    new Page.WaitForFunctionOptions().setTimeout(5_000));
         } catch (AssertionError assertionError) {
             String bodyText = page.locator("body").innerText();
             fail(

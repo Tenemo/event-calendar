@@ -47,7 +47,7 @@ public class CalendarView implements Serializable {
     private CalendarTimeService calendarTimeService;
 
     private Long calendarId;
-    private String publicToken;
+    private String calendarLinkToken;
     private Integer calendarVersion;
     private String calendarName;
     private String calendarDescription;
@@ -64,8 +64,8 @@ public class CalendarView implements Serializable {
     private String eventLocation;
     private LocalDateTime eventStartTime;
     private LocalDateTime eventEndTime;
-    private LocalDate eventStartDate;
-    private LocalDate eventEndDate;
+    private LocalDate eventFirstDay;
+    private LocalDate eventLastDay;
     private boolean eventAllDay;
     private boolean eventAllDaySelection;
 
@@ -77,11 +77,12 @@ public class CalendarView implements Serializable {
                 throw new NotFoundException("Calendar was not found.");
             }
 
-            publicToken = (String) request.getAttribute(CalendarRouteFilter.CALENDAR_TOKEN_REQUEST_ATTRIBUTE);
+            calendarLinkToken = (String) request.getAttribute(
+                    CalendarRouteFilter.CALENDAR_LINK_TOKEN_REQUEST_ATTRIBUTE);
             ApplicationUser actingUser = currentUser.find().orElse(null);
             Calendar calendar = (Calendar) request.getAttribute(CalendarRouteFilter.CALENDAR_REQUEST_ATTRIBUTE);
             if (calendar == null) {
-                calendar = calendarAccessService.requireCalendarReadableByToken(actingUser, publicToken);
+                calendar = calendarAccessService.requireCalendarReadableByLinkToken(actingUser, calendarLinkToken);
             }
             calendarId = calendar.getId();
             calendarVersion = calendar.getVersion();
@@ -102,13 +103,13 @@ public class CalendarView implements Serializable {
 
     public void regenerateCalendarLink() throws IOException {
         try {
-            Calendar calendar = calendarService.regeneratePublicToken(
+            Calendar calendar = calendarService.regenerateCalendarLink(
                     currentUser.require(), calendarId, calendarVersion);
-            publicToken = calendar.getPublicToken();
+            calendarLinkToken = calendar.getCalendarLinkToken();
             calendarVersion = calendar.getVersion();
             FacesContext facesContext = FacesContext.getCurrentInstance();
             facesContext.getExternalContext().redirect(
-                    facesContext.getExternalContext().getRequestContextPath() + "/" + publicToken);
+                    facesContext.getExternalContext().getRequestContextPath() + "/" + calendarLinkToken);
             facesContext.responseComplete();
         } catch (AuthorizationException | ConflictException | NotFoundException exception) {
             addMessage(FacesMessage.SEVERITY_ERROR, "Calendar link could not be regenerated.", exception.getMessage());
@@ -116,9 +117,10 @@ public class CalendarView implements Serializable {
     }
 
     public void createEvent() {
+        ApplicationUser actingUser;
         try {
             applyEventAllDaySelection();
-            ApplicationUser actingUser = currentUser.require();
+            actingUser = currentUser.require();
             calendarEventService.createEvent(
                     actingUser,
                     calendarId,
@@ -128,19 +130,28 @@ public class CalendarView implements Serializable {
                     eventTimeInput(),
                     calendarVersion,
                     timeZone);
-            reloadEvents(actingUser);
-            resetEventForm();
-            addMessage(FacesMessage.SEVERITY_INFO, "Event created.", "The event is now on the calendar.");
-        } catch (AuthorizationException | ConflictException | ValidationException exception) {
+        } catch (AuthorizationException | ConflictException | NotFoundException | ValidationException exception) {
             addMessage(FacesMessage.SEVERITY_ERROR, "Event could not be created.", exception.getMessage());
+            return;
         }
+
+        resetEventForm();
+        addMessage(FacesMessage.SEVERITY_INFO, "Event created.", "The event is now on the calendar.");
+        reloadEventsAfterCommittedChange(actingUser);
     }
 
     public void selectEvent(Long eventId) {
         CalendarEventRow event = events.stream()
                 .filter(candidate -> candidate.getId().equals(eventId))
                 .findFirst()
-                .orElseThrow(() -> new NotFoundException("Event was not found."));
+                .orElse(null);
+        if (event == null) {
+            addMessage(
+                    FacesMessage.SEVERITY_ERROR,
+                    "Event could not be selected.",
+                    "The event is no longer available. Reload the page and try again.");
+            return;
+        }
         selectedEventId = event.getId();
         selectedEventVersion = event.getVersion();
         eventTitle = event.getTitle();
@@ -148,18 +159,19 @@ public class CalendarView implements Serializable {
         eventLocation = event.getLocation();
         eventStartTime = event.getStartTime();
         eventEndTime = event.getEndTime();
-        eventStartDate = event.getStartTime().toLocalDate();
-        eventEndDate = event.getInclusiveEndDate();
+        eventFirstDay = event.getStartTime().toLocalDate();
+        eventLastDay = event.getInclusiveEndDate();
         setEventAllDay(event.isAllDay());
     }
 
     public void updateEvent() {
+        ApplicationUser actingUser;
         try {
             if (selectedEventId == null || selectedEventVersion == null) {
                 throw new ValidationException("Select an event to edit.");
             }
             applyEventAllDaySelection();
-            ApplicationUser actingUser = currentUser.require();
+            actingUser = currentUser.require();
             calendarEventService.updateEvent(
                     actingUser,
                     selectedEventId,
@@ -170,26 +182,31 @@ public class CalendarView implements Serializable {
                     eventTimeInput(),
                     calendarVersion,
                     timeZone);
-            reloadEvents(actingUser);
-            resetEventForm();
-            addMessage(FacesMessage.SEVERITY_INFO, "Event updated.", "Your changes were saved.");
         } catch (AuthorizationException | ConflictException | NotFoundException | ValidationException exception) {
             addMessage(FacesMessage.SEVERITY_ERROR, "Event could not be updated.", exception.getMessage());
+            return;
         }
+
+        resetEventForm();
+        addMessage(FacesMessage.SEVERITY_INFO, "Event updated.", "Your changes were saved.");
+        reloadEventsAfterCommittedChange(actingUser);
     }
 
     public void deleteEvent(Long eventId, Integer eventVersion) {
+        ApplicationUser actingUser;
         try {
-            ApplicationUser actingUser = currentUser.require();
+            actingUser = currentUser.require();
             calendarEventService.deleteEvent(actingUser, eventId, eventVersion);
-            reloadEvents(actingUser);
-            if (eventId.equals(selectedEventId)) {
-                resetEventForm();
-            }
-            addMessage(FacesMessage.SEVERITY_INFO, "Event deleted.", "The event was removed.");
         } catch (AuthorizationException | ConflictException | NotFoundException exception) {
             addMessage(FacesMessage.SEVERITY_ERROR, "Event could not be deleted.", exception.getMessage());
+            return;
         }
+
+        if (eventId != null && eventId.equals(selectedEventId)) {
+            resetEventForm();
+        }
+        addMessage(FacesMessage.SEVERITY_INFO, "Event deleted.", "The event was removed.");
+        reloadEventsAfterCommittedChange(actingUser);
     }
 
     public void resetEventForm() {
@@ -203,8 +220,8 @@ public class CalendarView implements Serializable {
                 .truncatedTo(ChronoUnit.HOURS);
         eventStartTime = nextHour;
         eventEndTime = nextHour.plusHours(1);
-        eventStartDate = nextHour.toLocalDate();
-        eventEndDate = nextHour.toLocalDate();
+        eventFirstDay = nextHour.toLocalDate();
+        eventLastDay = nextHour.toLocalDate();
         setEventAllDay(false);
     }
 
@@ -214,19 +231,19 @@ public class CalendarView implements Serializable {
             LocalDate firstDay = eventStartTime == null ? null : eventStartTime.toLocalDate();
             LocalDate lastDay = inclusiveEndDateForTimedRange(firstDay);
             if (firstDay != null) {
-                eventStartDate = firstDay;
+                eventFirstDay = firstDay;
             }
             if (lastDay != null) {
-                eventEndDate = lastDay;
+                eventLastDay = lastDay;
             }
             return;
         }
 
-        if (eventStartDate != null) {
-            eventStartTime = eventStartDate.atStartOfDay();
+        if (eventFirstDay != null) {
+            eventStartTime = eventFirstDay.atStartOfDay();
         }
-        if (eventEndDate != null) {
-            eventEndTime = eventEndDate.plusDays(1).atStartOfDay();
+        if (eventLastDay != null) {
+            eventEndTime = eventLastDay.plusDays(1).atStartOfDay();
         }
     }
 
@@ -255,17 +272,29 @@ public class CalendarView implements Serializable {
 
     private EventTimeInput eventTimeInput() {
         return eventAllDay
-                ? new EventTimeInput.AllDay(eventStartDate, eventEndDate)
+                ? new EventTimeInput.AllDay(eventFirstDay, eventLastDay)
                 : new EventTimeInput.Timed(eventStartTime, eventEndTime);
     }
 
     private void reloadEvents(ApplicationUser actingUser) {
         List<CalendarEvent> loadedEvents = role == null
-                ? calendarEventService.findPublicEvents(publicToken, null, null)
-                : calendarEventService.findEditorEvents(actingUser, calendarId, null, null);
+                ? calendarEventService.findPublicEvents(calendarLinkToken)
+                : calendarEventService.findEventsForMember(actingUser, calendarId);
         events = loadedEvents.stream()
                 .map(event -> CalendarEventRow.from(event, timeZone, calendarTimeService))
                 .toList();
+    }
+
+    private void reloadEventsAfterCommittedChange(ApplicationUser actingUser) {
+        try {
+            reloadEvents(actingUser);
+        } catch (AuthorizationException | NotFoundException exception) {
+            markNotFound();
+            addMessage(
+                    FacesMessage.SEVERITY_WARN,
+                    "The change was saved, but the page could not be refreshed.",
+                    "Open the calendar again to see its current events.");
+        }
     }
 
     private void markNotFound() {
@@ -279,7 +308,6 @@ public class CalendarView implements Serializable {
     }
 
     public Long getCalendarId() { return calendarId; }
-    public void setCalendarId(Long calendarId) { this.calendarId = calendarId; }
     public String getCalendarName() { return calendarName; }
     public String getCalendarDescription() { return calendarDescription; }
     public String getTimeZone() { return timeZone; }
@@ -289,7 +317,6 @@ public class CalendarView implements Serializable {
     public boolean isEditable() { return role != null; }
     public boolean isAdmin() { return role == CalendarRole.ADMIN; }
     public List<CalendarEventRow> getEvents() { return events; }
-    public Long getSelectedEventId() { return selectedEventId; }
     public boolean isEditingEvent() { return selectedEventId != null; }
     public String getEventTitle() { return eventTitle; }
     public void setEventTitle(String eventTitle) { this.eventTitle = eventTitle; }
@@ -301,10 +328,10 @@ public class CalendarView implements Serializable {
     public void setEventStartTime(LocalDateTime eventStartTime) { this.eventStartTime = eventStartTime; }
     public LocalDateTime getEventEndTime() { return eventEndTime; }
     public void setEventEndTime(LocalDateTime eventEndTime) { this.eventEndTime = eventEndTime; }
-    public LocalDate getEventStartDate() { return eventStartDate; }
-    public void setEventStartDate(LocalDate eventStartDate) { this.eventStartDate = eventStartDate; }
-    public LocalDate getEventEndDate() { return eventEndDate; }
-    public void setEventEndDate(LocalDate eventEndDate) { this.eventEndDate = eventEndDate; }
+    public LocalDate getEventFirstDay() { return eventFirstDay; }
+    public void setEventFirstDay(LocalDate eventFirstDay) { this.eventFirstDay = eventFirstDay; }
+    public LocalDate getEventLastDay() { return eventLastDay; }
+    public void setEventLastDay(LocalDate eventLastDay) { this.eventLastDay = eventLastDay; }
     public boolean isEventAllDay() { return eventAllDay; }
     public void setEventAllDay(boolean eventAllDay) {
         this.eventAllDay = eventAllDay;

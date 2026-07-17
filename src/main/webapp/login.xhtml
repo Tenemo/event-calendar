@@ -2,6 +2,7 @@
                 xmlns:f="jakarta.faces.core"
                 xmlns:h="jakarta.faces.html"
                 xmlns:ui="jakarta.faces.facelets"
+                xmlns:pt="jakarta.faces.passthrough"
                 xmlns:p="primefaces"
                 template="/WEB-INF/templates/main.xhtml">
     <f:metadata>
@@ -13,7 +14,7 @@
 
     <ui:define name="content">
         <section class="narrow-section">
-            <h1>Sign in</h1>
+            <h1 id="signInHeading">Sign in</h1>
             <h:panelGroup layout="block"
                           styleClass="notice-message"
                           rendered="#{loginView.passwordChanged}">
@@ -24,7 +25,7 @@
                           rendered="#{loginView.reauthenticationRequired}">
                 Your session is no longer valid. Sign in again.
             </h:panelGroup>
-            <p:panel styleClass="surface-panel form-panel">
+            <p:panel styleClass="surface-panel form-panel" pt:aria-labelledby="signInHeading">
                 <h:form styleClass="stacked-form">
                     <h:inputHidden value="#{loginView.invitationToken}"/>
                     <p:outputLabel for="username" value="Username"/>

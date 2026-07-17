@@ -17,7 +17,7 @@ public final class TestPasswordServices {
         return passwordService(new RecordingPasswordHash());
     }
 
-    public static PasswordService passwordService(RecordingPasswordHash passwordHash) {
+    public static PasswordService passwordService(Pbkdf2PasswordHash passwordHash) {
         PasswordService passwordService = new PasswordService();
         ServiceTestSupport.setField(passwordService, "passwordHash", passwordHash);
         return passwordService;

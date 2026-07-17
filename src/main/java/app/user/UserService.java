@@ -3,7 +3,6 @@ package app.user;
 import app.audit.AuditService;
 import app.security.PasswordService;
 import app.util.AuthorizationException;
-import app.util.NotFoundException;
 import app.util.ValidationException;
 import jakarta.ejb.Stateless;
 import jakarta.inject.Inject;
@@ -23,7 +22,7 @@ public class UserService {
     private static final int MAXIMUM_USERNAME_LENGTH = 80;
     private static final int MAXIMUM_DISPLAY_NAME_LENGTH = 160;
 
-    @PersistenceContext(unitName = "calendarPU")
+    @PersistenceContext(unitName = "calendarPersistenceUnit")
     private EntityManager entityManager;
 
     @Inject
@@ -92,7 +91,7 @@ public class UserService {
         entityManager.flush();
     }
 
-    public Optional<ApplicationUser> findByUsername(String username) {
+    private Optional<ApplicationUser> findByUsername(String username) {
         String normalizedUsername = normalizeUsername(username);
         if (normalizedUsername.isBlank()) {
             return Optional.empty();
@@ -111,14 +110,6 @@ public class UserService {
 
     public Optional<ApplicationUser> findActiveByUsername(String username) {
         return findByUsername(username).filter(ApplicationUser::isActive);
-    }
-
-    public ApplicationUser requireActiveUser(Long userId) {
-        ApplicationUser user = entityManager.find(ApplicationUser.class, userId);
-        if (user == null || !user.isActive()) {
-            throw new NotFoundException("User was not found.");
-        }
-        return user;
     }
 
     private ApplicationUser requireActiveUserForPasswordChange(ApplicationUser actingUser) {

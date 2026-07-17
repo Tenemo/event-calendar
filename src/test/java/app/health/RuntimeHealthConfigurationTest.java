@@ -21,12 +21,13 @@ final class RuntimeHealthConfigurationTest {
             "src", "main", "liberty", "config", "server.xml");
     private static final Path COMPOSE_CONFIGURATION_PATH = Path.of("docker-compose.yml");
     private static final Pattern SECOND_DURATION_PATTERN = Pattern.compile("(\\d+)s");
-    private static final Pattern COMPOSE_TIMEOUT_PATTERN = Pattern.compile("(?m)^      timeout: (\\d+)s$");
+    private static final Pattern COMPOSE_TIMEOUT_PATTERN = Pattern.compile(
+            "(?m)^x-application-health-timeout: &application-health-timeout (\\d+)s$");
 
     @Test
     void databaseAcquisitionAndValidationFitWithinTheContainerHealthTimeout() throws Exception {
         Document serverConfiguration = readServerConfiguration();
-        Element calendarDataSource = elementWithId(serverConfiguration, "dataSource", "CalendarDS");
+        Element calendarDataSource = elementWithId(serverConfiguration, "dataSource", "CalendarDataSource");
         Element connectionManager = firstDescendant(calendarDataSource, "connectionManager");
         Element postgresqlProperties = firstDescendant(calendarDataSource, "properties.postgresql");
 
@@ -34,7 +35,7 @@ final class RuntimeHealthConfigurationTest {
         Duration driverConnectTimeout = duration(postgresqlProperties.getAttribute("connectTimeout"));
         Duration driverLoginTimeout = duration(postgresqlProperties.getAttribute("loginTimeout"));
         Duration healthValidationTimeout = Duration.ofSeconds(HealthServlet.DATABASE_VALIDATION_TIMEOUT_SECONDS);
-        Duration containerHealthTimeout = webContainerHealthTimeout();
+        Duration containerHealthTimeout = applicationContainerHealthTimeout();
 
         assertAll(
                 () -> assertTrue(
@@ -79,14 +80,10 @@ final class RuntimeHealthConfigurationTest {
         return descendant;
     }
 
-    private static Duration webContainerHealthTimeout() throws Exception {
+    private static Duration applicationContainerHealthTimeout() throws Exception {
         String composeConfiguration = Files.readString(COMPOSE_CONFIGURATION_PATH);
-        int webServiceStart = composeConfiguration.indexOf("\n  web:");
-        int nextServiceStart = composeConfiguration.indexOf("\n  postgres-restore-verification:", webServiceStart);
-        assertTrue(webServiceStart >= 0 && nextServiceStart > webServiceStart, "Could not isolate the web service configuration.");
-        String webServiceConfiguration = composeConfiguration.substring(webServiceStart, nextServiceStart);
-        Matcher timeoutMatcher = COMPOSE_TIMEOUT_PATTERN.matcher(webServiceConfiguration);
-        assertTrue(timeoutMatcher.find(), "Could not find the web container health timeout.");
+        Matcher timeoutMatcher = COMPOSE_TIMEOUT_PATTERN.matcher(composeConfiguration);
+        assertTrue(timeoutMatcher.find(), "Could not find the shared application health timeout.");
         return Duration.ofSeconds(Long.parseLong(timeoutMatcher.group(1)));
     }
 

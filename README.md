@@ -4,7 +4,7 @@ Shared calendar is a server-rendered web application for event calendars shared 
 
 ## Stack
 
-- Java 25 runtime with Java 21 source compatibility
+- Java 25 runtime and source target
 - Maven Wrapper and WAR packaging
 - Open Liberty with Jakarta EE 10 Web Profile
 - Jakarta Faces / JSF and PrimeFaces with the `jakarta` classifier
@@ -22,7 +22,7 @@ Shared calendar is a server-rendered web application for event calendars shared 
 - Calendar invitations grant `EDITOR`; read-only access uses the calendar's bearer link rather than a membership role.
 - Signed-in users can change their own password from account settings; doing so invalidates every existing session.
 - Calendars are public by default through compact, random bearer links.
-- Public links are read-only and marked `noindex, nofollow`.
+- Calendar links with public access are read-only and marked `noindex, nofollow`.
 - Events support titles, locations, descriptions, inclusive all-day date ranges, and timed date ranges. All-day dates are normalized in the calendar's IANA time zone instead of assuming every day is 24 hours.
 - Recurrence, notifications, email delivery, ICS import/export, and native mobile apps are outside the current scope.
 
@@ -58,7 +58,7 @@ Copy `.env.example` to `.env` for local development. Do not commit `.env`.
 | `APP_BASE_URL` | `http://localhost:9080` | Canonical external base URL used for invitation and calendar links. |
 | `APP_BOOTSTRAP_INVITE_TOKEN` | blank | Optional one-time admission secret for creating the first account on a database that has never contained an account. |
 
-`APP_TIMEZONE` must be a valid IANA time zone. Invalid values stop application startup.
+`APP_TIMEZONE` must be an identifier supported by Java's IANA time-zone database. Invalid values stop application startup.
 
 `APP_BASE_URL` must be an absolute HTTP or HTTPS URL without credentials, query parameters, or a fragment. Request-derived links are accepted only on loopback development hosts; production requires an explicit value.
 
@@ -66,7 +66,7 @@ Copy `.env.example` to `.env` for local development. Do not commit `.env`.
 
 ## Database migrations
 
-Flyway runs during application startup and owns the database schema. The application fails startup when a migration cannot be applied. The current schema is migration version 11. Migration 8 removes existing read-only memberships rather than promoting them to editor access and restricts calendar memberships to `EDITOR` and `ADMIN`. Migration 9 adds the password version used to invalidate older authenticated sessions after a password change. Migration 10 replaces every existing calendar bearer token with the compact format, so deploying it invalidates every previously shared calendar URL once. Migration 11 caps every existing invitation at seven days after creation and adds a database constraint that prevents longer lifetimes. Host-installed PostgreSQL client programs are not required.
+Flyway runs during application startup and owns the database schema. The application fails startup when a migration cannot be applied. The current schema is migration version 12. Migration 8 removes existing read-only memberships rather than promoting them to editor access and restricts calendar memberships to `EDITOR` and `ADMIN`. Migration 9 adds the password version used to invalidate older authenticated sessions after a password change. Migration 10 replaces every existing calendar bearer token with the compact format, so deploying it invalidates every previously shared calendar URL once. Migration 11 caps every existing invitation at seven days after creation and adds a database constraint that prevents longer lifetimes. Migration 12 audits existing calendar time zones without changing them and fails closed if any stored value is not an exact identifier supported by Java's IANA time-zone database. If that audit fails, inspect the distinct `calendar.timezone` values, back up the database, map each unsupported value to its intended supported region identifier, and restart the application so Flyway retries the migration. Host-installed PostgreSQL client programs are not required.
 
 Start and inspect the local database with:
 
@@ -84,14 +84,13 @@ Run the unit tests and build the WAR:
 mise run package
 ```
 
-For browser tests, keep `mise run dev` running in one terminal, then run:
+Browser tests build the production image and run against disposable application and PostgreSQL containers on non-default loopback ports. They do not use or modify the persistent development database. Chromium is installed automatically by default.
 
 ```bash
-mise run install-playwright
 mise run e2e
 ```
 
-The automated suite covers registration, login, logout, password changes and session revocation, calendar creation, event creation/editing/deletion, compact canonical calendar links, public-access disabling, link regeneration, invitation acceptance, editor removal, last-admin protection, validation, request throttling, and anonymous read-only behavior. An additional isolated browser scenario builds the production image and verifies bootstrap-registration rollback and concurrency against a separate application container and tmpfs PostgreSQL database on non-default ports.
+Set `BROWSER` to `firefox` or `webkit` when intentionally running another supported browser. Pull requests use Chromium. The automated suite covers registration, login, logout, password changes and session revocation, calendar creation, event creation/editing/deletion, compact canonical calendar links, public-access disabling, link regeneration, invitation acceptance, editor removal, last-admin protection, validation, request throttling, and anonymous read-only behavior. A second isolated scenario verifies bootstrap-registration rollback and concurrency.
 
 Run only the isolated bootstrap-registration verification with:
 
@@ -110,7 +109,7 @@ Pull requests run the Maven build, PostgreSQL-backed Playwright workflows, a pro
 
 ## Running with Liberty dev mode
 
-Prepare Liberty's shared PostgreSQL driver, start PostgreSQL, and start dev mode:
+Check the toolchain, start PostgreSQL, and start dev mode:
 
 ```bash
 mise run setup
@@ -118,12 +117,12 @@ mise run db
 mise run dev
 ```
 
-The setup task copies the Maven-managed PostgreSQL driver into generated Liberty resources under `target/`. No downloaded driver is committed.
+The development command prepares the Maven-managed PostgreSQL driver and keeps the generated Liberty installation under `.liberty/`. Development classes use `.build/development`, while clean distributable builds use `.build/package`, so packaging does not remove or modify a running development server. No generated runtime or downloaded driver is committed.
 
-To check an already-running application and its database without rebuilding:
+To require the exact `200 ok` health contract and the current successful Flyway schema without rebuilding or starting services:
 
 ```bash
-mise run verify-running-app
+mise run verify-local
 ```
 
 ## Building Docker image
@@ -134,7 +133,7 @@ Build the production image:
 mise run docker-build
 ```
 
-The multi-stage build compiles the WAR with Maven and produces an Open Liberty Java 25 runtime image. Maven, source files, local environment files, and credentials are not present in the runtime image. Liberty writes JSON logs to standard output and standard error.
+The multi-stage build compiles production source without test compilation and produces an Open Liberty Java 25 runtime image. Run `mise run package` as the test gate; CI does so independently before accepting the production image. Maven, source files, local environment files, and credentials are not present in the runtime image. Liberty writes JSON logs to standard output and standard error.
 
 Start the production image with Docker Compose and local PostgreSQL:
 
@@ -193,7 +192,7 @@ APP_BOOTSTRAP_INVITE_TOKEN=
 
 Set `APP_BOOTSTRAP_INVITE_TOKEN` temporarily to a generated high-entropy secret for the first registration only. After the first account is created, delete or clear the variable and redeploy; the database also records permanent bootstrap consumption.
 
-After deployment, verify `/health`, registration, login, password change, public links, invitations, role changes, and event persistence. Redeploy, confirm that accounts and calendar data persist, then sign in again because HTTP sessions are intentionally in memory. Inspect logs to confirm that passwords, database credentials, public tokens, and invitation tokens are absent. Railway's deployment health check is not continuous monitoring, so configure an external HTTPS uptime check for `https://calendar.social/health` before relying on the service.
+After deployment, verify `/health`, registration, login, password change, calendar links, invitations, role changes, and event persistence. Redeploy, confirm that accounts and calendar data persist, then sign in again because HTTP sessions are intentionally in memory. Inspect logs to confirm that passwords, database credentials, calendar link tokens, and invitation tokens are absent. Railway's deployment health check is not continuous monitoring, so configure an external HTTPS uptime check for `https://calendar.social/health` before relying on the service.
 
 Railway protects its network below the application layer, but it does not provide an application-layer WAF. The application rejects malformed calendar paths before database access, limits each client source to 300 valid-looking calendar-link requests per minute, permits at most 16 such requests to execute concurrently, and bounds source tracking to 10,000 entries. Both calendar-link and login throttles use Railway's documented `X-Real-IP` address only when Railway's automatically provided `RAILWAY_ENVIRONMENT_ID` marks the deployment and the immediate peer is in Railway's documented `100.0.0.0/8` proxy range; elsewhere they ignore that header and use the direct TCP peer. Missing, malformed, ambiguous, or untrusted client-address headers fall back to that peer. These controls make online token iteration impractical from one source and shed excess application work without disrupting a busy shared network; they cannot absorb a volumetric or large distributed attack before traffic reaches Railway. For stronger public-internet protection, proxy `calendar.social` through a service such as Cloudflare with application-layer rate limiting and bot/WAF rules, then remove Railway's generated public domain so it cannot bypass that edge. Netlify is not required.
 
@@ -238,7 +237,7 @@ For all-day events, the first and last dates shown in the form are both inclusiv
 
 ## Calendar links and public access
 
-New calendars have public access enabled and receive a bearer token made from 64 cryptographically random bits, encoded as exactly 11 unpadded Base64URL characters. `/{calendarToken}` is the one canonical calendar URL: it is the address editors and admins see in their browser, and it is the address they copy and share. There is no `/calendar/` prefix. Active editors and admins see mutation controls at that URL. Anyone else with the URL receives only the read-only calendar, without signing in, so the URL should be treated as a secret.
+New calendars have public access enabled and receive a bearer token made from 64 cryptographically random bits, encoded as exactly 11 unpadded Base64URL characters. `/{calendarLinkToken}` is the one canonical calendar URL: it is the address editors and admins see in their browser, and it is the address they copy and share. There is no `/calendar/` prefix. Active editors and admins see mutation controls at that URL. Anyone else with the URL receives only the read-only calendar, without signing in, so the URL should be treated as a secret.
 
 Only exact one-segment paths containing the canonical unpadded Base64URL encoding of eight bytes enter calendar lookup. That means ten URL-safe Base64 characters followed by one of `AEIMQUYcgkosw048`; other 11-character lookalikes are rejected without a calendar database query. Valid-looking requests are source-rate-limited and globally concurrency-limited before lookup. Missing, disabled, and regenerated tokens use the same link-unavailable `404`; overload uses a generic `429` with `Retry-After`, without echoing the candidate token.
 
@@ -275,13 +274,13 @@ Verify the complete backup/restore path against a fresh tmpfs PostgreSQL service
 mise run verify-backup-restore
 ```
 
-Restore replaces database objects and data. Stop the application first, keep a separate pre-restore backup, and pass the target database name a second time as explicit confirmation:
+Restore replaces database objects and data. Stop the application first, keep a separate pre-restore backup, and pass the target database name a second time as explicit confirmation. Local restore refuses to continue while the Compose web service or another application on the configured local port is responding.
 
 ```bash
 mise run restore-postgres -- target/backups/calendar-before-upgrade.dump calendar
 ```
 
-For a remote database, set `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, and normally `PGSSLMODE=require`, then run the same backup or restore task. The tool uses a temporary `postgres:17` client container and passes the password through its environment, not its command line. The target database must already exist.
+For a remote database, set `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, and normally `PGSSLMODE=require`, then run the same backup or restore task. The tool cannot detect remote application instances, so stop them separately before restore. It uses a temporary `postgres:17` client container and passes the password through its environment, not its command line. The target database must already exist.
 
 ## Troubleshooting
 

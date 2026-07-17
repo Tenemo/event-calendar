@@ -15,7 +15,7 @@
     <header class="app-header">
         <div>
             <h:outputLink value="#{request.contextPath}/" styleClass="app-brand">Shared calendar</h:outputLink>
-            <p class="app-subtitle">Events for friends, clubs, and recurring plans.</p>
+            <p class="app-subtitle">Events for friends, clubs, and group plans.</p>
         </div>
         <nav class="app-nav" aria-label="Main navigation">
             <h:outputLink value="#{request.contextPath}/">Home</h:outputLink>
@@ -33,5 +33,33 @@
         <p:messages id="messages" showDetail="true" closable="true"/>
         <ui:insert name="content"/>
     </main>
+    <script type="text/javascript">
+        function focusElementByIdSuffix(idSuffix) {
+            window.requestAnimationFrame(function () {
+                var element = document.querySelector("[id$='" + idSuffix + "']");
+                if (element) {
+                    element.focus();
+                }
+            });
+        }
+
+        function focusAfterSuccessfulAjax(ajaxArguments, idSuffix) {
+            if (ajaxArguments) {
+                if (ajaxArguments.validationFailed) {
+                    return;
+                }
+            }
+            focusElementByIdSuffix(idSuffix);
+        }
+
+        function focusConfirmationCancelButton() {
+            window.setTimeout(function () {
+                var cancelButton = document.querySelector(".ui-confirmdialog-no");
+                if (cancelButton) {
+                    cancelButton.focus();
+                }
+            }, 0);
+        }
+    </script>
 </h:body>
 </html>

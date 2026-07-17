@@ -25,8 +25,8 @@ public class Calendar {
 
     private String description;
 
-    @Column(name = "public_token", nullable = false, unique = true, length = CalendarPublicToken.ENCODED_LENGTH)
-    private String publicToken;
+    @Column(name = "public_token", nullable = false, unique = true, length = CalendarLinkToken.ENCODED_LENGTH)
+    private String calendarLinkToken;
 
     @Column(name = "timezone", nullable = false, length = 80)
     private String timeZone = "Europe/Warsaw";
@@ -71,12 +71,12 @@ public class Calendar {
         this.description = description;
     }
 
-    public String getPublicToken() {
-        return publicToken;
+    public String getCalendarLinkToken() {
+        return calendarLinkToken;
     }
 
-    public void setPublicToken(String publicToken) {
-        this.publicToken = publicToken;
+    public void setCalendarLinkToken(String calendarLinkToken) {
+        this.calendarLinkToken = calendarLinkToken;
     }
 
     public String getTimeZone() {
@@ -101,10 +101,6 @@ public class Calendar {
 
     public void setActive(boolean active) {
         this.active = active;
-    }
-
-    public ApplicationUser getCreatedByUser() {
-        return createdByUser;
     }
 
     public void setCreatedByUser(ApplicationUser createdByUser) {

@@ -9,10 +9,10 @@ WORKDIR /app
 COPY .mvn .mvn
 COPY mvnw pom.xml ./
 RUN chmod +x mvnw \
-    && ./mvnw -B -ntp -DskipTests dependency:go-offline
+    && ./mvnw -B -ntp -Dmaven.test.skip=true -DincludeScope=compile dependency:go-offline
 
-COPY src src
-RUN ./mvnw -B -ntp -DskipTests package
+COPY src/main src/main
+RUN ./mvnw -B -ntp -Dmaven.test.skip=true package
 
 FROM icr.io/appcafe/open-liberty:kernel-slim-java25-openj9-ubi-minimal
 
@@ -29,10 +29,10 @@ COPY --chown=1001:0 src/main/liberty/container/bootstrap.properties /config/
 RUN features.sh
 
 COPY --chown=1001:0 --from=build \
-    /app/target/liberty/wlp/usr/shared/resources/postgresql/postgresql.jar \
+    /app/.build/package/liberty-resources/postgresql/postgresql.jar \
     /opt/ol/wlp/usr/shared/resources/postgresql/postgresql.jar
 COPY --chown=1001:0 --from=build \
-    /app/target/shared-calendar.war \
+    /app/.build/package/shared-calendar.war \
     /config/apps/shared-calendar.war
 
 RUN configure.sh

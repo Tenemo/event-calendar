@@ -37,7 +37,7 @@ final class RuntimeSessionConfigurationTest {
     }
 
     @Test
-    void rollingSessionRefreshRunsBeforeCanonicalCalendarRouting() throws Exception {
+    void calendarAdmissionRunsBeforeRollingSessionRefreshAndForwardedRendering() throws Exception {
         DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
         documentBuilderFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
         NodeList filterMappingElements = documentBuilderFactory
@@ -46,19 +46,28 @@ final class RuntimeSessionConfigurationTest {
                 .getElementsByTagName("filter-mapping");
         List<String> filterNames = new ArrayList<>();
         List<String> urlPatterns = new ArrayList<>();
-        List<String> dispatchers = new ArrayList<>();
+        List<List<String>> dispatchers = new ArrayList<>();
         for (int mappingIndex = 0; mappingIndex < filterMappingElements.getLength(); mappingIndex++) {
             Element filterMapping = (Element) filterMappingElements.item(mappingIndex);
             filterNames.add(filterMapping.getElementsByTagName("filter-name").item(0).getTextContent());
             urlPatterns.add(filterMapping.getElementsByTagName("url-pattern").item(0).getTextContent());
-            dispatchers.add(filterMapping.getElementsByTagName("dispatcher").item(0).getTextContent());
+            NodeList dispatcherElements = filterMapping.getElementsByTagName("dispatcher");
+            List<String> mappingDispatchers = new ArrayList<>();
+            for (int dispatcherIndex = 0;
+                    dispatcherIndex < dispatcherElements.getLength();
+                    dispatcherIndex++) {
+                mappingDispatchers.add(dispatcherElements.item(dispatcherIndex).getTextContent());
+            }
+            dispatchers.add(mappingDispatchers);
         }
 
         assertAll(
                 () -> assertEquals(
-                        List.of("Session cookie refresh filter", "Calendar route filter"),
+                        List.of("Calendar route filter", "Session cookie refresh filter"),
                         filterNames),
                 () -> assertEquals(List.of("/*", "/*"), urlPatterns),
-                () -> assertEquals(List.of("REQUEST", "REQUEST"), dispatchers));
+                () -> assertEquals(
+                        List.of(List.of("REQUEST"), List.of("REQUEST", "FORWARD")),
+                        dispatchers));
     }
 }

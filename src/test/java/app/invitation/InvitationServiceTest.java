@@ -92,6 +92,27 @@ final class InvitationServiceTest {
     }
 
     @Test
+    void calendarInvitationCreationRechecksEditorAccessAfterTakingTheCalendarLock() {
+        Calendar calendar = activeCalendar(200L);
+        EntityManagerStub entityManagerStub = entityManagerStub()
+                .singleResult("where invitation.invitationToken", 0L);
+        InvitationService service = service(
+                entityManagerStub,
+                new FixedTokenService("editor-token-abcdefghijklmnopqrstuvwxyz"),
+                new RecordingAuditService());
+        setField(service, "calendarAccessService", new EditAccessRevokedAfterInitialCheckAccessService());
+        setField(service, "calendarService", new FixedCalendarService(calendar));
+
+        AuthorizationException exception = assertThrows(
+                AuthorizationException.class,
+                () -> service.createCalendarEditorInvitation(activeUser(1L, "editor"), calendar.getId()));
+
+        assertAll(
+                () -> assertEquals("Editor access is required.", exception.getMessage()),
+                () -> assertTrue(entityManagerStub.persistedObjects().isEmpty()));
+    }
+
+    @Test
     void registrationInvitationRegistersWithoutGrantingCalendarMembership() {
         Invitation invitation = registrationInvitation(activeUser(1L, "creator"));
         EntityManagerStub entityManagerStub = entityManagerStub()
@@ -124,7 +145,7 @@ final class InvitationServiceTest {
 
         ValidationException exception = assertThrows(
                 ValidationException.class,
-                () -> service.requireRegistrationAdmission(invitation.getInvitationToken()));
+                () -> service.claimRegistrationAdmission(invitation.getInvitationToken()));
 
         assertEquals("Invitation is invalid or no longer available.", exception.getMessage());
     }
@@ -154,9 +175,9 @@ final class InvitationServiceTest {
     }
 
     @Test
-    void blankUsedRevokedExpiredMissingAndMalformedInvitationsCannotRegister() {
-        Invitation usedInvitation = registrationInvitation(activeUser(1L, "creator"));
-        usedInvitation.setAcceptedAt(OffsetDateTime.now(ZoneOffset.UTC));
+    void blankAcceptedRevokedExpiredMissingAndMalformedInvitationsCannotRegister() {
+        Invitation acceptedInvitation = registrationInvitation(activeUser(1L, "creator"));
+        acceptedInvitation.setAcceptedAt(OffsetDateTime.now(ZoneOffset.UTC));
         Invitation revokedInvitation = registrationInvitation(activeUser(1L, "creator"));
         revokedInvitation.setRevokedAt(OffsetDateTime.now(ZoneOffset.UTC));
         Invitation expiredInvitation = registrationInvitation(activeUser(1L, "creator"));
@@ -166,7 +187,7 @@ final class InvitationServiceTest {
 
         assertAll(
                 () -> assertThrows(ValidationException.class, () -> serviceForInvitation(null).requireAdmission("   ")),
-                () -> assertThrows(ValidationException.class, () -> serviceForInvitation(usedInvitation).requireAdmission(usedInvitation.getInvitationToken())),
+                () -> assertThrows(ValidationException.class, () -> serviceForInvitation(acceptedInvitation).requireAdmission(acceptedInvitation.getInvitationToken())),
                 () -> assertThrows(ValidationException.class, () -> serviceForInvitation(revokedInvitation).requireAdmission(revokedInvitation.getInvitationToken())),
                 () -> assertThrows(ValidationException.class, () -> serviceForInvitation(expiredInvitation).requireAdmission(expiredInvitation.getInvitationToken())),
                 () -> assertThrows(ValidationException.class, () -> serviceForInvitation(malformedInvitation).requireAdmission(malformedInvitation.getInvitationToken())),
@@ -179,7 +200,7 @@ final class InvitationServiceTest {
         InvitationService serviceWithoutUsers = serviceForMissingInvitation(false, "bootstrap-token", availableBootstrapState);
         InvitationService serviceWithUsers = serviceForMissingInvitation(true, "bootstrap-token", availableBootstrapState());
 
-        RegistrationAdmission admission = serviceWithoutUsers.requireRegistrationAdmission(" bootstrap-token ");
+        RegistrationAdmission admission = serviceWithoutUsers.claimRegistrationAdmission(" bootstrap-token ");
 
         assertAll(
                 () -> assertTrue(admission.bootstrap()),
@@ -187,7 +208,7 @@ final class InvitationServiceTest {
                 () -> assertEquals(ZoneOffset.UTC, availableBootstrapState.getConsumedAt().getOffset()),
                 () -> assertThrows(
                         ValidationException.class,
-                        () -> serviceWithoutUsers.requireRegistrationAdmission("bootstrap-token")),
+                        () -> serviceWithoutUsers.claimRegistrationAdmission("bootstrap-token")),
                 () -> assertThrows(ValidationException.class, () -> serviceWithUsers.requireAdmission("bootstrap-token")),
                 () -> assertThrows(ValidationException.class, () -> serviceWithoutUsers.requireAdmission("wrong-token")));
     }
@@ -236,19 +257,19 @@ final class InvitationServiceTest {
     }
 
     @Test
-    void creatorsCanRevokeAvailableInvitationsButNotUsedExpiredOrForeignInvitations() {
+    void creatorsCanRevokeAvailableInvitationsButNotAcceptedExpiredOrForeignInvitations() {
         ApplicationUser creator = activeUser(1L, "creator");
-        Invitation unusedInvitation = registrationInvitation(creator);
-        EntityManagerStub unusedInvitationEntityManagerStub = entityManagerStub()
-                .singleResult("where invitation.id", unusedInvitation);
-        InvitationService unusedInvitationService = service(unusedInvitationEntityManagerStub, new FixedTokenService("unused"), new RecordingAuditService());
+        Invitation unacceptedInvitation = registrationInvitation(creator);
+        EntityManagerStub unacceptedInvitationEntityManagerStub = entityManagerStub()
+                .singleResult("where invitation.id", unacceptedInvitation);
+        InvitationService unacceptedInvitationService = service(unacceptedInvitationEntityManagerStub, new FixedTokenService("unused"), new RecordingAuditService());
 
-        unusedInvitationService.revokeInvitation(creator, 1L);
+        unacceptedInvitationService.revokeInvitation(creator, 1L);
 
-        Invitation usedInvitation = registrationInvitation(creator);
-        usedInvitation.setAcceptedAt(OffsetDateTime.now(ZoneOffset.UTC));
-        InvitationService usedInvitationService = service(
-                entityManagerStub().singleResult("where invitation.id", usedInvitation),
+        Invitation acceptedInvitation = registrationInvitation(creator);
+        acceptedInvitation.setAcceptedAt(OffsetDateTime.now(ZoneOffset.UTC));
+        InvitationService acceptedInvitationService = service(
+                entityManagerStub().singleResult("where invitation.id", acceptedInvitation),
                 new FixedTokenService("unused"),
                 new RecordingAuditService());
         Invitation expiredInvitation = registrationInvitation(creator);
@@ -264,13 +285,13 @@ final class InvitationServiceTest {
                 new RecordingAuditService());
 
         assertAll(
-                () -> assertEquals(ZoneOffset.UTC, unusedInvitation.getRevokedAt().getOffset()),
-                () -> assertTrue(unusedInvitationEntityManagerStub.lockedQueryTexts().stream()
+                () -> assertEquals(ZoneOffset.UTC, unacceptedInvitation.getRevokedAt().getOffset()),
+                () -> assertTrue(unacceptedInvitationEntityManagerStub.lockedQueryTexts().stream()
                         .anyMatch(queryText -> queryText.contains("where invitation.id"))),
-                () -> assertTrue(unusedInvitationEntityManagerStub.lockedQueryTexts().stream()
+                () -> assertTrue(unacceptedInvitationEntityManagerStub.lockedQueryTexts().stream()
                         .filter(queryText -> queryText.contains("where invitation.id"))
                         .noneMatch(queryText -> queryText.contains("join fetch"))),
-                () -> assertThrows(ValidationException.class, () -> usedInvitationService.revokeInvitation(creator, 2L)),
+                () -> assertThrows(ValidationException.class, () -> acceptedInvitationService.revokeInvitation(creator, 2L)),
                 () -> assertThrows(ValidationException.class, () -> expiredInvitationService.revokeInvitation(creator, 3L)),
                 () -> assertThrows(AuthorizationException.class, () -> foreignInvitationService.revokeInvitation(creator, 4L)));
     }
@@ -314,19 +335,19 @@ final class InvitationServiceTest {
         ApplicationUser editor = activeUser(1L, "editor");
         ApplicationUser administrator = activeUser(2L, "administrator");
         Invitation editorInvitation = editorInvitation(editor, calendar);
-        Invitation usedInvitation = editorInvitation(editor, calendar);
-        usedInvitation.setAcceptedAt(OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
+        Invitation acceptedInvitation = editorInvitation(editor, calendar);
+        acceptedInvitation.setAcceptedAt(OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
         Invitation revokedInvitation = editorInvitation(editor, calendar);
         revokedInvitation.setRevokedAt(OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
         Invitation expiredInvitation = editorInvitation(editor, calendar);
         expiredInvitation.setExpiresAt(OffsetDateTime.now(ZoneOffset.UTC).minusDays(1));
         List<Invitation> calendarHistory = List.of(
                 editorInvitation,
-                usedInvitation,
+                acceptedInvitation,
                 revokedInvitation,
                 expiredInvitation);
         EntityManagerStub listEntityManagerStub = entityManagerStub()
-                .resultList("where calendarMember.calendar = calendar", calendarHistory);
+                .resultList("where calendarMembership.calendar = calendar", calendarHistory);
         InvitationService listService = service(
                 listEntityManagerStub,
                 new FixedTokenService("unused"),
@@ -338,16 +359,20 @@ final class InvitationServiceTest {
                 InvitationService.MAXIMUM_INVITATIONS_PER_PAGE);
 
         RecordingAuditService auditService = new RecordingAuditService();
+        FixedCalendarService calendarService = new FixedCalendarService(calendar);
         InvitationService revokeService = service(
                 entityManagerStub().singleResult("where invitation.id", editorInvitation),
                 new FixedTokenService("unused"),
                 auditService);
+        setField(revokeService, "calendarService", calendarService);
+        setField(revokeService, "calendarAccessService", new AdminAccessAfterCalendarLockService(calendarService));
         revokeService.revokeInvitation(administrator, editorInvitation.getId());
 
         assertAll(
                 () -> assertEquals(calendarHistory, visibleInvitations),
                 () -> assertFalse(listEntityManagerStub.maximumResultLimitedQueryTexts().isEmpty()),
                 () -> assertEquals(ZoneOffset.UTC, editorInvitation.getRevokedAt().getOffset()),
+                () -> assertEquals(1, calendarService.childMutationLoadCount),
                 () -> assertSame(calendar, auditService.calendar),
                 () -> assertEquals("revoked", auditService.action));
     }
@@ -412,7 +437,9 @@ final class InvitationServiceTest {
         setEntityId(invitation, 300L);
         invitation.setInvitationToken("app-token-abcdefghijklmnopqrstuvwxyz");
         invitation.setCreatedByUser(creator);
-        invitation.setCreatedAt(OffsetDateTime.parse("2026-07-08T12:00:00Z"));
+        OffsetDateTime createdAt = OffsetDateTime.now(ZoneOffset.UTC).minusHours(1);
+        invitation.setCreatedAt(createdAt);
+        invitation.setExpiresAt(createdAt.plusDays(7));
         return invitation;
     }
 
@@ -427,7 +454,7 @@ final class InvitationServiceTest {
         Calendar calendar = new Calendar();
         setEntityId(calendar, id);
         calendar.setName("Kayaking");
-        calendar.setPublicToken("public-token-123456789012345678901234567890");
+        calendar.setCalendarLinkToken("Abc_123-xY0");
         calendar.setPublicAccessEnabled(true);
         calendar.setActive(true);
         return calendar;
@@ -456,7 +483,7 @@ final class InvitationServiceTest {
         private CalendarRole grantedRole;
 
         @Override
-        public Optional<app.membership.CalendarMember> grantMembershipFromAcceptedInvitation(
+        public Optional<app.membership.CalendarMembership> grantMembershipFromAcceptedInvitation(
                 Calendar calendar,
                 ApplicationUser invitationCreator,
                 ApplicationUser user,
@@ -466,13 +493,13 @@ final class InvitationServiceTest {
             grantedCreator = invitationCreator;
             grantedUser = user;
             grantedRole = role;
-            return Optional.of(new app.membership.CalendarMember());
+            return Optional.of(new app.membership.CalendarMembership());
         }
     }
 
     private static final class RejectingMembershipService extends CalendarMembershipService {
         @Override
-        public Optional<app.membership.CalendarMember> grantMembershipFromAcceptedInvitation(
+        public Optional<app.membership.CalendarMembership> grantMembershipFromAcceptedInvitation(
                 Calendar calendar,
                 ApplicationUser invitationCreator,
                 ApplicationUser user,
@@ -511,15 +538,44 @@ final class InvitationServiceTest {
         }
     }
 
+    private static final class EditAccessRevokedAfterInitialCheckAccessService extends CalendarAccessService {
+        private int editChecks;
+
+        @Override
+        public void requireCanEdit(ApplicationUser user, Long calendarId) {
+            editChecks++;
+            if (editChecks > 1) {
+                throw new AuthorizationException("Editor access is required.");
+            }
+        }
+    }
+
+    private static final class AdminAccessAfterCalendarLockService extends CalendarAccessService {
+        private final FixedCalendarService calendarService;
+
+        private AdminAccessAfterCalendarLockService(FixedCalendarService calendarService) {
+            this.calendarService = calendarService;
+        }
+
+        @Override
+        public void requireCanAdminister(ApplicationUser user, Long calendarId) {
+            if (calendarService.childMutationLoadCount == 0) {
+                throw new AssertionError("Admin access was checked before the calendar lock was taken.");
+            }
+        }
+    }
+
     private static final class FixedCalendarService extends CalendarService {
         private final Calendar calendar;
+        private int childMutationLoadCount;
 
         private FixedCalendarService(Calendar calendar) {
             this.calendar = calendar;
         }
 
         @Override
-        public Calendar requireActiveCalendar(Long calendarId) {
+        public Calendar requireActiveCalendarForChildMutation(Long calendarId) {
+            childMutationLoadCount++;
             return calendar;
         }
     }
@@ -532,7 +588,7 @@ final class InvitationServiceTest {
         }
 
         @Override
-        public String generateToken() {
+        public String generateInvitationToken() {
             return token;
         }
     }

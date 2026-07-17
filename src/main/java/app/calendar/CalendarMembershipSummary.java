@@ -5,19 +5,19 @@ import app.membership.CalendarRole;
 public class CalendarMembershipSummary {
     private final Long calendarId;
     private final String calendarName;
-    private final String publicToken;
+    private final String calendarLinkToken;
     private final CalendarRole role;
     private final boolean publicAccessEnabled;
 
     public CalendarMembershipSummary(
             Long calendarId,
             String calendarName,
-            String publicToken,
+            String calendarLinkToken,
             CalendarRole role,
             boolean publicAccessEnabled) {
         this.calendarId = calendarId;
         this.calendarName = calendarName;
-        this.publicToken = publicToken;
+        this.calendarLinkToken = calendarLinkToken;
         this.role = role;
         this.publicAccessEnabled = publicAccessEnabled;
     }
@@ -30,8 +30,8 @@ public class CalendarMembershipSummary {
         return calendarName;
     }
 
-    public String getPublicToken() {
-        return publicToken;
+    public String getCalendarLinkToken() {
+        return calendarLinkToken;
     }
 
     public CalendarRole getRole() {

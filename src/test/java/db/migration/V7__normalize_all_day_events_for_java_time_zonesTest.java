@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 final class V7__normalize_all_day_events_for_java_time_zonesTest {
     @Test
-    void normalizesJavaFixedOffsetTimeZonesWithoutPostgresqlSignReversal() {
+    void normalizesJavaFixedOffsetTimeZonesWithoutPostgreSQLSignReversal() {
         V7__normalize_all_day_events_for_java_time_zones.NormalizedBoundary normalizedBoundary =
                 V7__normalize_all_day_events_for_java_time_zones.normalizeBoundary(
                         OffsetDateTime.parse("2026-07-22T12:00:00+02:00"),
@@ -25,7 +25,7 @@ final class V7__normalize_all_day_events_for_java_time_zonesTest {
     }
 
     @Test
-    void normalizesJavaLegacyAliasesThatPostgresqlDoesNotRecognize() {
+    void normalizesJavaLegacyAliasesThatPostgreSQLDoesNotRecognize() {
         V7__normalize_all_day_events_for_java_time_zones.NormalizedBoundary normalizedBoundary =
                 V7__normalize_all_day_events_for_java_time_zones.normalizeBoundary(
                         OffsetDateTime.parse("2026-07-22T12:00:00-04:00"),

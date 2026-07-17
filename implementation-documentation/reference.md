@@ -197,7 +197,7 @@ src/main/webapp
   login.xhtml
   sign-in-error.xhtml
   register.xhtml
-  public-calendar.xhtml
+  calendar.xhtml
   app
     account-settings.xhtml
     calendars.xhtml
@@ -222,7 +222,7 @@ Jakarta Faces extensionless routing is enabled. User-facing links should prefer 
 Use one canonical calendar URL shape that is easy to share and hard to guess:
 
 ```text
-/{publicToken}
+/{calendarLinkToken}
 ```
 
 The token is exactly 11 characters, produced by encoding eight cryptographically random bytes without Base64 padding. Its first ten characters use `[A-Za-z0-9_-]`; its final character must be one of `AEIMQUYcgkosw048`, the canonical values possible when encoding exactly eight bytes. Reject noncanonical 11-character lookalikes before database access. The one-segment 11-character root namespace is reserved for canonical calendars. Do not expose sequential calendar ids in calendar read URLs. Do not use calendar names or slugs as access secrets. Active editors and admins use this same URL, so the address visible in their browser is exactly the address they share.
