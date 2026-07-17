@@ -1,39 +1,36 @@
 package app.config;
 
-import jakarta.enterprise.context.RequestScoped;
+import jakarta.annotation.PostConstruct;
+import jakarta.ejb.Lock;
+import jakarta.ejb.LockType;
+import jakarta.ejb.Singleton;
+import jakarta.ejb.Startup;
+import jakarta.ejb.TransactionAttribute;
+import jakarta.ejb.TransactionAttributeType;
 import jakarta.faces.context.FacesContext;
 import java.net.URI;
 
-@RequestScoped
+@Singleton
+@Startup
+@Lock(LockType.READ)
+@TransactionAttribute(TransactionAttributeType.NOT_SUPPORTED)
 public class ApplicationUrlService {
     private static final String APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE = "APP_BASE_URL";
 
     private String configuredBaseUrl = System.getenv(APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE);
+
+    @PostConstruct
+    void initialize() {
+        configuredBaseUrl = normalizedConfiguredBaseUrl(configuredBaseUrl);
+    }
 
     public String linkTo(String path) {
         return baseUrl() + normalizedPath(path);
     }
 
     private String baseUrl() {
-        if (configuredBaseUrl != null && !configuredBaseUrl.isBlank()) {
-            String normalizedBaseUrl = removeTrailingSlashes(configuredBaseUrl.trim());
-            try {
-                URI baseUri = URI.create(normalizedBaseUrl);
-                String scheme = baseUri.getScheme();
-                if (!baseUri.isOpaque()
-                        && ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
-                        && baseUri.getHost() != null
-                        && baseUri.getPort() <= 65_535
-                        && !baseUri.getRawAuthority().endsWith(":")
-                        && baseUri.getRawUserInfo() == null
-                        && baseUri.getRawQuery() == null
-                        && baseUri.getRawFragment() == null) {
-                    return normalizedBaseUrl;
-                }
-            } catch (IllegalArgumentException exception) {
-                throw invalidBaseUrlException(exception);
-            }
-            throw invalidBaseUrlException(null);
+        if (configuredBaseUrl != null) {
+            return configuredBaseUrl;
         }
 
         FacesContext facesContext = FacesContext.getCurrentInstance();
@@ -55,6 +52,31 @@ public class ApplicationUrlService {
                 + requestPort(requestScheme, requestPort)
                 + requestContextPath;
         return removeTrailingSlashes(requestBaseUrl);
+    }
+
+    private static String normalizedConfiguredBaseUrl(String configuredBaseUrl) {
+        if (configuredBaseUrl == null || configuredBaseUrl.isBlank()) {
+            return null;
+        }
+
+        String normalizedBaseUrl = removeTrailingSlashes(configuredBaseUrl.trim());
+        try {
+            URI baseUri = URI.create(normalizedBaseUrl);
+            String scheme = baseUri.getScheme();
+            if (!baseUri.isOpaque()
+                    && ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
+                    && baseUri.getHost() != null
+                    && baseUri.getPort() <= 65_535
+                    && !baseUri.getRawAuthority().endsWith(":")
+                    && baseUri.getRawUserInfo() == null
+                    && baseUri.getRawQuery() == null
+                    && baseUri.getRawFragment() == null) {
+                return normalizedBaseUrl;
+            }
+        } catch (IllegalArgumentException exception) {
+            throw invalidBaseUrlException();
+        }
+        throw invalidBaseUrlException();
     }
 
     static boolean isLoopbackHost(String serverName) {
@@ -99,8 +121,8 @@ public class ApplicationUrlService {
         return normalizedValue;
     }
 
-    private static IllegalStateException invalidBaseUrlException(IllegalArgumentException cause) {
+    private static IllegalStateException invalidBaseUrlException() {
         String message = "APP_BASE_URL must be an absolute HTTP or HTTPS URL without credentials, a query, or a fragment.";
-        return cause == null ? new IllegalStateException(message) : new IllegalStateException(message, cause);
+        return new IllegalStateException(message);
     }
 }

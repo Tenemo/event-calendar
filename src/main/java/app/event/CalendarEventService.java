@@ -9,6 +9,7 @@ import app.user.ApplicationUser;
 import app.util.AuthorizationException;
 import app.util.ConflictException;
 import app.util.NotFoundException;
+import app.util.TextNormalizer;
 import app.util.ValidationException;
 import jakarta.ejb.Stateless;
 import jakarta.inject.Inject;
@@ -62,12 +63,12 @@ public class CalendarEventService {
             Integer expectedCalendarVersion,
             String expectedCalendarTimeZone) {
         calendarAccessService.requireCanEdit(actingUser, calendarId);
-        String normalizedTitle = normalizeRequiredText(
+        String normalizedTitle = TextNormalizer.normalizeRequiredText(
                 title,
                 "Event title is required.",
                 MAXIMUM_EVENT_TITLE_LENGTH,
                 "Event title must be 200 characters or fewer.");
-        String normalizedLocation = normalizeOptionalText(
+        String normalizedLocation = TextNormalizer.normalizeOptionalText(
                 location,
                 MAXIMUM_EVENT_LOCATION_LENGTH,
                 "Event location must be 200 characters or fewer.");
@@ -80,7 +81,7 @@ public class CalendarEventService {
         CalendarEvent event = new CalendarEvent();
         event.setCalendar(calendar);
         event.setTitle(normalizedTitle);
-        event.setDescription(normalizeOptionalText(description));
+        event.setDescription(TextNormalizer.normalizeOptionalText(description));
         event.setLocation(normalizedLocation);
         event.setStartTime(normalizedTimeRange.startTime());
         event.setEndTime(normalizedTimeRange.endTime());
@@ -106,12 +107,12 @@ public class CalendarEventService {
             Integer expectedCalendarVersion,
             String expectedCalendarTimeZone) {
         CalendarEvent event = requireEditableEvent(actingUser, eventId);
-        String normalizedTitle = normalizeRequiredText(
+        String normalizedTitle = TextNormalizer.normalizeRequiredText(
                 title,
                 "Event title is required.",
                 MAXIMUM_EVENT_TITLE_LENGTH,
                 "Event title must be 200 characters or fewer.");
-        String normalizedLocation = normalizeOptionalText(
+        String normalizedLocation = TextNormalizer.normalizeOptionalText(
                 location,
                 MAXIMUM_EVENT_LOCATION_LENGTH,
                 "Event location must be 200 characters or fewer.");
@@ -122,7 +123,7 @@ public class CalendarEventService {
         EventTimeRange normalizedTimeRange = normalizeEventTimes(calendar, eventTimeInput);
 
         event.setTitle(normalizedTitle);
-        event.setDescription(normalizeOptionalText(description));
+        event.setDescription(TextNormalizer.normalizeOptionalText(description));
         event.setLocation(normalizedLocation);
         event.setStartTime(normalizedTimeRange.startTime());
         event.setEndTime(normalizedTimeRange.endTime());
@@ -197,17 +198,6 @@ public class CalendarEventService {
         }
     }
 
-    private String normalizeRequiredText(String value, String blankMessage, int maximumLength, String lengthMessage) {
-        if (value == null || value.isBlank()) {
-            throw new ValidationException(blankMessage);
-        }
-        String normalizedValue = value.trim();
-        if (normalizedValue.length() > maximumLength) {
-            throw new ValidationException(lengthMessage);
-        }
-        return normalizedValue;
-    }
-
     private List<CalendarEvent> findEvents(Long calendarId) {
         return entityManager
                 .createQuery(
@@ -258,21 +248,6 @@ public class CalendarEventService {
     private ConflictException calendarConflictException() {
         return new ConflictException(
                 "This calendar changed after you opened the event form. Reload the page and try again.");
-    }
-
-    private String normalizeOptionalText(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return value.trim();
-    }
-
-    private String normalizeOptionalText(String value, int maximumLength, String lengthMessage) {
-        String normalizedValue = normalizeOptionalText(value);
-        if (normalizedValue != null && normalizedValue.length() > maximumLength) {
-            throw new ValidationException(lengthMessage);
-        }
-        return normalizedValue;
     }
 
     private record EventTimeRange(OffsetDateTime startTime, OffsetDateTime endTime) {

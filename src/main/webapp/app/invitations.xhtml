@@ -33,8 +33,7 @@
                         <h:selectOneMenu id="calendar"
                                          value="#{invitationView.selectedCalendarId}"
                                          required="true"
-                                         requiredMessage="Calendar is required."
-                                         styleClass="ui-inputfield ui-widget ui-state-default ui-corner-all">
+                                         requiredMessage="Calendar is required.">
                             <f:selectItem itemLabel="Select calendar" noSelectionOption="true"/>
                             <f:selectItems value="#{invitationView.editableCalendars}"
                                            var="calendar"
@@ -59,13 +58,14 @@
                 <div class="copy-control">
                     <p:inputText id="generatedInvitationLink"
                                  value="#{invitationView.generatedInvitationLink}"
+                                 pt:aria-describedby="generatedInvitationHelp"
                                  readonly="true"/>
                     <button type="button"
                             class="button-link secondary-link"
                             onclick="copyInvitationLink(this); return false;">Copy generated link</button>
                     <p class="copy-status" role="status" aria-live="polite"></p>
                 </div>
-                <p class="field-help">You can also select the link and copy it manually.</p>
+                <p id="generatedInvitationHelp" class="field-help">You can also select the link and copy it manually.</p>
             </h:panelGroup>
 
             <div class="table-scroll-region" role="region" aria-label="Invitations table" tabindex="0">

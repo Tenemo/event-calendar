@@ -21,7 +21,7 @@ Use these decisions unless the repository owner explicitly changes them later.
 | Database                     | Dockerized PostgreSQL for local development, Railway PostgreSQL for production                               |
 | Migrations                   | Flyway                                                                                                       |
 | Auth                         | Username/password with invitation-only registration, signed-in password change, source-aware login throttling, no OAuth/SSO |
-| Calendar access              | Root `/{calendarToken}` read-only bearer links plus authenticated editor/admin roles                         |
+| Calendar access              | Root `/{calendarLinkToken}` read-only bearer links plus authenticated editor/admin roles                     |
 | Calendar roles               | `EDITOR`, `ADMIN`, scoped to one calendar                                                                    |
 | Deployment                   | Dockerfile to Railway first                                                                                  |
 | Frontend hosting             | None; do not use Netlify for the app UI                                                                      |
@@ -79,8 +79,8 @@ Each implementation phase must leave the repository runnable and verified. The p
 | Milestone                         | Outcome                                                                                                                | Includes                                                                                                                                                             |
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | M0: project foundation            | A reproducible Jakarta EE web app that builds and starts locally                                                       | Repository skeleton, Maven wrapper, `mise`, Docker Compose PostgreSQL, Open Liberty config, health endpoint, placeholder JSF/PrimeFaces pages, flat responsive shell |
-| M1: persistence and security core | Database-backed registration, login, password change, calendars, memberships, public tokens, invitations, and audit foundation | Flyway migrations, JPA entities, Jakarta Security password hashing, session revocation, registration, calendar-level authorization, focused tests |
-| M2: calendar and account workflows | One canonical calendar view, account settings, event CRUD, calendar creation, invite links, and member management     | PrimeFaces calendar and account UI, bearer-link reads, role-aware event actions, settings, invite acceptance, audit logging, manual role checks |
+| M1: persistence and security core | Database-backed registration, sign-in, password change, calendars, memberships, calendar-link tokens, invitations, and audit foundation | Flyway migrations, JPA entities, Jakarta Security password hashing, session revocation, registration, calendar-level authorization, focused tests |
+| M2: calendar and account workflows | One canonical calendar view, account settings, event CRUD, calendar creation, invitation links, and member management     | PrimeFaces calendar and account UI, bearer-link reads, role-aware event actions, settings, invitation acceptance, audit logging, manual role checks |
 | M3: production readiness          | The app is packaged, deployable, and recoverable                                                                       | Docker production image, local Docker runtime test, Railway deployment, custom domain, Dockerized backup/restore, README runbook                                     |
 
 ## 2. Product scope
@@ -90,7 +90,7 @@ Each implementation phase must leave the repository runnable and verified. The p
 The first deployed version must include:
 
 1. Invitation-only registration with username/password.
-2. Login and logout.
+2. Sign-in and sign-out.
 3. Jakarta Security password hashes stored in PostgreSQL.
 4. Signed-in users can reset/change their own password after confirming their current password.
 5. Registered users can create calendars.
@@ -107,7 +107,7 @@ The first deployed version must include:
 16. View events on the same canonical calendar page, with member actions determined by server-enforced membership.
 17. Create, edit, and delete events as calendar editor/admin.
 18. Calendar settings and member management for calendar admins.
-19. Audit log for account password, calendar, invite, member, and event changes.
+19. Audit log for account password, calendar, invitation, member, and event changes.
 20. Flyway-managed schema.
 21. Database-aware health endpoint.
 22. Login throttling.
@@ -120,7 +120,7 @@ Final v1 invariants:
 
 1. App-only and calendar-editor invitations expire exactly seven days after creation, cannot be issued with a longer lifetime, are capped by the database, and are serialized during acceptance.
 2. Every invitation becomes invalid when its creator's account becomes inactive. Calendar invitations grant only `EDITOR`, also become invalid when their creator loses edit permission, and can be listed and revoked by calendar admins.
-3. `/{calendarToken}` is the one canonical URL for members and anonymous readers. The token is exactly 11 unpadded Base64URL characters and there is no `/calendar/` prefix. Public access can be disabled without changing that URL, and regeneration invalidates the previous URL immediately for everyone.
+3. `/{calendarLinkToken}` is the one canonical URL for members and anonymous readers. The token is exactly 11 unpadded Base64URL characters and there is no `/calendar/` prefix. Public access can be disabled without changing that URL, and regeneration invalidates the previous URL immediately for everyone.
 4. Bootstrap admission is claimed in the account-creation transaction, rolls back with a failed registration, and is permanently consumed after the first successful account.
 5. All-day UI dates are inclusive while storage ends at the exclusive start of the following calendar-local day. Services receive civil dates directly, use the calendar's Java time-zone rules, and reject stale event forms after a concurrent calendar-settings change.
 6. Anonymous sessions are non-persistent and expire after 30 minutes of inactivity. Successful authentication extends that session to a rolling 30 days, while in-memory sessions require reauthentication after restart or redeploy.
@@ -131,7 +131,7 @@ Final v1 invariants:
 
 Do not build these in the first version:
 
-1. OAuth, SSO, Google login, Microsoft login, or external identity providers.
+1. OAuth, SSO, Google sign-in, Microsoft sign-in, or external identity providers.
 2. Netlify-hosted frontend.
 3. React/Vue/Angular/Svelte frontend.
 4. REST API-first architecture.
@@ -213,9 +213,9 @@ src/main/webapp
       app.css
 ```
 
-The canonical `/{calendarToken}` route must be reachable without authentication. It renders read-only content to nonmembers while public access is enabled and member controls to active editors and admins. Authenticated app routes under `/app/*` require login. Account password changes are enforced in the user service, while calendar mutation and member management are enforced in services with calendar-specific authorization.
+The canonical `/{calendarLinkToken}` route must be reachable without authentication. It renders read-only content to nonmembers while public access is enabled and member controls to active editors and admins. Authenticated app routes under `/app/*` require sign-in. Account password changes are enforced in the user service, while calendar mutation and member management are enforced in services with calendar-specific authorization.
 
-Jakarta Faces extensionless routing is enabled. User-facing links should prefer clean paths such as `/login`, `/register`, `/app/calendars`, `/app/account-settings`, `/{calendarToken}`, `/app/calendar-members`, `/app/calendar-settings`, and `/app/invitations`; `.xhtml` remains an implementation file suffix, not the canonical browser route.
+Jakarta Faces extensionless routing is enabled. User-facing links should prefer clean paths such as `/login`, `/register`, `/app/calendars`, `/app/account-settings`, `/{calendarLinkToken}`, `/app/calendar-members`, `/app/calendar-settings`, and `/app/invitations`; `.xhtml` remains an implementation file suffix, not the canonical browser route.
 
 ### 3.3 URL model
 
@@ -236,7 +236,7 @@ Reject any path that does not match the exact canonical shape before database ac
 3. The PostgreSQL driver must be available to Liberty as a server resource. Downloaded drivers and generated Liberty state belong under ignored build output.
 4. Flyway owns every schema change and runs before the application accepts traffic. Jakarta Persistence schema generation remains disabled.
 5. Persistence code must remain provider-neutral and use the Jakarta Persistence XML schema supported by the runtime.
-6. The schema contains users, permanent registration-bootstrap state, calendars, calendar memberships, unified invitations, events, and audit records. Calendar public tokens are unique and constrained to the canonical 11-character format. The user record contains a monotonically increasing password version used to revoke older authenticated sessions.
+6. The schema contains users, permanent registration-bootstrap state, calendars, calendar memberships, unified invitations, events, and audit records. Calendar-link tokens are unique and constrained to the canonical 11-character format. The user record contains a monotonically increasing password version used to revoke older authenticated sessions.
 7. Calendars and events use optimistic versions for user-facing edit conflicts. Invitation admission, bootstrap admission, membership creation, and password replacement use database serialization where concurrent requests would otherwise violate a single-use or identity invariant.
 8. Timed values persist as offset-aware instants. All-day values persist as calendar-zone-derived start-inclusive and end-exclusive instants.
 9. Database migrations, entities, service rules, and restore tooling must agree on the same schema. Application startup must fail when migrations fail.
@@ -255,11 +255,11 @@ Registration requirements:
 6. Create the user's initial calendar, grant that user `ADMIN`, apply any calendar-editor invitation, consume the invitation, and record non-secret audit details in the same logical workflow.
 7. Authenticate the new account when possible, rotate the pre-authentication session identifier, and bind the current database password version to the authenticated session.
 
-Login and session requirements:
+Sign-in and session requirements:
 
 1. Return the same sign-in failure for missing, inactive, and incorrectly authenticated accounts.
 2. Perform a real password-hash verification for existing accounts and a fixed dummy-hash verification for missing accounts.
-3. Track failures by normalized username and client source. Five failures for one username/source pair in 15 minutes block that pair for 15 minutes; 25 source-wide failures in the same window block that source for 15 minutes. On Railway, resolve the source from the platform-controlled leftmost `X-Forwarded-For` address only when `RAILWAY_ENVIRONMENT_ID` is present; elsewhere ignore forwarded addresses and use the direct TCP peer.
+3. Track failures by normalized username and client source. Five failures for one username/source pair in 15 minutes block that pair for 15 minutes; 25 source-wide failures in the same window block that source for 15 minutes. On Railway, resolve the source from the platform-controlled `X-Real-IP` address only when `RAILWAY_ENVIRONMENT_ID` is present and the direct TCP peer is in Railway's `100.0.0.0/8` proxy range; elsewhere ignore forwarded addresses and use the direct TCP peer.
 4. Rotate the session identifier after authentication and bind the user's current password version to the session.
 5. Keep anonymous cookies non-persistent with a 30-minute server-side inactivity timeout. Only after successful authentication, set the server-side timeout to 30 days and refresh authenticated application and canonical-calendar cookies with a rolling 30-day lifetime.
 6. Compare the session's password version with the active user record before protected application or canonical-calendar processing. A mismatch invalidates the session before the request reaches a backing bean or service.
@@ -294,7 +294,7 @@ Application authentication answers "who is signed in." Calendar authorization an
 11. Invitation creators may revoke unused links, and calendar admins may list and revoke unused editor invitations for calendars they administer.
 12. Revalidate the creator's current edit permission during editor-invitation acceptance and serialize acceptance so exactly one account can consume a link.
 13. UI controls may hide unavailable actions, but services must enforce membership and role checks.
-14. Calendar and invite tokens are bearer secrets; calendar tokens contain exactly 64 random bits while invitation tokens retain 256 random bits. Never log either token type, and support calendar URL regeneration and invitation revocation.
+14. Calendar-link and invitation tokens are bearer secrets; calendar-link tokens contain exactly 64 random bits while invitation tokens retain 256 random bits. Never log either token type, and support calendar URL regeneration and invitation revocation.
 
 ## 5. Security checklist
 
@@ -305,8 +305,8 @@ Before first real use:
 3. Confirm nonmember access to canonical calendar pages is read-only.
 4. Confirm canonical calendar pages include `noindex`.
 5. Confirm calendar links use exactly 64 cryptographically random bits encoded as 11 unpadded Base64URL characters at the root, never database ids, names, or slugs.
-6. Confirm invite links use random UUID or stronger tokens, expire after seven days, become invalid when their creator is inactive, and can be revoked by their creator or the relevant calendar admin.
-7. Confirm `/app/*` requires login and that exact `/{calendarToken}` routes expose member actions only after service-enforced membership checks.
+6. Confirm invitation links use random UUID or stronger tokens, expire after seven days, become invalid when their creator is inactive, and can be revoked by their creator or the relevant calendar admin.
+7. Confirm `/app/*` requires sign-in and that exact `/{calendarLinkToken}` routes expose member actions only after service-enforced membership checks.
 8. Confirm service methods enforce calendar membership for every mutation.
 9. Confirm public visitors cannot mutate events.
 10. Confirm signed-in nonmembers cannot mutate events through a bearer link.
@@ -315,7 +315,7 @@ Before first real use:
 13. Confirm cookies are HttpOnly.
 14. Confirm production cookies are Secure.
 15. Confirm URL rewriting is disabled.
-16. Do not log passwords, calendar tokens, invite tokens, or full database URLs with credentials.
+16. Do not log passwords, calendar-link tokens, invitation tokens, or full database URLs with credentials.
 17. Do not log app invitation tokens.
 18. Keep one app instance unless session handling is reviewed.
 19. Throttle repeated login failures by normalized username and client source without revealing whether an account exists or allowing one source to lock out other sources.
@@ -371,7 +371,7 @@ The app should feel modern, flat, sleek, and practical:
 
 1. The shared template provides the document title, stylesheet, messages, brand, primary navigation, sign-in state, sign-out action, skip link, and main content region without duplicating page chrome.
 2. Registration collects invitation token, username, display name, password, and initial calendar name, and shows generic user-readable admission failures.
-3. Login collects username and password, preserves an invitation continuation when present, and never identifies which credential was wrong.
+3. The sign-in page collects username and password, preserves an invitation continuation when present, and never identifies which credential was wrong.
 4. Account settings identifies the signed-in account, explains that success signs every session out, and collects current password, new password, and confirmation with correct browser autocomplete attributes.
 5. The calendar list shows every active membership, its role, a direct canonical-calendar link, and calendar creation.
 6. The canonical calendar page loads by bearer token, always includes `noindex, nofollow`, renders events in the calendar time zone, and adds event and link-regeneration controls only for active editors and admins.
@@ -387,8 +387,8 @@ Minimum automated tests:
 1. Password policy validation.
 2. Invitation-only registration validation.
 3. Calendar creation grants the creator `ADMIN`.
-4. Calendar token generation produces unique 11-character unpadded Base64URL values from eight random bytes and is not derived from sequential ids; invitation tokens remain 43 characters from 32 random bytes.
-5. Invite token acceptance assigns the intended calendar role.
+4. Calendar-link token generation produces unique 11-character unpadded Base64URL values from eight random bytes and is not derived from sequential ids; invitation tokens remain 43 characters from 32 random bytes.
+5. Invitation token acceptance assigns the intended calendar role.
 6. Event title validation.
 7. Event time validation.
 8. Calendar access checks for anonymous readers, signed-in nonmembers, removed editors, active editors, and admins.
@@ -416,7 +416,7 @@ Manual acceptance checks before deployment and after deployment:
 | Signed-in user creates app invitation      | Single-use account link is generated                      |
 | New user registers with app invitation     | Account is created                                        |
 | Registered user creates calendar           | User becomes calendar admin                               |
-| Calendar editor creates editor invitation  | Invite link is generated                                  |
+| Calendar editor creates editor invitation  | Invitation link is generated                              |
 | Invitee accepts editor invitation          | Invitee can edit that calendar                            |
 | Removed editor uses a previously created invitation | Rejected                                         |
 | Two users concurrently accept one invitation | Exactly one acceptance succeeds                         |
@@ -458,7 +458,7 @@ Production packaging and deployment requirements:
 
 1. Build the WAR in a disposable Java 25 stage and run it in the pinned Open Liberty Java 25 image without Maven or application source in the runtime stage.
 2. Copy only Liberty configuration, declared server features, the Maven-managed PostgreSQL driver, and the WAR into the runtime image. Never bake environment secrets or private planning material into the image.
-3. Emit structured Liberty logs to standard output and standard error without passwords, database URLs containing credentials, calendar tokens, invitation tokens, or session identifiers.
+3. Emit structured Liberty logs to standard output and standard error without passwords, database URLs containing credentials, calendar-link tokens, invitation tokens, or session identifiers.
 4. Keep Railway build, start, restart, and deployment-health configuration in repository-owned configuration-as-code where Railway supports it.
 5. Deploy production from pushes or merges to `master`; do not create preview deployments or deploy from pull-request workflows.
 6. Use Railway's injected `PORT`, private PostgreSQL service references, persistent PostgreSQL storage, managed HTTPS, and the `calendar.social` custom domain.
@@ -520,12 +520,12 @@ The local agent is done only when all of these are true:
 3. `mise run dev` starts the app locally.
 4. `/health` returns `200 ok` locally.
 5. Users can register.
-6. Users can log in.
+6. Users can sign in.
 7. Signed-in users can change their password and every older session is invalidated.
 8. Registered users can create calendars.
 9. Calendar creators become calendar admins.
 10. Public calendar links work read-only.
-11. Calendar invite links grant editor access only; read-only sharing uses public links.
+11. Calendar invitation links grant editor access only; read-only sharing uses public links.
 12. Calendar role behavior works.
 13. Event CRUD works for editor/admin and is rejected for anonymous readers and signed-in nonmembers.
 14. Calendar member management works for calendar admins.

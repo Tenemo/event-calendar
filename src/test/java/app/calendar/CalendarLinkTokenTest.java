@@ -46,7 +46,7 @@ final class CalendarLinkTokenTest {
     }
 
     @Test
-    void rootFaceletRoutesDoNotCollideWithTheCalendarTokenNamespace() throws IOException {
+    void rootFaceletRoutesDoNotCollideWithTheCalendarLinkTokenNamespace() throws IOException {
         Path webApplicationRoot = Path.of("src", "main", "webapp");
 
         try (var rootEntries = Files.list(webApplicationRoot)) {
@@ -55,7 +55,7 @@ final class CalendarLinkTokenTest {
                     .map(path -> path.getFileName().toString().replaceFirst("\\.xhtml$", ""))
                     .forEach(routeName -> assertFalse(
                             CalendarLinkToken.isValid(routeName),
-                            () -> "Root route /" + routeName + " collides with canonical calendar tokens."));
+                            () -> "Root route /" + routeName + " collides with canonical calendar-link tokens."));
         }
     }
 

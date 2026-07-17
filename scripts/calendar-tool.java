@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -523,7 +524,7 @@ final class CalendarTool {
     }
 
     private static Path defaultBackupPath() {
-        String timestamp = BACKUP_TIMESTAMP_FORMAT.format(java.time.Instant.now());
+        String timestamp = BACKUP_TIMESTAMP_FORMAT.format(Instant.now());
         return PROJECT_DIRECTORY.resolve("target/backups/shared-calendar-" + timestamp + ".dump");
     }
 
@@ -554,7 +555,7 @@ final class CalendarTool {
             throw new IllegalStateException("PGPASSWORD is required for remote backup and restore.");
         }
 
-        java.util.HashMap<String, String> environment = new java.util.HashMap<>();
+        HashMap<String, String> environment = new HashMap<>();
         environment.put(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE, password);
         String sslMode = System.getenv(POSTGRESQL_SSL_MODE_ENVIRONMENT_VARIABLE);
         if (sslMode != null && !sslMode.isBlank()) {

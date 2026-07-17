@@ -276,27 +276,27 @@ final class CalendarServiceTest {
                         false,
                         settingsCalendar.getVersion()));
 
-        Calendar tokenCalendar = activeCalendar(81L, actingUser);
-        CalendarService tokenService = configuredSettingsService(
-                entityManagerStub().find(Calendar.class, tokenCalendar.getId(), tokenCalendar));
-        setField(tokenService, "calendarAccessService", new EditAccessRevokedAfterInitialCheckAccessService());
+        Calendar calendarLinkCalendar = activeCalendar(81L, actingUser);
+        CalendarService calendarLinkService = configuredSettingsService(
+                entityManagerStub().find(Calendar.class, calendarLinkCalendar.getId(), calendarLinkCalendar));
+        setField(calendarLinkService, "calendarAccessService", new EditAccessRevokedAfterInitialCheckAccessService());
 
-        AuthorizationException tokenException = assertThrows(
+        AuthorizationException calendarLinkException = assertThrows(
                 AuthorizationException.class,
-                () -> tokenService.regenerateCalendarLink(
+                () -> calendarLinkService.regenerateCalendarLink(
                         actingUser,
-                        tokenCalendar.getId(),
-                        tokenCalendar.getVersion()));
+                        calendarLinkCalendar.getId(),
+                        calendarLinkCalendar.getVersion()));
 
         assertAll(
                 () -> assertEquals("Admin access is required.", settingsException.getMessage()),
-                () -> assertEquals("Editor access is required.", tokenException.getMessage()),
+                () -> assertEquals("Editor access is required.", calendarLinkException.getMessage()),
                 () -> assertEquals("Kayaking", settingsCalendar.getName()),
                 () -> assertEquals("Europe/Warsaw", settingsCalendar.getTimeZone()),
                 () -> assertTrue(settingsCalendar.isPublicAccessEnabled()),
                 () -> assertEquals(
                         "Abc_123-xY0",
-                        tokenCalendar.getCalendarLinkToken()));
+                        calendarLinkCalendar.getCalendarLinkToken()));
     }
 
     @Test

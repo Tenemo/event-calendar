@@ -60,7 +60,7 @@ Copy `.env.example` to `.env` for local development. Do not commit `.env`.
 
 `APP_TIMEZONE` must be an identifier supported by Java's IANA time-zone database. Invalid values stop application startup.
 
-`APP_BASE_URL` must be an absolute HTTP or HTTPS URL without credentials, query parameters, or a fragment. Request-derived links are accepted only on loopback development hosts; production requires an explicit value.
+`APP_BASE_URL` must be an absolute HTTP or HTTPS URL without credentials, query parameters, or a fragment. A malformed configured value stops application startup. Request-derived links are accepted only on loopback development hosts; production requires an explicit value.
 
 `PGSSLMODE` is used only by the Dockerized PostgreSQL backup client. Set it to the mode required by the remote database, normally `require` for a public production endpoint.
 

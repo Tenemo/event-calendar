@@ -76,12 +76,7 @@ public class ClientRequestSourceResolver {
                     || !addressPart.chars().allMatch(Character::isDigit)) {
                 return Optional.empty();
             }
-            int numericAddressPart;
-            try {
-                numericAddressPart = Integer.parseInt(addressPart);
-            } catch (NumberFormatException exception) {
-                return Optional.empty();
-            }
+            int numericAddressPart = Integer.parseInt(addressPart);
             if (numericAddressPart > 255) {
                 return Optional.empty();
             }

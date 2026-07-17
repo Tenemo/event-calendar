@@ -13,8 +13,8 @@
 
     <ui:define name="content">
         <section class="narrow-section">
-            <h:panelGroup rendered="#{registrationView.signedIn}"><h1 id="acceptInvitationHeading">Accept invitation</h1></h:panelGroup>
-            <h:panelGroup rendered="#{not registrationView.signedIn}"><h1 id="createAccountHeading">Create your calendar</h1></h:panelGroup>
+            <h:panelGroup layout="block" rendered="#{registrationView.signedIn}"><h1 id="acceptInvitationHeading">Accept invitation</h1></h:panelGroup>
+            <h:panelGroup layout="block" rendered="#{not registrationView.signedIn}"><h1 id="createAccountHeading">Create your calendar</h1></h:panelGroup>
             <p:panel
                      styleClass="surface-panel form-panel"
                      pt:aria-labelledby="acceptInvitationHeading"
@@ -75,7 +75,7 @@
                     Already registered?
                     <h:outputLink value="#{request.contextPath}/login">
                         Sign in to accept
-                        <f:param name="invite" value="#{registrationView.invitationToken}"/>
+                        <f:param name="token" value="#{registrationView.invitationToken}"/>
                     </h:outputLink>
                 </p>
             </p:panel>

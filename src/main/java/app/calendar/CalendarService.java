@@ -10,6 +10,7 @@ import app.security.TokenService;
 import app.user.ApplicationUser;
 import app.util.ConflictException;
 import app.util.NotFoundException;
+import app.util.TextNormalizer;
 import app.util.ValidationException;
 import jakarta.ejb.Stateless;
 import jakarta.inject.Inject;
@@ -51,7 +52,7 @@ public class CalendarService {
             throw new ValidationException("An active user is required to create a calendar.");
         }
 
-        String normalizedName = normalizeRequiredText(
+        String normalizedName = TextNormalizer.normalizeRequiredText(
                 name,
                 "Calendar name is required.",
                 MAXIMUM_CALENDAR_NAME_LENGTH,
@@ -156,13 +157,13 @@ public class CalendarService {
         Calendar calendar = requireActiveCalendar(calendarId, LockModeType.PESSIMISTIC_WRITE);
         calendarAccessService.requireCanAdminister(actingUser, calendarId);
         requireExpectedVersion(calendar, expectedVersion);
-        calendar.setName(normalizeRequiredText(
+        calendar.setName(TextNormalizer.normalizeRequiredText(
                 name,
                 "Calendar name is required.",
                 MAXIMUM_CALENDAR_NAME_LENGTH,
                 "Calendar name must be 160 characters or fewer."));
-        calendar.setDescription(normalizeOptionalText(description));
-        String normalizedTimeZone = normalizeRequiredText(
+        calendar.setDescription(TextNormalizer.normalizeOptionalText(description));
+        String normalizedTimeZone = TextNormalizer.normalizeRequiredText(
                 timeZone,
                 "Time zone is required.",
                 MAXIMUM_TIME_ZONE_LENGTH,
@@ -247,21 +248,4 @@ public class CalendarService {
         throw new IllegalStateException("Could not generate a unique calendar link token.");
     }
 
-    private String normalizeRequiredText(String value, String blankMessage, int maximumLength, String lengthMessage) {
-        if (value == null || value.isBlank()) {
-            throw new ValidationException(blankMessage);
-        }
-        String normalizedValue = value.trim();
-        if (normalizedValue.length() > maximumLength) {
-            throw new ValidationException(lengthMessage);
-        }
-        return normalizedValue;
-    }
-
-    private String normalizeOptionalText(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return value.trim();
-    }
 }

@@ -3,8 +3,8 @@ package app.security;
 import app.util.ValidationException;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Named;
 import jakarta.inject.Inject;
+import jakarta.inject.Named;
 import jakarta.security.enterprise.identitystore.Pbkdf2PasswordHash;
 import java.util.Arrays;
 import java.util.Map;
@@ -28,13 +28,8 @@ public class PasswordService {
     @Inject
     private Pbkdf2PasswordHash passwordHash;
 
-    private boolean passwordHashInitialized;
-
     @PostConstruct
-    synchronized void initializePasswordHash() {
-        if (passwordHashInitialized) {
-            return;
-        }
+    void initializePasswordHash() {
         if (passwordHash == null) {
             throw new IllegalStateException("Jakarta Security password hash is unavailable.");
         }
@@ -44,7 +39,6 @@ public class PasswordService {
                 "Pbkdf2PasswordHash.Iterations", Integer.toString(PASSWORD_HASH_ITERATIONS),
                 "Pbkdf2PasswordHash.SaltSizeBytes", Integer.toString(PASSWORD_HASH_SALT_BYTES),
                 "Pbkdf2PasswordHash.KeySizeBytes", Integer.toString(PASSWORD_HASH_KEY_BYTES)));
-        passwordHashInitialized = true;
     }
 
     public int getMaximumPasswordLength() {
@@ -77,7 +71,7 @@ public class PasswordService {
         validatePasswordPolicy(username, password);
         char[] passwordCharacters = password.toCharArray();
         try {
-            return configuredPasswordHash().generate(passwordCharacters);
+            return passwordHash.generate(passwordCharacters);
         } finally {
             Arrays.fill(passwordCharacters, '\0');
         }
@@ -105,16 +99,9 @@ public class PasswordService {
 
     private boolean verifyJakartaSecurityPasswordHash(char[] passwordCharacters, String storedHash) {
         try {
-            return configuredPasswordHash().verify(passwordCharacters, storedHash);
+            return passwordHash.verify(passwordCharacters, storedHash);
         } catch (IllegalArgumentException exception) {
             return false;
         }
-    }
-
-    private Pbkdf2PasswordHash configuredPasswordHash() {
-        if (!passwordHashInitialized) {
-            initializePasswordHash();
-        }
-        return passwordHash;
     }
 }

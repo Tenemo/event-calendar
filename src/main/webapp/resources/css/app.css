@@ -138,16 +138,32 @@ a:focus-visible,
 .link-button:focus-visible,
 .button-link:focus-visible,
 body .ui-button:focus-visible,
-.ui-inputfield:focus-visible,
-select:focus-visible,
-.ui-selectonemenu.ui-state-focus,
+body .ui-button.ui-state-focus,
+body .ui-inputfield.ui-state-focus,
+body select:focus-visible,
 body .ui-chkbox:focus-within .ui-chkbox-box,
 body .ui-chkbox .ui-chkbox-box.ui-state-focus,
 body .ui-dialog .ui-button:focus,
-body .ui-confirm-dialog .ui-button:focus,
+body .ui-datepicker .ui-datepicker-next:focus,
+body .ui-datepicker .ui-datepicker-prev:focus,
+body .ui-datepicker .ui-datepicker-calendar td > a:focus,
+body .ui-datepicker .ui-datepicker-calendar td > span:focus,
+body .ui-datepicker .ui-timepicker-timeinput input:focus,
+body .ui-datepicker .ui-datepicker-buttonpane button.ui-state-focus,
+body .ui-datepicker .ui-datepicker-buttonbar button.ui-state-focus,
+body .ui-datepicker .ui-monthpicker-month:focus,
+body .ui-datepicker .ui-picker-up:focus,
+body .ui-datepicker .ui-picker-down:focus,
+body .ui-paginator .ui-paginator-first.ui-state-focus,
+body .ui-paginator .ui-paginator-prev.ui-state-focus,
+body .ui-paginator .ui-paginator-next.ui-state-focus,
+body .ui-paginator .ui-paginator-last.ui-state-focus,
+body .ui-paginator .ui-paginator-pages .ui-paginator-page.ui-state-focus,
+body .ui-messages .ui-messages-close:focus,
 .table-scroll-region:focus-visible {
     outline: 3px solid var(--focus-ring);
     outline-offset: 3px;
+    box-shadow: none;
 }
 
 :target,
@@ -192,6 +208,14 @@ button,
 .narrow-section {
     max-width: 500px;
     margin: 0 auto;
+}
+
+.narrow-section h1 {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: 0;
+    line-height: 1.1;
 }
 
 .section-header,
@@ -355,7 +379,7 @@ button,
 }
 
 .month-grid .has-event {
-    border-color: rgba(37, 99, 235, 0.35);
+    border-color: var(--primary);
     background: var(--primary-soft);
     color: var(--primary-strong);
 }
@@ -493,7 +517,6 @@ button,
     width: 0.6rem;
     height: 0.6rem;
     border-radius: 50%;
-    background: #9ca3af;
 }
 
 .status-dot.enabled {
@@ -663,18 +686,72 @@ button,
 }
 
 .surface-table table {
-    min-width: 42rem !important;
+    min-width: 42rem;
 }
 
 .ui-panel.surface-panel .ui-panel-content {
     background: var(--surface);
 }
 
-body .ui-inputfield,
 body select,
-body .ui-selectonemenu,
+body .ui-inputfield,
 body .ui-chkbox .ui-chkbox-box {
     border-color: var(--control-border);
+}
+
+body select {
+    min-height: 2.5rem;
+    padding: 0.6rem 0.75rem;
+    border-style: solid;
+    border-width: 1px;
+    border-radius: var(--control-radius);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+}
+
+body select:disabled {
+    background: var(--surface-muted);
+    color: var(--muted-text);
+    cursor: not-allowed;
+}
+
+body select:not(:disabled):hover,
+body .ui-inputfield.ui-state-hover,
+body .ui-chkbox .ui-chkbox-box.ui-state-hover,
+body .ui-datepicker .ui-timepicker-timeinput input:hover,
+body .ui-datepicker .ui-timepicker-timeinput input.ui-state-hover {
+    border-color: var(--primary);
+}
+
+body select:focus-visible,
+body .ui-inputfield.ui-state-focus,
+body .ui-datepicker .ui-timepicker-timeinput input:focus {
+    border-color: var(--primary);
+}
+
+body .ui-chkbox .ui-chkbox-box.ui-state-active {
+    border-color: var(--primary);
+    background: var(--primary);
+    color: #ffffff;
+}
+
+body .ui-chkbox .ui-chkbox-box.ui-state-active.ui-state-hover {
+    border-color: var(--primary-strong);
+    background: var(--primary-strong);
+}
+
+body .ui-datepicker .ui-datepicker-calendar td > a.ui-state-active,
+body .ui-datepicker .ui-datepicker-calendar td > span.ui-state-active,
+body .ui-datepicker .ui-datepicker-calendar td.ui-datepicker-today > a.ui-state-active,
+body .ui-datepicker .ui-datepicker-calendar td.ui-datepicker-today > span.ui-state-active,
+body .ui-datepicker .ui-datepicker-calendar td.ui-datepicker-current-day > a.ui-state-active,
+body .ui-datepicker .ui-datepicker-calendar td.ui-datepicker-current-day > span.ui-state-active,
+body .ui-datepicker .ui-monthpicker-month.ui-state-active,
+body .ui-paginator .ui-paginator-pages .ui-paginator-page.ui-state-active {
+    border-color: var(--primary);
+    background: var(--primary-soft);
+    color: var(--primary-strong);
 }
 
 body .ui-button {
@@ -686,6 +763,13 @@ body .ui-button {
 body .ui-button:not(.ui-state-disabled):hover {
     border-color: var(--primary-strong);
     background: var(--primary-strong);
+}
+
+body .ui-button.ui-state-active,
+body .ui-button.ui-state-down {
+    border-color: var(--primary-strong);
+    background: var(--primary-strong);
+    color: #ffffff;
 }
 
 body .ui-button.ui-button-outlined {
@@ -700,9 +784,24 @@ body .ui-button.ui-button-outlined:not(.ui-state-disabled):hover {
     color: var(--primary-strong);
 }
 
+body .ui-button.ui-button-outlined.ui-state-active,
+body .ui-button.ui-button-outlined.ui-state-down {
+    border-color: var(--primary-strong);
+    background: var(--primary-soft);
+    color: var(--primary-strong);
+}
+
 body .ui-button.ui-button-secondary.ui-button-outlined {
     border-color: var(--control-border);
     background: var(--surface);
+    color: var(--text);
+}
+
+body .ui-button.ui-button-secondary.ui-state-active,
+body .ui-button.ui-button-secondary.ui-state-down,
+body .ui-button.ui-button-secondary:active {
+    border-color: var(--control-border);
+    background: var(--surface-muted);
     color: var(--text);
 }
 
@@ -717,6 +816,14 @@ body .ui-button.ui-button-danger:not(.ui-state-disabled):hover {
     background: var(--danger-strong);
 }
 
+body .ui-button.ui-button-danger.ui-state-active,
+body .ui-button.ui-button-danger.ui-state-down,
+body .ui-button.ui-button-danger:active {
+    border-color: var(--danger-strong);
+    background: var(--danger-strong);
+    color: #ffffff;
+}
+
 body .ui-button.ui-button-danger.ui-button-outlined {
     border-color: var(--danger);
     background: var(--surface);
@@ -727,6 +834,19 @@ body .ui-button.ui-button-danger.ui-button-outlined:not(.ui-state-disabled):hove
     border-color: var(--danger-strong);
     background: #fef2f2;
     color: var(--danger-strong);
+}
+
+body .ui-button.ui-button-danger.ui-button-outlined.ui-state-active,
+body .ui-button.ui-button-danger.ui-button-outlined.ui-state-down,
+body .ui-button.ui-button-danger.ui-button-outlined:active {
+    border-color: var(--danger-strong);
+    background: #fef2f2;
+    color: var(--danger-strong);
+}
+
+body .ui-button.ui-button-secondary.ui-state-focus,
+body .ui-button.ui-button-danger.ui-state-focus {
+    box-shadow: none;
 }
 
 .preview-empty-state {

@@ -38,14 +38,15 @@
                 </p:column>
                 <p:column headerText="Role">
                     <h:form styleClass="inline-role-form">
-                        <p:selectOneMenu value="#{member.role}"
+                        <h:selectOneMenu id="memberRole"
+                                         value="#{member.role}"
                                          disabled="#{member.currentUser}"
                                          pt:aria-label="Role for #{member.displayName}">
                             <f:selectItems value="#{calendarMembersView.roles}"
                                            var="role"
                                            itemValue="#{role}"
                                            itemLabel="#{role.displayName}"/>
-                        </p:selectOneMenu>
+                        </h:selectOneMenu>
                         <p:commandButton value="Save role"
                                          action="#{calendarMembersView.saveRole(member.userId, member.role)}"
                                          ariaLabel="Save role for #{member.displayName}"

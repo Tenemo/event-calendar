@@ -251,6 +251,34 @@ final class SharedCalendarEndToEndIT {
             assertNotEquals(editorInvitationLink, existingUserInvitationLink);
             signOut(page);
 
+            page.navigate(registrationInvitationLink);
+            Locator signInContinuation = page.locator("a:has-text('Sign in to accept')");
+            String signInContinuationLink = signInContinuation.getAttribute("href");
+            assertTrue(
+                    signInContinuationLink != null && signInContinuationLink.contains("/login?token="),
+                    () -> "Expected the sign-in continuation to use the canonical token parameter, but got "
+                            + signInContinuationLink);
+            assertFalse(signInContinuationLink != null && signInContinuationLink.contains("invite="));
+            String expectedInvitationQuery = URI.create(registrationInvitationLink).getRawQuery();
+            assertTrue(
+                    expectedInvitationQuery != null && expectedInvitationQuery.startsWith("token="),
+                    () -> "Expected a token query in the generated invitation link, but got "
+                            + registrationInvitationLink);
+            String invitationToken = expectedInvitationQuery.substring("token=".length());
+
+            signInContinuation.click();
+            page.waitForURL("**/login?token=*");
+            submitSignInAndWaitForUrl(page, ownerUsername, TEST_PASSWORD, "**/register?token=*");
+            assertEquals(expectedInvitationQuery, URI.create(page.url()).getRawQuery());
+            assertBodyContains(page, "Accept invitation");
+            signOut(page);
+
+            page.navigate(route("/login?invite=" + invitationToken));
+            submitSignInAndWaitForUrl(page, ownerUsername, TEST_PASSWORD, "**/register?token=*");
+            assertEquals(expectedInvitationQuery, URI.create(page.url()).getRawQuery());
+            assertBodyContains(page, "Accept invitation");
+            signOut(page);
+
             page.navigate(route("/register"));
             fillRegistrationForm(
                     page,
@@ -1734,11 +1762,19 @@ final class SharedCalendarEndToEndIT {
     private String createRegistrationInvitation(Page page) {
         page.navigate(route("/app/invitations"));
         page.locator("button:has-text('Generate registration link')").click();
-        Locator generatedInvitationLink = page.locator("input[id$='generatedInvitationLink']");
-        assertThat(generatedInvitationLink).isVisible();
+        Locator generatedInvitationLink = generatedInvitationLink(page);
         String invitationLink = generatedInvitationLink.inputValue();
         assertTrue(invitationLink.contains("/register?token="));
         return invitationLink;
+    }
+
+    private Locator generatedInvitationLink(Page page) {
+        Locator generatedInvitationLink = page.locator("input[id$='generatedInvitationLink']");
+        assertThat(generatedInvitationLink).isVisible();
+        String helpElementId = generatedInvitationLink.getAttribute("aria-describedby");
+        assertEquals("generatedInvitationHelp", helpElementId);
+        assertThat(page.locator("#" + helpElementId)).isVisible();
+        return generatedInvitationLink;
     }
 
     private Locator invitationRow(Page page, String invitationLink) {
@@ -1753,14 +1789,15 @@ final class SharedCalendarEndToEndIT {
     private String createEditorInvitation(Page page, String calendarName) {
         page.navigate(route("/app/invitations"));
         Locator calendarSelect = page.locator("select[id$='calendar']");
-        assertVisibleFocus(calendarSelect);
+        pressTabUntilFocused(page, calendarSelect, 12);
+        assertVisibleOutline(calendarSelect);
         String calendarOptionValue = page.locator(
                         "select[id$='calendar'] option",
                         new Page.LocatorOptions().setHasText(calendarName))
                 .getAttribute("value");
         calendarSelect.selectOption(calendarOptionValue);
         page.locator("button:has-text('Generate editor link')").click();
-        String invitationLink = page.locator("input[id$='generatedInvitationLink']").inputValue();
+        String invitationLink = generatedInvitationLink(page).inputValue();
         assertTrue(invitationLink.contains("/register?token="));
         return invitationLink;
     }
@@ -1792,10 +1829,18 @@ final class SharedCalendarEndToEndIT {
 
     private void signIn(Page page, String username, String password) {
         page.navigate(route("/login"));
+        submitSignInAndWaitForUrl(page, username, password, "**/app/calendars");
+    }
+
+    private void submitSignInAndWaitForUrl(
+            Page page,
+            String username,
+            String password,
+            String expectedUrlPattern) {
         page.locator("input[id$='username']").fill(username);
         page.locator("input[id$='password']").fill(password);
         page.locator("button:has-text('Sign in')").click();
-        page.waitForURL("**/app/calendars");
+        page.waitForURL(expectedUrlPattern);
     }
 
     private void signOut(Page page) {
@@ -1933,11 +1978,6 @@ final class SharedCalendarEndToEndIT {
         page.waitForFunction(
                 "() => document.body.innerText.includes('Member role saved.') "
                         + "|| document.body.innerText.includes('Admin access is required.')");
-    }
-
-    private void assertVisibleFocus(Locator locator) {
-        locator.focus();
-        assertVisibleOutline(locator);
     }
 
     private Locator visibleConfirmationDialog(Page page) {
@@ -2140,22 +2180,25 @@ final class SharedCalendarEndToEndIT {
                 DEFAULT_APPLICATION_BASE_URL)));
     }
 
-    private void seedUser(String username) throws SQLException {
-        seedUser(username, "End-to-end user", true);
-    }
-
-    private void seedUser(String username, String displayName, boolean active) throws SQLException {
+    private Connection openDatabaseConnection() throws SQLException {
         String jdbcUrl = "jdbc:postgresql://"
                 + firstNonBlank(System.getenv(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE), "localhost")
                 + ":"
                 + firstNonBlank(System.getenv(POSTGRESQL_PORT_ENVIRONMENT_VARIABLE), "5432")
                 + "/"
                 + firstNonBlank(System.getenv(POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE), "calendar");
+        return DriverManager.getConnection(
+                jdbcUrl,
+                firstNonBlank(System.getenv(POSTGRESQL_USER_ENVIRONMENT_VARIABLE), "calendar"),
+                firstNonBlank(System.getenv(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE), "calendar"));
+    }
 
-        try (Connection connection = DriverManager.getConnection(
-                        jdbcUrl,
-                        firstNonBlank(System.getenv(POSTGRESQL_USER_ENVIRONMENT_VARIABLE), "calendar"),
-                        firstNonBlank(System.getenv(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE), "calendar"));
+    private void seedUser(String username) throws SQLException {
+        seedUser(username, "End-to-end user", true);
+    }
+
+    private void seedUser(String username, String displayName, boolean active) throws SQLException {
+        try (Connection connection = openDatabaseConnection();
                 PreparedStatement statement = connection.prepareStatement(
                         "insert into app_user "
                                 + "(username, display_name, password_hash, active, created_at, updated_at) "
@@ -2170,16 +2213,7 @@ final class SharedCalendarEndToEndIT {
 
     private String insertExpiredInvitation(String creatorUsername) throws SQLException {
         String invitationToken = "expired-test-" + UUID.randomUUID().toString().replace("-", "");
-        String jdbcUrl = "jdbc:postgresql://"
-                + firstNonBlank(System.getenv(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE), "localhost")
-                + ":"
-                + firstNonBlank(System.getenv(POSTGRESQL_PORT_ENVIRONMENT_VARIABLE), "5432")
-                + "/"
-                + firstNonBlank(System.getenv(POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE), "calendar");
-        try (Connection connection = DriverManager.getConnection(
-                        jdbcUrl,
-                        firstNonBlank(System.getenv(POSTGRESQL_USER_ENVIRONMENT_VARIABLE), "calendar"),
-                        firstNonBlank(System.getenv(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE), "calendar"));
+        try (Connection connection = openDatabaseConnection();
                 PreparedStatement statement = connection.prepareStatement(
                         "insert into app_invitation "
                                 + "(invite_token, calendar_id, role_name, created_by_user_id, expires_at, created_at) "
@@ -2193,16 +2227,7 @@ final class SharedCalendarEndToEndIT {
     }
 
     private void insertRegistrationInvitations(String creatorUsername, int invitationCount) throws SQLException {
-        String jdbcUrl = "jdbc:postgresql://"
-                + firstNonBlank(System.getenv(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE), "localhost")
-                + ":"
-                + firstNonBlank(System.getenv(POSTGRESQL_PORT_ENVIRONMENT_VARIABLE), "5432")
-                + "/"
-                + firstNonBlank(System.getenv(POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE), "calendar");
-        try (Connection connection = DriverManager.getConnection(
-                        jdbcUrl,
-                        firstNonBlank(System.getenv(POSTGRESQL_USER_ENVIRONMENT_VARIABLE), "calendar"),
-                        firstNonBlank(System.getenv(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE), "calendar"));
+        try (Connection connection = openDatabaseConnection();
                 PreparedStatement statement = connection.prepareStatement(
                         "insert into app_invitation "
                                 + "(invite_token, calendar_id, role_name, created_by_user_id, expires_at, created_at) "
@@ -2225,16 +2250,7 @@ final class SharedCalendarEndToEndIT {
 
     private void assertInvitationLifetimeConstraintRejectsLongerInvitation(String creatorUsername)
             throws SQLException {
-        String jdbcUrl = "jdbc:postgresql://"
-                + firstNonBlank(System.getenv(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE), "localhost")
-                + ":"
-                + firstNonBlank(System.getenv(POSTGRESQL_PORT_ENVIRONMENT_VARIABLE), "5432")
-                + "/"
-                + firstNonBlank(System.getenv(POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE), "calendar");
-        try (Connection connection = DriverManager.getConnection(
-                        jdbcUrl,
-                        firstNonBlank(System.getenv(POSTGRESQL_USER_ENVIRONMENT_VARIABLE), "calendar"),
-                        firstNonBlank(System.getenv(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE), "calendar"));
+        try (Connection connection = openDatabaseConnection();
                 PreparedStatement statement = connection.prepareStatement(
                         "insert into app_invitation "
                                 + "(invite_token, calendar_id, role_name, created_by_user_id, expires_at, created_at) "
@@ -2260,16 +2276,7 @@ final class SharedCalendarEndToEndIT {
     }
 
     private long findCalendarId(String calendarName) throws SQLException {
-        String jdbcUrl = "jdbc:postgresql://"
-                + firstNonBlank(System.getenv(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE), "localhost")
-                + ":"
-                + firstNonBlank(System.getenv(POSTGRESQL_PORT_ENVIRONMENT_VARIABLE), "5432")
-                + "/"
-                + firstNonBlank(System.getenv(POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE), "calendar");
-        try (Connection connection = DriverManager.getConnection(
-                        jdbcUrl,
-                        firstNonBlank(System.getenv(POSTGRESQL_USER_ENVIRONMENT_VARIABLE), "calendar"),
-                        firstNonBlank(System.getenv(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE), "calendar"));
+        try (Connection connection = openDatabaseConnection();
                 PreparedStatement statement = connection.prepareStatement(
                         "select id from calendar where name = ? order by id desc limit 1")) {
             statement.setString(1, calendarName);
@@ -2282,16 +2289,7 @@ final class SharedCalendarEndToEndIT {
 
     private String calendarLink(String calendarId) throws SQLException {
         long numericCalendarId = Long.parseLong(calendarId);
-        String jdbcUrl = "jdbc:postgresql://"
-                + firstNonBlank(System.getenv(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE), "localhost")
-                + ":"
-                + firstNonBlank(System.getenv(POSTGRESQL_PORT_ENVIRONMENT_VARIABLE), "5432")
-                + "/"
-                + firstNonBlank(System.getenv(POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE), "calendar");
-        try (Connection connection = DriverManager.getConnection(
-                        jdbcUrl,
-                        firstNonBlank(System.getenv(POSTGRESQL_USER_ENVIRONMENT_VARIABLE), "calendar"),
-                        firstNonBlank(System.getenv(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE), "calendar"));
+        try (Connection connection = openDatabaseConnection();
                 PreparedStatement statement = connection.prepareStatement(
                         "select public_token from calendar where id = ?")) {
             statement.setLong(1, numericCalendarId);
@@ -2303,16 +2301,7 @@ final class SharedCalendarEndToEndIT {
     }
 
     private long countActiveAdmins(long calendarId) throws SQLException {
-        String jdbcUrl = "jdbc:postgresql://"
-                + firstNonBlank(System.getenv(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE), "localhost")
-                + ":"
-                + firstNonBlank(System.getenv(POSTGRESQL_PORT_ENVIRONMENT_VARIABLE), "5432")
-                + "/"
-                + firstNonBlank(System.getenv(POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE), "calendar");
-        try (Connection connection = DriverManager.getConnection(
-                        jdbcUrl,
-                        firstNonBlank(System.getenv(POSTGRESQL_USER_ENVIRONMENT_VARIABLE), "calendar"),
-                        firstNonBlank(System.getenv(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE), "calendar"));
+        try (Connection connection = openDatabaseConnection();
                 PreparedStatement statement = connection.prepareStatement(
                         "select count(*) from calendar_member "
                                 + "where calendar_id = ? and role_name = 'ADMIN' and active = true")) {
@@ -2325,16 +2314,7 @@ final class SharedCalendarEndToEndIT {
     }
 
     private void executeDatabaseUpdate(String sql, Object... parameters) throws SQLException {
-        String jdbcUrl = "jdbc:postgresql://"
-                + firstNonBlank(System.getenv(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE), "localhost")
-                + ":"
-                + firstNonBlank(System.getenv(POSTGRESQL_PORT_ENVIRONMENT_VARIABLE), "5432")
-                + "/"
-                + firstNonBlank(System.getenv(POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE), "calendar");
-        try (Connection connection = DriverManager.getConnection(
-                        jdbcUrl,
-                        firstNonBlank(System.getenv(POSTGRESQL_USER_ENVIRONMENT_VARIABLE), "calendar"),
-                        firstNonBlank(System.getenv(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE), "calendar"));
+        try (Connection connection = openDatabaseConnection();
                 PreparedStatement statement = connection.prepareStatement(sql)) {
             for (int parameterIndex = 0; parameterIndex < parameters.length; parameterIndex++) {
                 statement.setObject(parameterIndex + 1, parameters[parameterIndex]);
@@ -2344,16 +2324,7 @@ final class SharedCalendarEndToEndIT {
     }
 
     private long queryLong(String sql, Object... parameters) throws SQLException {
-        String jdbcUrl = "jdbc:postgresql://"
-                + firstNonBlank(System.getenv(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE), "localhost")
-                + ":"
-                + firstNonBlank(System.getenv(POSTGRESQL_PORT_ENVIRONMENT_VARIABLE), "5432")
-                + "/"
-                + firstNonBlank(System.getenv(POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE), "calendar");
-        try (Connection connection = DriverManager.getConnection(
-                        jdbcUrl,
-                        firstNonBlank(System.getenv(POSTGRESQL_USER_ENVIRONMENT_VARIABLE), "calendar"),
-                        firstNonBlank(System.getenv(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE), "calendar"));
+        try (Connection connection = openDatabaseConnection();
                 PreparedStatement statement = connection.prepareStatement(sql)) {
             for (int parameterIndex = 0; parameterIndex < parameters.length; parameterIndex++) {
                 statement.setObject(parameterIndex + 1, parameters[parameterIndex]);

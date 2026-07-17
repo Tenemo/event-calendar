@@ -6,7 +6,9 @@
                 xmlns:p="primefaces"
                 template="/WEB-INF/templates/main.xhtml">
     <f:metadata>
+        <!-- Keep the previous continuation parameter readable while new links use token. -->
         <f:viewParam name="invite" value="#{loginView.invitationToken}"/>
+        <f:viewParam name="token" value="#{loginView.invitationToken}"/>
         <f:viewParam name="passwordChanged" value="#{loginView.passwordChanged}"/>
         <f:viewParam name="reauthenticationRequired" value="#{loginView.reauthenticationRequired}"/>
     </f:metadata>

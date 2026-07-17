@@ -2,18 +2,33 @@ package app.config;
 
 import static app.testsupport.ServiceTestSupport.setField;
 import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import jakarta.annotation.PostConstruct;
+import jakarta.ejb.Singleton;
+import jakarta.ejb.Startup;
 import org.junit.jupiter.api.Test;
 
 final class ApplicationUrlServiceTest {
     @Test
+    void validatesConfigurationDuringApplicationStartup() throws NoSuchMethodException {
+        assertAll(
+                () -> assertTrue(ApplicationUrlService.class.isAnnotationPresent(Singleton.class)),
+                () -> assertTrue(ApplicationUrlService.class.isAnnotationPresent(Startup.class)),
+                () -> assertTrue(ApplicationUrlService.class
+                        .getDeclaredMethod("initialize")
+                        .isAnnotationPresent(PostConstruct.class)));
+    }
+
+    @Test
     void buildsLinksFromTheConfiguredCanonicalBaseUrl() {
         ApplicationUrlService applicationUrlService = new ApplicationUrlService();
         setField(applicationUrlService, "configuredBaseUrl", "https://calendar.example.com/friends/");
+        applicationUrlService.initialize();
 
         assertEquals(
                 "https://calendar.example.com/friends/Abc_123-xY0",
@@ -22,20 +37,19 @@ final class ApplicationUrlServiceTest {
                 "https://calendar.example.com/friends/register?token=invite-123",
                 applicationUrlService.linkTo("register?token=invite-123"));
 
-        setField(applicationUrlService, "configuredBaseUrl", "HTTPS://calendar.example.com:9443/team/");
-        assertEquals(
-                "HTTPS://calendar.example.com:9443/team/New_123-xY0",
-                applicationUrlService.linkTo("New_123-xY0"));
-
-        setField(applicationUrlService, "configuredBaseUrl", "http://127.0.0.1:9080/calendar-app/");
-        assertEquals(
-                "http://127.0.0.1:9080/calendar-app/register",
-                applicationUrlService.linkTo("register"));
-
-        setField(applicationUrlService, "configuredBaseUrl", "https://[2001:db8::1]/friends/");
-        assertEquals(
-                "https://[2001:db8::1]/friends/Url_123-xY0",
-                applicationUrlService.linkTo("Url_123-xY0"));
+        assertAll(
+                () -> assertConfiguredLink(
+                        "HTTPS://calendar.example.com:9443/team/",
+                        "New_123-xY0",
+                        "HTTPS://calendar.example.com:9443/team/New_123-xY0"),
+                () -> assertConfiguredLink(
+                        "http://127.0.0.1:9080/calendar-app/",
+                        "register",
+                        "http://127.0.0.1:9080/calendar-app/register"),
+                () -> assertConfiguredLink(
+                        "https://[2001:db8::1]/friends/",
+                        "Url_123-xY0",
+                        "https://[2001:db8::1]/friends/Url_123-xY0"));
     }
 
     @Test
@@ -43,10 +57,10 @@ final class ApplicationUrlServiceTest {
         ApplicationUrlService applicationUrlService = new ApplicationUrlService();
 
         setField(applicationUrlService, "configuredBaseUrl", "calendar.example.com");
-        assertThrows(IllegalStateException.class, () -> applicationUrlService.linkTo("/Abc_123-xY0"));
+        assertThrows(IllegalStateException.class, applicationUrlService::initialize);
 
         setField(applicationUrlService, "configuredBaseUrl", "https://calendar.example.com?redirect=attacker.example");
-        assertThrows(IllegalStateException.class, () -> applicationUrlService.linkTo("/Abc_123-xY0"));
+        assertThrows(IllegalStateException.class, applicationUrlService::initialize);
 
         assertAll(
                 () -> assertRejectedBaseUrl(applicationUrlService, "https://user:password@calendar.example.com"),
@@ -57,6 +71,14 @@ final class ApplicationUrlServiceTest {
                 () -> assertRejectedBaseUrl(applicationUrlService, "https://calendar.example.com:"),
                 () -> assertRejectedBaseUrl(applicationUrlService, "https://calendar.example.com:65536"),
                 () -> assertRejectedBaseUrl(applicationUrlService, "https://[::1"));
+    }
+
+    @Test
+    void permitsAnAbsentConfiguredBaseUrlForLoopbackDevelopmentRequests() {
+        ApplicationUrlService applicationUrlService = new ApplicationUrlService();
+        setField(applicationUrlService, "configuredBaseUrl", "   ");
+
+        assertDoesNotThrow(applicationUrlService::initialize);
     }
 
     @Test
@@ -93,6 +115,13 @@ final class ApplicationUrlServiceTest {
 
     private static void assertRejectedBaseUrl(ApplicationUrlService applicationUrlService, String configuredBaseUrl) {
         setField(applicationUrlService, "configuredBaseUrl", configuredBaseUrl);
-        assertThrows(IllegalStateException.class, () -> applicationUrlService.linkTo("/Abc_123-xY0"));
+        assertThrows(IllegalStateException.class, applicationUrlService::initialize);
+    }
+
+    private static void assertConfiguredLink(String configuredBaseUrl, String path, String expectedLink) {
+        ApplicationUrlService applicationUrlService = new ApplicationUrlService();
+        setField(applicationUrlService, "configuredBaseUrl", configuredBaseUrl);
+        applicationUrlService.initialize();
+        assertEquals(expectedLink, applicationUrlService.linkTo(path));
     }
 }

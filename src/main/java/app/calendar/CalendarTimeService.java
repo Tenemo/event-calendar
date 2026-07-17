@@ -43,7 +43,7 @@ public class CalendarTimeService {
 
         OffsetDateTime storedStartTime = toStoredStartOfDay(firstDay, timeZone);
         if (!lastDay.equals(firstDay)) {
-            toStoredStartOfDay(lastDay, timeZone);
+            requireExistingCalendarDate(lastDay, timeZone);
         }
         OffsetDateTime storedEndTime = toStoredExclusiveDayBoundary(lastDay.plusDays(1), timeZone);
         return new StoredAllDayRange(storedStartTime, storedEndTime);
@@ -70,12 +70,16 @@ public class CalendarTimeService {
             return null;
         }
 
+        return requireExistingCalendarDate(calendarDate, timeZone).toOffsetDateTime();
+    }
+
+    private ZonedDateTime requireExistingCalendarDate(LocalDate calendarDate, String timeZone) {
         ZoneId zoneId = ZoneId.of(normalizeTimeZone(timeZone));
         ZonedDateTime startOfDay = calendarDate.atStartOfDay(zoneId);
         if (!startOfDay.toLocalDate().equals(calendarDate)) {
             throw new ValidationException("The selected date does not exist in the calendar time zone because of a clock change.");
         }
-        return startOfDay.toOffsetDateTime();
+        return startOfDay;
     }
 
     public OffsetDateTime toStoredExclusiveDayBoundary(LocalDate exclusiveCalendarDate, String timeZone) {
