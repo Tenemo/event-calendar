@@ -7,9 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
-import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
-import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
@@ -28,18 +26,23 @@ import java.sql.SQLException;
 import java.time.Duration;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.TestInfo;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 final class BootstrapRegistrationConcurrencyIT {
     private static final String APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE =
             "BOOTSTRAP_VERIFICATION_BASE_URL";
+    private static final String HEALTH_URL_ENVIRONMENT_VARIABLE =
+            "BOOTSTRAP_VERIFICATION_HEALTH_URL";
     private static final String DATABASE_PORT_ENVIRONMENT_VARIABLE =
             "BOOTSTRAP_VERIFICATION_DATABASE_PORT";
     private static final String INVITATION_TOKEN_ENVIRONMENT_VARIABLE =
             "BOOTSTRAP_VERIFICATION_INVITATION_TOKEN";
-    private static final String DEFAULT_APPLICATION_BASE_URL = "http://localhost:9081";
+    private static final String DEFAULT_APPLICATION_BASE_URL = "https://localhost:9444";
+    private static final String DEFAULT_HEALTH_URL = "http://localhost:9081/health";
     private static final String DEFAULT_DATABASE_PORT = "55432";
     private static final String DEFAULT_INVITATION_TOKEN =
             "bootstrap-verification-only-token-00000000000000000000000000000000";
@@ -53,22 +56,35 @@ final class BootstrapRegistrationConcurrencyIT {
     private static final Duration POLL_INTERVAL = Duration.ofMillis(50);
 
     private URI applicationBaseUri;
+    private URI applicationHealthUri;
     private String bootstrapInvitationToken;
     private Playwright playwright;
-    private Browser browser;
+    private final EndToEndBrowserDiagnostics browserDiagnostics =
+            new EndToEndBrowserDiagnostics(BootstrapRegistrationConcurrencyIT.class);
+    private EndToEndBrowserDiagnostics.RecordedBrowser browser;
 
     @BeforeAll
     void prepareIsolatedApplication() throws Exception {
         applicationBaseUri = URI.create(removeTrailingSlashes(environmentValueOrDefault(
                 APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE,
                 DEFAULT_APPLICATION_BASE_URL)));
+        applicationHealthUri = URI.create(environmentValueOrDefault(
+                HEALTH_URL_ENVIRONMENT_VARIABLE,
+                DEFAULT_HEALTH_URL));
         bootstrapInvitationToken = environmentValueOrDefault(
                 INVITATION_TOKEN_ENVIRONMENT_VARIABLE,
                 DEFAULT_INVITATION_TOKEN);
         waitForApplicationHealth();
         assertFreshMigratedDatabase();
         playwright = Playwright.create();
-        browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true));
+        browser = browserDiagnostics.launch(playwright.chromium(), true);
+    }
+
+    @BeforeEach
+    void prepareBrowserDiagnostics(TestInfo testInfo) {
+        browserDiagnostics.startTest(testInfo.getTestMethod()
+                .map(java.lang.reflect.Method::getName)
+                .orElse(testInfo.getDisplayName()));
     }
 
     @AfterAll
@@ -277,7 +293,7 @@ final class BootstrapRegistrationConcurrencyIT {
     }
 
     private void waitForApplicationHealth() throws InterruptedException {
-        URI healthUri = applicationBaseUri.resolve("/health");
+        URI healthUri = applicationHealthUri;
         HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
         long deadlineNanos = System.nanoTime() + APPLICATION_READY_TIMEOUT.toNanos();
         String lastHealthResult = "no response";

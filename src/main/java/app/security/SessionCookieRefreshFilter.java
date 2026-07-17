@@ -2,6 +2,7 @@ package app.security;
 
 import app.calendar.CalendarLinkToken;
 import app.calendar.CalendarRouteFilter;
+import app.web.RelativeRedirect;
 import jakarta.inject.Inject;
 import jakarta.servlet.Filter;
 import jakarta.servlet.FilterChain;
@@ -25,6 +26,7 @@ public class SessionCookieRefreshFilter implements Filter {
             AuthenticatedSessionSecurity.AUTHENTICATED_SESSION_LIFETIME_SECONDS;
 
     private static final String SESSION_COOKIE_NAME = "JSESSIONID";
+    private static final String SINGLE_SIGN_ON_COOKIE_NAME = "LtpaToken2";
 
     @Inject
     private CurrentUser currentUser;
@@ -44,15 +46,19 @@ public class SessionCookieRefreshFilter implements Filter {
             throws IOException, ServletException {
         if (servletRequest instanceof HttpServletRequest request
                 && servletResponse instanceof HttpServletResponse response) {
+            expireRejectedSingleSignOnCookie(request, response);
             if (!isManagedRequest(request)) {
                 filterChain.doFilter(servletRequest, servletResponse);
                 return;
             }
-            if (clearStaleAuthenticatedSession(request)) {
-                if (isCanonicalCalendarRequest(request)) {
+            if (clearStaleAuthenticatedSession(request, response)) {
+                if (isReadOnlyCanonicalCalendarRequest(request)) {
                     filterChain.doFilter(servletRequest, servletResponse);
                 } else {
-                    response.sendRedirect(request.getContextPath() + "/login?reauthenticationRequired=true");
+                    RelativeRedirect.send(
+                            response,
+                            request.getContextPath(),
+                            "/login?reauthenticationRequired=true");
                 }
                 return;
             }
@@ -67,13 +73,49 @@ public class SessionCookieRefreshFilter implements Filter {
         filterChain.doFilter(servletRequest, servletResponse);
     }
 
-    private boolean clearStaleAuthenticatedSession(HttpServletRequest request) throws ServletException {
+    private boolean clearStaleAuthenticatedSession(
+            HttpServletRequest request,
+            HttpServletResponse response) throws ServletException {
         if (request.getUserPrincipal() == null || currentUser.isSignedIn()) {
             return false;
         }
 
         AuthenticatedSessionSecurity.invalidateSessionAndLogout(request);
+        expireAuthenticationCookies(response);
         return true;
+    }
+
+    private boolean isReadOnlyCanonicalCalendarRequest(HttpServletRequest request) {
+        return "GET".equalsIgnoreCase(request.getMethod()) && isCanonicalCalendarRequest(request);
+    }
+
+    private void expireAuthenticationCookies(HttpServletResponse response) {
+        response.addCookie(expiredCookie(SESSION_COOKIE_NAME));
+        response.addCookie(expiredCookie(SINGLE_SIGN_ON_COOKIE_NAME));
+    }
+
+    private void expireRejectedSingleSignOnCookie(
+            HttpServletRequest request,
+            HttpServletResponse response) {
+        if (request.getUserPrincipal() == null && hasCookie(request, SINGLE_SIGN_ON_COOKIE_NAME)) {
+            response.addCookie(expiredCookie(SINGLE_SIGN_ON_COOKIE_NAME));
+        }
+    }
+
+    private boolean hasCookie(HttpServletRequest request, String cookieName) {
+        Cookie[] requestCookies = request.getCookies();
+        return requestCookies != null
+                && Arrays.stream(requestCookies).anyMatch(cookie -> cookieName.equals(cookie.getName()));
+    }
+
+    private Cookie expiredCookie(String cookieName) {
+        Cookie expiredCookie = new Cookie(cookieName, "");
+        expiredCookie.setPath("/");
+        expiredCookie.setHttpOnly(true);
+        expiredCookie.setSecure(true);
+        expiredCookie.setMaxAge(0);
+        expiredCookie.setAttribute("SameSite", "Lax");
+        return expiredCookie;
     }
 
     private boolean isManagedRequest(HttpServletRequest request) {
@@ -100,9 +142,9 @@ public class SessionCookieRefreshFilter implements Filter {
             HttpServletRequest request,
             HttpServletResponse response) {
         Principal authenticatedPrincipal = request.getUserPrincipal();
-        if (!request.isRequestedSessionIdValid()
-                || authenticatedPrincipal == null
-                || !currentUser.isSignedIn()) {
+        if (authenticatedPrincipal == null
+                || !currentUser.isSignedIn()
+                || !request.isRequestedSessionIdValid()) {
             return;
         }
 

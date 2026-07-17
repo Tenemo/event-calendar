@@ -1,5 +1,9 @@
 [tools]
+actionlint = "1.7.12"
 java = "temurin-25.0.3+9.0.LTS"
+node = "24.18.0"
+shellcheck = "0.11.0"
+trivy = "0.72.0"
 
 [env]
 _.file = ".env"
@@ -7,6 +11,10 @@ _.file = ".env"
 [tasks.setup]
 description = "Check the local toolchain"
 run = "mise exec -- java scripts/calendar-tool.java setup"
+
+[tasks.tooling-self-test]
+description = "Run the portable calendar tool regression tests"
+run = "mise exec -- java scripts/calendar-tool.java tooling-self-test"
 
 [tasks.db]
 description = "Start the local PostgreSQL service"
@@ -20,9 +28,36 @@ run = "mise exec -- java scripts/calendar-tool.java dev"
 description = "Build and test the WAR"
 run = "mise exec -- java scripts/calendar-tool.java package"
 
+[tasks.static-analysis]
+description = "Run Java source and bytecode analysis"
+run = "mise exec -- java scripts/calendar-tool.java static-analysis"
+
+[tasks.format]
+description = "Apply deterministic low-churn source formatting"
+run = "mise exec -- java scripts/calendar-tool.java format"
+
+[tasks.lint-css]
+description = "Install locked frontend tools and lint CSS"
+run = "mise exec -- java scripts/calendar-tool.java lint-css"
+
+[tasks.lint-workflows]
+description = "Lint GitHub Actions workflows and shell scripts"
+run = [
+    "mise exec -- actionlint",
+    "mise exec -- shellcheck mvnw",
+]
+
+[tasks.verify-reproducible-build]
+description = "Verify that repeated WAR builds are identical"
+run = "mise exec -- java scripts/calendar-tool.java verify-reproducible-build"
+
 [tasks.e2e]
 description = "Run isolated Playwright end-to-end tests"
 run = "mise exec -- java scripts/calendar-tool.java e2e"
+
+[tasks.e2e-calendar-link-throttle]
+description = "Run isolated calendar-link request-throttle end-to-end tests"
+run = "mise exec -- java scripts/calendar-tool.java e2e-calendar-link-throttle"
 
 [tasks.verify-bootstrap-registration]
 description = "Verify atomic bootstrap registration against isolated PostgreSQL"
@@ -35,6 +70,10 @@ run = "mise exec -- java scripts/calendar-tool.java verify-local"
 [tasks.docker-build]
 description = "Build the production application image"
 run = "mise exec -- java scripts/calendar-tool.java docker-build"
+
+[tasks.image-scan]
+description = "Scan the production image for high-severity vulnerabilities"
+run = "mise exec -- java scripts/calendar-tool.java image-scan"
 
 [tasks.docker-up]
 description = "Build and start the production image with local PostgreSQL"

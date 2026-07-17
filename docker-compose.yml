@@ -4,7 +4,7 @@ x-application-health-command: &application-health-command
 
 services:
   postgres:
-    image: postgres:17
+    image: postgres:17.10@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
     environment:
       POSTGRES_DB: ${PGDATABASE:-calendar}
       POSTGRES_USER: ${PGUSER:-calendar}
@@ -24,6 +24,8 @@ services:
     image: shared-calendar:local
     build:
       context: .
+      args:
+        RAILWAY_GIT_COMMIT_SHA: ${RAILWAY_GIT_COMMIT_SHA:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -37,6 +39,7 @@ services:
       PGPASSWORD: ${PGPASSWORD:-calendar}
       APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Warsaw}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:9080}
+      APP_LTPA_KEYS_PASSWORD: ${APP_LTPA_KEYS_PASSWORD:-local-development-only}
       APP_BOOTSTRAP_INVITE_TOKEN: ${APP_BOOTSTRAP_INVITE_TOKEN:-}
     ports:
       - "${PORT:-9080}:9080"
@@ -49,7 +52,7 @@ services:
 
   postgres-restore-verification:
     profiles: [restore-verification]
-    image: postgres:17
+    image: postgres:17.10@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
     environment:
       POSTGRES_DB: calendar_restore
       POSTGRES_USER: calendar_restore
@@ -64,7 +67,7 @@ services:
 
   postgres-bootstrap-verification:
     profiles: [bootstrap-verification]
-    image: postgres:17
+    image: postgres:17.10@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
     environment:
       POSTGRES_DB: calendar_bootstrap_verification
       POSTGRES_USER: calendar_bootstrap_verification
@@ -81,7 +84,7 @@ services:
 
   postgres-e2e-verification:
     profiles: [e2e-verification]
-    image: postgres:17
+    image: postgres:17.10@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
     environment:
       POSTGRES_DB: calendar_e2e_verification
       POSTGRES_USER: calendar_e2e_verification
@@ -111,10 +114,12 @@ services:
       PGUSER: calendar_e2e_verification
       PGPASSWORD: calendar_e2e_verification
       APP_TIMEZONE: Europe/Warsaw
-      APP_BASE_URL: ${E2E_VERIFICATION_BASE_URL:-http://localhost:9082}
+      APP_BASE_URL: ${E2E_VERIFICATION_BASE_URL:-https://localhost:9445}
+      APP_LTPA_KEYS_PASSWORD: e2e-verification-only
       APP_BOOTSTRAP_INVITE_TOKEN: ""
     ports:
       - "127.0.0.1:${E2E_VERIFICATION_APPLICATION_PORT:-9082}:9080"
+      - "127.0.0.1:${E2E_VERIFICATION_HTTPS_PORT:-9445}:9443"
     healthcheck:
       test: *application-health-command
       interval: 2s
@@ -137,10 +142,12 @@ services:
       PGUSER: calendar_bootstrap_verification
       PGPASSWORD: calendar_bootstrap_verification
       APP_TIMEZONE: Europe/Warsaw
-      APP_BASE_URL: http://localhost:${BOOTSTRAP_VERIFICATION_APPLICATION_PORT:-9081}
+      APP_BASE_URL: https://localhost:${BOOTSTRAP_VERIFICATION_HTTPS_PORT:-9444}
+      APP_LTPA_KEYS_PASSWORD: bootstrap-verification-only
       APP_BOOTSTRAP_INVITE_TOKEN: ${BOOTSTRAP_VERIFICATION_INVITATION_TOKEN:-bootstrap-verification-only-token-00000000000000000000000000000000}
     ports:
       - "127.0.0.1:${BOOTSTRAP_VERIFICATION_APPLICATION_PORT:-9081}:9080"
+      - "127.0.0.1:${BOOTSTRAP_VERIFICATION_HTTPS_PORT:-9444}:9443"
     healthcheck:
       test: *application-health-command
       interval: 2s

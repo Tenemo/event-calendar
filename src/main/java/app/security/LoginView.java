@@ -1,5 +1,7 @@
 package app.security;
 
+import app.invitation.InvitationToken;
+import app.web.RelativeRedirect;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
@@ -61,10 +63,7 @@ public class LoginView {
             AuthenticatedSessionSecurity.establishAuthenticatedSession(
                     request,
                     validatedPasswordVersion.getAsLong());
-            String route = isBlank(invitationToken)
-                    ? "/app/calendars"
-                    : "/register?token=" + URLEncoder.encode(invitationToken.trim(), StandardCharsets.UTF_8);
-            redirectToApplication(facesContext, route);
+            RelativeRedirect.send(facesContext, successfulLoginRoute(invitationToken));
         } else if (status == AuthenticationStatus.SEND_CONTINUE) {
             facesContext.responseComplete();
         } else {
@@ -113,9 +112,12 @@ public class LoginView {
         this.reauthenticationRequired = reauthenticationRequired;
     }
 
-    private void redirectToApplication(FacesContext facesContext, String route) throws IOException {
-        facesContext.getExternalContext().redirect(facesContext.getExternalContext().getRequestContextPath() + route);
-        facesContext.responseComplete();
+    static String successfulLoginRoute(String invitationToken) {
+        String normalizedInvitationToken = InvitationToken.normalize(invitationToken);
+        return InvitationToken.isValidCandidate(normalizedInvitationToken)
+                ? "/register?token="
+                        + URLEncoder.encode(normalizedInvitationToken, StandardCharsets.UTF_8)
+                : AuthenticatedApplicationFilter.DEFAULT_AUTHENTICATED_ROUTE;
     }
 
     private void addFailureMessage(String detail) {

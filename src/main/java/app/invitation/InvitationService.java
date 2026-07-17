@@ -150,8 +150,8 @@ public class InvitationService {
     }
 
     private RegistrationAdmission resolveAdmission(String invitationToken, boolean claimBootstrapAdmission) {
-        String normalizedInvitationToken = normalizeInvitationToken(invitationToken);
-        if (normalizedInvitationToken.isBlank()) {
+        String normalizedInvitationToken = InvitationToken.normalize(invitationToken);
+        if (!InvitationToken.isValidCandidate(normalizedInvitationToken)) {
             throw invalidInvitationException();
         }
 
@@ -399,21 +399,14 @@ public class InvitationService {
     }
 
     private boolean matchesBootstrapInvitationToken(String invitationToken) {
-        String configuredBootstrapInvitationToken = normalizeInvitationToken(bootstrapInvitationToken);
-        if (configuredBootstrapInvitationToken.isBlank()) {
+        String configuredBootstrapInvitationToken = InvitationToken.normalize(bootstrapInvitationToken);
+        if (!InvitationToken.isValidCandidate(configuredBootstrapInvitationToken)) {
             return false;
         }
 
         return MessageDigest.isEqual(
                 configuredBootstrapInvitationToken.getBytes(StandardCharsets.UTF_8),
                 invitationToken.getBytes(StandardCharsets.UTF_8));
-    }
-
-    private String normalizeInvitationToken(String invitationToken) {
-        if (invitationToken == null) {
-            return "";
-        }
-        return invitationToken.trim();
     }
 
     private ValidationException invalidInvitationException() {

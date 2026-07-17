@@ -10,6 +10,11 @@ public class CalendarMembershipId implements Serializable {
     public CalendarMembershipId() {
     }
 
+    CalendarMembershipId(Long calendarIdentifier, Long userIdentifier) {
+        this.calendar = calendarIdentifier;
+        this.user = userIdentifier;
+    }
+
     @Override
     public boolean equals(Object other) {
         if (this == other) {

@@ -3,6 +3,8 @@ package app.security;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.user.ApplicationUser;
@@ -18,7 +20,7 @@ import org.junit.jupiter.api.Test;
 
 final class AuthenticatedSessionSecurityTest {
     @Test
-    void invalidatesTheOwnedSessionBeforeRemovingTheAuthenticatedIdentity() throws Exception {
+    void logsOutBeforeInvalidatingAnySessionThatTheContainerRetains() throws Exception {
         AtomicBoolean authenticated = new AtomicBoolean(true);
         List<String> cleanupOperations = new ArrayList<>();
         HttpSession session = (HttpSession) Proxy.newProxyInstance(
@@ -26,7 +28,7 @@ final class AuthenticatedSessionSecurityTest {
                 new Class<?>[] {HttpSession.class},
                 (proxy, method, arguments) -> {
                     if (method.getName().equals("invalidate")) {
-                        assertTrue(authenticated.get());
+                        assertFalse(authenticated.get());
                         cleanupOperations.add("session invalidated");
                     }
                     return defaultValue(method.getReturnType());
@@ -36,9 +38,7 @@ final class AuthenticatedSessionSecurityTest {
                 new Class<?>[] {HttpServletRequest.class},
                 (proxy, method, arguments) -> {
                     if (method.getName().equals("getSession")) {
-                        if (!authenticated.get()) {
-                            throw new AssertionError("An anonymous identity cannot access the authenticated session.");
-                        }
+                        assertFalse(authenticated.get());
                         return session;
                     }
                     if (method.getName().equals("logout")) {
@@ -51,8 +51,41 @@ final class AuthenticatedSessionSecurityTest {
         AuthenticatedSessionSecurity.invalidateSessionAndLogout(request);
 
         assertAll(
-                () -> assertEquals(List.of("session invalidated", "logout"), cleanupOperations),
+                () -> assertEquals(List.of("logout", "session invalidated"), cleanupOperations),
                 () -> assertFalse(authenticated.get()));
+    }
+
+    @Test
+    void doesNotInvalidateAgainWhenContainerLogoutAlreadyRemovedTheSession() throws Exception {
+        AtomicBoolean authenticated = new AtomicBoolean(true);
+        AtomicInteger sessionInvalidations = new AtomicInteger();
+        HttpSession session = (HttpSession) Proxy.newProxyInstance(
+                HttpSession.class.getClassLoader(),
+                new Class<?>[] {HttpSession.class},
+                (proxy, method, arguments) -> {
+                    if (method.getName().equals("invalidate")) {
+                        sessionInvalidations.incrementAndGet();
+                    }
+                    return defaultValue(method.getReturnType());
+                });
+        HttpServletRequest request = (HttpServletRequest) Proxy.newProxyInstance(
+                HttpServletRequest.class.getClassLoader(),
+                new Class<?>[] {HttpServletRequest.class},
+                (proxy, method, arguments) -> {
+                    if (method.getName().equals("logout")) {
+                        authenticated.set(false);
+                    }
+                    if (method.getName().equals("getSession")) {
+                        return authenticated.get() ? session : null;
+                    }
+                    return defaultValue(method.getReturnType());
+                });
+
+        AuthenticatedSessionSecurity.invalidateSessionAndLogout(request);
+
+        assertAll(
+                () -> assertFalse(authenticated.get()),
+                () -> assertEquals(0, sessionInvalidations.get()));
     }
 
     @Test
@@ -87,9 +120,10 @@ final class AuthenticatedSessionSecurityTest {
         AtomicInteger newSessionRequests = new AtomicInteger();
         HttpServletRequest request = request(true, sessionIdentifierChanges, newSessionRequests);
 
-        AuthenticatedSessionSecurity.rotateSessionIdentifier(request);
+        HttpSession rotatedSession = AuthenticatedSessionSecurity.rotateSessionIdentifier(request);
 
         assertAll(
+                () -> assertSame(request.getSession(false), rotatedSession),
                 () -> assertEquals(1, sessionIdentifierChanges.get()),
                 () -> assertEquals(0, newSessionRequests.get()));
     }
@@ -100,9 +134,10 @@ final class AuthenticatedSessionSecurityTest {
         AtomicInteger newSessionRequests = new AtomicInteger();
         HttpServletRequest request = request(false, sessionIdentifierChanges, newSessionRequests);
 
-        AuthenticatedSessionSecurity.rotateSessionIdentifier(request);
+        HttpSession createdSession = AuthenticatedSessionSecurity.rotateSessionIdentifier(request);
 
         assertAll(
+                () -> assertNotNull(createdSession),
                 () -> assertEquals(0, sessionIdentifierChanges.get()),
                 () -> assertEquals(1, newSessionRequests.get()));
     }
@@ -124,6 +159,7 @@ final class AuthenticatedSessionSecurityTest {
 
         assertAll(
                 () -> assertEquals(1, sessionIdentifierChanges.get()),
+                () -> assertEquals(0, newSessionRequests.get()),
                 () -> assertEquals(7L, sessionPasswordVersion.get()),
                 () -> assertTrue(AuthenticatedSessionSecurity.hasCurrentPasswordVersion(request, user)));
 

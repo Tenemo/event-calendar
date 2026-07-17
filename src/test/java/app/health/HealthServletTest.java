@@ -4,6 +4,7 @@ import static app.testsupport.ServiceTestSupport.setField;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -16,6 +17,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Optional;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 
@@ -32,9 +34,27 @@ final class HealthServletTest {
                 () -> assertEquals(HttpServletResponse.SC_OK, responseCapture.status),
                 () -> assertEquals("text/plain; charset=UTF-8", responseCapture.contentType),
                 () -> assertEquals("no-store", responseCapture.cacheControl),
+                () -> assertNull(responseCapture.deploymentRevision),
                 () -> assertEquals("ok", responseCapture.body()),
                 () -> assertEquals(2, recordingConnection.validationTimeoutSeconds),
                 () -> assertTrue(recordingConnection.closed));
+    }
+
+    @Test
+    void healthyDatabaseReturnsTheValidatedDeploymentRevision() throws Exception {
+        String deploymentRevision = "0123456789abcdef0123456789abcdef01234567";
+        RecordingConnection recordingConnection = new RecordingConnection(true);
+        HealthServlet healthServlet = healthServlet(
+                dataSourceReturning(recordingConnection.connection()),
+                Optional.of(deploymentRevision));
+        ResponseCapture responseCapture = new ResponseCapture();
+
+        healthServlet.doGet(null, responseCapture.response());
+
+        assertAll(
+                () -> assertEquals(HttpServletResponse.SC_OK, responseCapture.status),
+                () -> assertEquals(deploymentRevision, responseCapture.deploymentRevision),
+                () -> assertEquals("ok", responseCapture.body()));
     }
 
     @Test
@@ -78,8 +98,13 @@ final class HealthServletTest {
     }
 
     private static HealthServlet healthServlet(DataSource dataSource) {
+        return healthServlet(dataSource, Optional.empty());
+    }
+
+    private static HealthServlet healthServlet(DataSource dataSource, Optional<String> deploymentRevision) {
         HealthServlet healthServlet = new HealthServlet();
         setField(healthServlet, "dataSource", dataSource);
+        setField(healthServlet, "deploymentRevision", deploymentRevision.orElse(null));
         return healthServlet;
     }
 
@@ -162,6 +187,7 @@ final class HealthServletTest {
         private int status;
         private String contentType;
         private String cacheControl;
+        private String deploymentRevision;
 
         private HttpServletResponse response() {
             return (HttpServletResponse) Proxy.newProxyInstance(
@@ -194,6 +220,8 @@ final class HealthServletTest {
         private Object setHeader(String name, String value) {
             if (name.equals("Cache-Control")) {
                 cacheControl = value;
+            } else if (name.equals(HealthServlet.DEPLOYMENT_REVISION_HEADER)) {
+                deploymentRevision = value;
             }
             return null;
         }

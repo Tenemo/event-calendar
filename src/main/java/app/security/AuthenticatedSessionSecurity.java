@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import java.time.Duration;
+import java.util.Objects;
 
 public final class AuthenticatedSessionSecurity {
     static final int AUTHENTICATED_SESSION_LIFETIME_SECONDS =
@@ -15,13 +16,17 @@ public final class AuthenticatedSessionSecurity {
     private AuthenticatedSessionSecurity() {
     }
 
-    public static void rotateSessionIdentifier(HttpServletRequest request) {
+    public static HttpSession rotateSessionIdentifier(HttpServletRequest request) {
         HttpSession existingSession = request.getSession(false);
         if (existingSession == null) {
-            request.getSession(true);
-            return;
+            return Objects.requireNonNull(
+                    request.getSession(true),
+                    "The servlet container did not create a requested session.");
         }
-        request.changeSessionId();
+        Objects.requireNonNull(
+                request.changeSessionId(),
+                "The servlet container did not return the rotated session identifier.");
+        return existingSession;
     }
 
     public static void establishAuthenticatedSession(
@@ -30,8 +35,7 @@ public final class AuthenticatedSessionSecurity {
         if (validatedPasswordVersion < 0) {
             throw new IllegalArgumentException("Validated password version cannot be negative.");
         }
-        rotateSessionIdentifier(request);
-        HttpSession authenticatedSession = request.getSession(true);
+        HttpSession authenticatedSession = rotateSessionIdentifier(request);
         authenticatedSession.setMaxInactiveInterval(AUTHENTICATED_SESSION_LIFETIME_SECONDS);
         authenticatedSession.setAttribute(
                 PASSWORD_VERSION_SESSION_ATTRIBUTE,
@@ -39,11 +43,11 @@ public final class AuthenticatedSessionSecurity {
     }
 
     public static void invalidateSessionAndLogout(HttpServletRequest request) throws ServletException {
-        HttpSession existingSession = request.getSession(false);
-        if (existingSession != null) {
-            existingSession.invalidate();
-        }
         request.logout();
+        HttpSession remainingSession = request.getSession(false);
+        if (remainingSession != null) {
+            remainingSession.invalidate();
+        }
     }
 
     public static boolean hasCurrentPasswordVersion(

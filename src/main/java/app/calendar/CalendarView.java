@@ -12,6 +12,7 @@ import app.util.AuthorizationException;
 import app.util.ConflictException;
 import app.util.NotFoundException;
 import app.util.ValidationException;
+import app.web.RelativeRedirect;
 import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
 import jakarta.faces.view.ViewScoped;
@@ -108,11 +109,11 @@ public class CalendarView implements Serializable {
             calendarLinkToken = calendar.getCalendarLinkToken();
             calendarVersion = calendar.getVersion();
             FacesContext facesContext = FacesContext.getCurrentInstance();
-            facesContext.getExternalContext().redirect(
-                    facesContext.getExternalContext().getRequestContextPath() + "/" + calendarLinkToken);
-            facesContext.responseComplete();
+            RelativeRedirect.send(facesContext, "/" + calendarLinkToken);
         } catch (AuthorizationException | ConflictException | NotFoundException exception) {
+            FacesContext facesContext = FacesContext.getCurrentInstance();
             addMessage(FacesMessage.SEVERITY_ERROR, "Calendar link could not be regenerated.", exception.getMessage());
+            RelativeRedirect.sendKeepingMessages(facesContext, "/" + calendarLinkToken);
         }
     }
 

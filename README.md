@@ -56,11 +56,14 @@ Copy `.env.example` to `.env` for local development. Do not commit `.env`.
 | `PGPASSWORD` | `calendar` | PostgreSQL password. Use a generated secret outside local development. |
 | `APP_TIMEZONE` | `Europe/Warsaw` | Default IANA time zone assigned to new calendars. |
 | `APP_BASE_URL` | `http://localhost:9080` | Canonical external base URL used for invitation and calendar links. |
+| `APP_LTPA_KEYS_PASSWORD` | `local-development-only` | Stable password used by Liberty to protect its generated authentication signing keys. |
 | `APP_BOOTSTRAP_INVITE_TOKEN` | blank | Optional one-time admission secret for creating the first account on a database that has never contained an account. |
 
 `APP_TIMEZONE` must be an identifier supported by Java's IANA time-zone database. Invalid values stop application startup.
 
-`APP_BASE_URL` must be an absolute HTTP or HTTPS URL without credentials, query parameters, or a fragment. A malformed configured value stops application startup. Request-derived links are accepted only on loopback development hosts; production requires an explicit value.
+`APP_BASE_URL` must be an absolute HTTP or HTTPS URL without credentials, query parameters, or a fragment. A malformed configured value stops application startup. Railway startup also fails when the value is missing, blank, or not HTTPS. Request-derived links are accepted only on loopback hosts; explicit HTTP values remain supported outside Railway for local development.
+
+`APP_LTPA_KEYS_PASSWORD` must be set to a generated high-entropy value of at least 32 characters on Railway. Keep it stable across application restarts so Liberty can decrypt its existing authentication signing keys. Missing, blank, or shorter Railway values stop application startup. The committed local value is deterministic only for disposable development and verification environments; never reuse it in production. Do not log or commit the production value.
 
 `PGSSLMODE` is used only by the Dockerized PostgreSQL backup client. Set it to the mode required by the remote database, normally `require` for a public production endpoint.
 
@@ -90,7 +93,7 @@ Browser tests build the production image and run against disposable application 
 mise run e2e
 ```
 
-Set `BROWSER` to `firefox` or `webkit` when intentionally running another supported browser. Pull requests use Chromium. The automated suite covers registration, login, logout, password changes and session revocation, calendar creation, event creation/editing/deletion, compact canonical calendar links, public-access disabling, link regeneration, invitation acceptance, editor removal, last-admin protection, validation, request throttling, and anonymous read-only behavior. A second isolated scenario verifies bootstrap-registration rollback and concurrency.
+Set `BROWSER` to `firefox` or `webkit` when intentionally running another supported browser. Pull requests run the complete suite in Chromium and focused compatibility journeys in Firefox and WebKit. The automated suite covers registration, login, logout, password changes and session revocation, calendar creation, event creation/editing/deletion, compact canonical calendar links, public-access disabling, link regeneration, invitation acceptance, editor removal, last-admin protection, validation, request throttling, and anonymous read-only behavior. A second isolated scenario verifies bootstrap-registration rollback and concurrency.
 
 Run only the isolated bootstrap-registration verification with:
 
@@ -98,14 +101,19 @@ Run only the isolated bootstrap-registration verification with:
 mise run verify-bootstrap-registration
 ```
 
-Production packaging and recovery have separate checks:
+Production packaging, recovery, and deployment verification have separate checks:
 
 ```bash
 mise run docker-build
 mise run verify-backup-restore
+java scripts/verify-production-deployment.java self-test
 ```
 
-Pull requests run the Maven build, PostgreSQL-backed Playwright workflows, a production image/container smoke test, Dependency Review, and CodeQL.
+The production deployment verifier has deterministic self-tests for argument validation, exact-revision matching, bounded polling, transient network failures, mid-pass deployment changes, direct authentication redirects, secure cookie attributes, and exact response-header contracts. Running the verifier against a service is read-only.
+
+Pull requests run Java static analysis, CSS linting, the Maven build and reproducibility check, the full PostgreSQL-backed Chromium suite, focused Firefox and WebKit smoke journeys, bootstrap-concurrency verification, the exact production image smoke test, image SBOM generation and vulnerability scan, backup/restore verification, Dependency Review, and CodeQL. A separate daily and manually dispatchable workflow rebuilds the current default-branch production image, regenerates its SBOM, and blocks on high or critical vulnerabilities so newly disclosed issues are detected between pull requests.
+
+In GitHub's repository ruleset, require the stable `Required PR checks` and `Code analysis` status checks before merging. Also enable GitHub's native automatic Maven dependency submission, Dependabot alerts, and Dependabot security updates. These are GitHub UI settings rather than additional workflows; the committed Dependabot configuration supplies weekly update pull requests for GitHub Actions, Maven, npm, and Docker dependencies.
 
 ## Running with Liberty dev mode
 
@@ -118,6 +126,8 @@ mise run dev
 ```
 
 The development command prepares the Maven-managed PostgreSQL driver and keeps the generated Liberty installation under `.liberty/`. Development classes use `.build/development`, while clean distributable builds use `.build/package`, so packaging does not remove or modify a running development server. No generated runtime or downloaded driver is committed.
+
+Dev mode requires `t` before running tests on demand and excludes integration and browser tests so an interactive development server cannot write E2E fixtures into the normal development database. Use `mise run package` for the normal test suite and the dedicated E2E tasks for isolated browser verification.
 
 To require the exact `200 ok` health contract and the current successful Flyway schema without rebuilding or starting services:
 
@@ -187,12 +197,25 @@ PGUSER=${{Postgres.POSTGRES_USER}}
 PGPASSWORD=${{Postgres.POSTGRES_PASSWORD}}
 APP_TIMEZONE=Europe/Warsaw
 APP_BASE_URL=https://calendar.social
+APP_LTPA_KEYS_PASSWORD=<generated high-entropy secret of at least 32 characters>
 APP_BOOTSTRAP_INVITE_TOKEN=
 ```
 
 Set `APP_BOOTSTRAP_INVITE_TOKEN` temporarily to a generated high-entropy secret for the first registration only. After the first account is created, delete or clear the variable and redeploy; the database also records permanent bootstrap consumption.
 
-After deployment, verify `/health`, registration, login, password change, calendar links, invitations, role changes, and event persistence. Redeploy, confirm that accounts and calendar data persist, then sign in again because HTTP sessions are intentionally in memory. Inspect logs to confirm that passwords, database credentials, calendar link tokens, and invitation tokens are absent. Railway's deployment health check is not continuous monitoring, so configure an external HTTPS uptime check for `https://calendar.social/health` before relying on the service.
+[Railway provides `RAILWAY_GIT_COMMIT_SHA` to GitHub-triggered builds](https://docs.railway.com/variables/reference), and [Dockerfile variables are available as build arguments](https://docs.railway.com/builds/dockerfiles). Do not configure that platform-owned variable manually. The Dockerfile accepts only one complete Git commit SHA, normalizes it, and embeds it in the WAR. `/health` reads only that artifact-bound value and returns it in the no-store `X-Deployment-Revision` response header. A stale image therefore identifies the commit it actually contains rather than whichever revision happens to be running. A missing value omits the resource and header, a malformed nonempty build argument fails the image build, and the existing database-aware `200 ok` or `503 unavailable` health contract remains unchanged.
+
+After each deployment, require production to serve the exact expected commit and the read-only smoke contracts:
+
+```bash
+java scripts/verify-production-deployment.java --base-url https://calendar.social --expected-revision <40-character-git-sha> --timeout-seconds 600 --poll-interval-seconds 5
+```
+
+GitHub runs the same verifier for a successful Railway `production` deployment status, using the exact SHA recorded by that deployment event. This genuinely post-deploy trigger cannot form a cycle with Railway's optional **Wait for CI** gate. Manual workflow dispatch supports deliberate verification of another full SHA and HTTPS origin.
+
+The command accepts HTTPS origins without credentials, paths, query parameters, or fragments; plain HTTP is limited to literal loopback hosts for local verification. It waits only within the configured deadline for `/health` to prove both database availability and the exact deployment revision. It then verifies stable home and sign-in page markers, secure emitted cookies and exact session-cookie attributes without retaining cookie values, the exact origin-relative `/login` redirect for an anonymous protected request, the committed response-security headers and dynamic no-store policies, and the rejected legacy calendar route. Resolving that relative redirect at the required production HTTPS origin keeps authentication on HTTPS without trusting a proxy-supplied host or scheme. A final health and revision check prevents a deployment change during the smoke pass from being accepted. The verifier does not follow redirects, store cookies, mutate production data, or print response bodies, cookie values, redirect targets, or unvalidated option values.
+
+After the automated check passes, verify registration, login, password change, calendar links, invitations, role changes, and event persistence through the normal manual release checklist. Redeploy, confirm that accounts and calendar data persist, then sign in again because HTTP sessions are intentionally in memory. Inspect logs to confirm that passwords, database credentials, calendar link tokens, and invitation tokens are absent. Railway's deployment health check is not continuous monitoring, so configure an external HTTPS uptime check for `https://calendar.social/health` before relying on the service.
 
 Railway protects its network below the application layer, but it does not provide an application-layer WAF. The application rejects malformed calendar paths before database access, limits each client source to 300 valid-looking calendar-link requests per minute, permits at most 16 such requests to execute concurrently, and bounds source tracking to 10,000 entries. Both calendar-link and login throttles use Railway's documented `X-Real-IP` address only when Railway's automatically provided `RAILWAY_ENVIRONMENT_ID` marks the deployment and the immediate peer is in Railway's documented `100.0.0.0/8` proxy range; elsewhere they ignore that header and use the direct TCP peer. Missing, malformed, ambiguous, or untrusted client-address headers fall back to that peer. These controls make online token iteration impractical from one source and shed excess application work without disrupting a busy shared network; they cannot absorb a volumetric or large distributed attack before traffic reaches Railway. For stronger public-internet protection, proxy `calendar.social` through a service such as Cloudflare with application-layer rate limiting and bot/WAF rules, then remove Railway's generated public domain so it cannot bypass that edge. Netlify is not required.
 
@@ -210,7 +233,7 @@ Passwords must be between 8 and 512 characters, contain at least one uppercase l
 
 Five failed sign-in attempts for one normalized username from one client source within 15 minutes block that username/source pair for 15 minutes. Twenty-five failures from one source in the same window block further attempts from that source for 15 minutes, which limits username spraying without letting one remote client lock the account for other sources. Missing and existing usernames follow the same policy and return the same generic failure. Tracking is bounded; if every slot is occupied by an active block, authentication enters a 15-minute fail-closed saturation cooldown instead of allowing untracked attempts.
 
-Anonymous sessions receive browser-session cookies and expire on the server after 30 minutes of inactivity. Only successful authentication extends a server session to 30 days and allows the application to issue an unconditionally Secure, HTTP-only, SameSite `Lax` persistent cookie. Authenticated application and calendar requests refresh both the cookie and the 30-day inactivity window. A server restart or redeploy clears in-memory sessions and requires reauthentication, while accounts and calendar data remain in PostgreSQL.
+Anonymous Faces views, including sign-in, receive browser-session cookies and expire on the server after 30 minutes of inactivity. Only successful authentication extends a server session to 30 days and allows the application to issue an unconditionally Secure, HTTP-only, SameSite `Lax` persistent cookie. Liberty also restricts its HTTP-only, SameSite `Lax` authentication cookie to secure requests and rejects SSO tokens after logout on the running instance. Authenticated application and calendar requests refresh both the cookie and the 30-day inactivity window. A server restart or redeploy clears in-memory sessions and requires reauthentication; submitting a sign-in form that was open before the restart returns the browser to a fresh sign-in form. The stable `APP_LTPA_KEYS_PASSWORD` lets Liberty reopen its generated signing-key file, while accounts and calendar data remain in PostgreSQL.
 
 ## Password changes
 
@@ -298,7 +321,7 @@ Confirm that Liberty uses `host="*"`, the web service receives Railway's `PORT`,
 
 ### Login works locally but not in production
 
-Confirm that `APP_BASE_URL` exactly matches the HTTPS domain, only one application replica is running, and the browser is not switching between generated and custom domains. Session cookies are always Secure and cannot be downgraded through configuration.
+Confirm that `APP_BASE_URL` exactly matches the HTTPS domain, `APP_LTPA_KEYS_PASSWORD` is present and unchanged, only one application replica is running, and the browser is not switching between generated and custom domains. Session cookies are always Secure and cannot be downgraded through configuration. A `CWWKS4106E`, `CWWKS4118E`, or `CWWKS4000E` message after a restart indicates that Liberty could not reopen its authentication signing keys or start the token service; restore the same production LTPA password instead of generating a replacement. If a disposable local `.liberty` runtime predates the stable local password setting, stop that local server, delete only `.liberty/user/servers/defaultServer/resources/security/ltpa.keys`, and restart once so Liberty regenerates the file with the current local value. Never use that local-only recovery for a production key file.
 
 ### Calendar link does not work
 

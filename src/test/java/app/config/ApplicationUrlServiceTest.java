@@ -1,6 +1,5 @@
 package app.config;
 
-import static app.testsupport.ServiceTestSupport.setField;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -26,8 +25,8 @@ final class ApplicationUrlServiceTest {
 
     @Test
     void buildsLinksFromTheConfiguredCanonicalBaseUrl() {
-        ApplicationUrlService applicationUrlService = new ApplicationUrlService();
-        setField(applicationUrlService, "configuredBaseUrl", "https://calendar.example.com/friends/");
+        ApplicationUrlService applicationUrlService =
+                new ApplicationUrlService("https://calendar.example.com/friends/", null);
         applicationUrlService.initialize();
 
         assertEquals(
@@ -54,31 +53,53 @@ final class ApplicationUrlServiceTest {
 
     @Test
     void rejectsConfiguredBaseUrlsThatCouldProduceUntrustedOrMalformedLinks() {
-        ApplicationUrlService applicationUrlService = new ApplicationUrlService();
+        ApplicationUrlService malformedBaseUrlService =
+                new ApplicationUrlService("calendar.example.com", null);
+        assertThrows(IllegalStateException.class, malformedBaseUrlService::initialize);
 
-        setField(applicationUrlService, "configuredBaseUrl", "calendar.example.com");
-        assertThrows(IllegalStateException.class, applicationUrlService::initialize);
-
-        setField(applicationUrlService, "configuredBaseUrl", "https://calendar.example.com?redirect=attacker.example");
-        assertThrows(IllegalStateException.class, applicationUrlService::initialize);
+        ApplicationUrlService untrustedQueryService = new ApplicationUrlService(
+                "https://calendar.example.com?redirect=attacker.example", null);
+        assertThrows(IllegalStateException.class, untrustedQueryService::initialize);
 
         assertAll(
-                () -> assertRejectedBaseUrl(applicationUrlService, "https://user:password@calendar.example.com"),
-                () -> assertRejectedBaseUrl(applicationUrlService, "https://calendar.example.com#fragment"),
-                () -> assertRejectedBaseUrl(applicationUrlService, "mailto:calendar@example.com"),
-                () -> assertRejectedBaseUrl(applicationUrlService, "https:///deployment-path"),
-                () -> assertRejectedBaseUrl(applicationUrlService, "https://calendar_example.com"),
-                () -> assertRejectedBaseUrl(applicationUrlService, "https://calendar.example.com:"),
-                () -> assertRejectedBaseUrl(applicationUrlService, "https://calendar.example.com:65536"),
-                () -> assertRejectedBaseUrl(applicationUrlService, "https://[::1"));
+                () -> assertRejectedBaseUrl("https://user:password@calendar.example.com"),
+                () -> assertRejectedBaseUrl("https://calendar.example.com#fragment"),
+                () -> assertRejectedBaseUrl("mailto:calendar@example.com"),
+                () -> assertRejectedBaseUrl("https:///deployment-path"),
+                () -> assertRejectedBaseUrl("https://calendar_example.com"),
+                () -> assertRejectedBaseUrl("https://calendar.example.com:"),
+                () -> assertRejectedBaseUrl("https://calendar.example.com:65536"),
+                () -> assertRejectedBaseUrl("https://[::1"));
     }
 
     @Test
     void permitsAnAbsentConfiguredBaseUrlForLoopbackDevelopmentRequests() {
-        ApplicationUrlService applicationUrlService = new ApplicationUrlService();
-        setField(applicationUrlService, "configuredBaseUrl", "   ");
+        assertAll(
+                () -> assertDoesNotThrow(() -> new ApplicationUrlService(null, null).initialize()),
+                () -> assertDoesNotThrow(() -> new ApplicationUrlService("", "").initialize()),
+                () -> assertDoesNotThrow(() -> new ApplicationUrlService("   ", "   ").initialize()));
+    }
 
-        assertDoesNotThrow(applicationUrlService::initialize);
+    @Test
+    void requiresAnExplicitBaseUrlDuringRailwayStartup() {
+        assertAll(
+                () -> assertThrows(
+                        IllegalStateException.class,
+                        () -> new ApplicationUrlService(null, "production-environment-id").initialize()),
+                () -> assertThrows(
+                        IllegalStateException.class,
+                        () -> new ApplicationUrlService("", "production-environment-id").initialize()),
+                () -> assertThrows(
+                        IllegalStateException.class,
+                        () -> new ApplicationUrlService("   ", "production-environment-id").initialize()),
+                () -> assertThrows(
+                        IllegalStateException.class,
+                        () -> new ApplicationUrlService(
+                                        "http://calendar.example.com", "production-environment-id")
+                                .initialize()),
+                () -> assertDoesNotThrow(() -> new ApplicationUrlService(
+                                "HTTPS://calendar.example.com", "production-environment-id")
+                        .initialize()));
     }
 
     @Test
@@ -113,14 +134,13 @@ final class ApplicationUrlServiceTest {
                                 "https", "calendar.example.com", 443, "")));
     }
 
-    private static void assertRejectedBaseUrl(ApplicationUrlService applicationUrlService, String configuredBaseUrl) {
-        setField(applicationUrlService, "configuredBaseUrl", configuredBaseUrl);
+    private static void assertRejectedBaseUrl(String configuredBaseUrl) {
+        ApplicationUrlService applicationUrlService = new ApplicationUrlService(configuredBaseUrl, null);
         assertThrows(IllegalStateException.class, applicationUrlService::initialize);
     }
 
     private static void assertConfiguredLink(String configuredBaseUrl, String path, String expectedLink) {
-        ApplicationUrlService applicationUrlService = new ApplicationUrlService();
-        setField(applicationUrlService, "configuredBaseUrl", configuredBaseUrl);
+        ApplicationUrlService applicationUrlService = new ApplicationUrlService(configuredBaseUrl, null);
         applicationUrlService.initialize();
         assertEquals(expectedLink, applicationUrlService.linkTo(path));
     }

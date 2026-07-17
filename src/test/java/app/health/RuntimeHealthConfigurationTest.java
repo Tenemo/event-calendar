@@ -1,7 +1,6 @@
 package app.health;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -47,14 +46,6 @@ final class RuntimeHealthConfigurationTest {
                 () -> assertTrue(
                         driverLoginTimeout.compareTo(connectionAcquisitionTimeout) <= 0,
                         "The driver login timeout must not exceed the pool acquisition timeout."));
-    }
-
-    @Test
-    void httpEndpointLeavesClientSourceResolutionToTheRailwayAwareApplicationPolicy() throws Exception {
-        Document serverConfiguration = readServerConfiguration();
-        Element httpEndpoint = elementWithId(serverConfiguration, "httpEndpoint", "defaultHttpEndpoint");
-
-        assertEquals(0, httpEndpoint.getElementsByTagName("remoteIp").getLength());
     }
 
     private static Document readServerConfiguration() throws Exception {

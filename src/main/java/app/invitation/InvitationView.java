@@ -1,6 +1,5 @@
 package app.invitation;
 
-import app.calendar.CalendarMembershipSummary;
 import app.calendar.CalendarService;
 import app.config.ApplicationUrlService;
 import app.security.CurrentUser;

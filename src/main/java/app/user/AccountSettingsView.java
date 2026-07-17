@@ -4,6 +4,7 @@ import app.security.AuthenticatedSessionSecurity;
 import app.security.CurrentUser;
 import app.util.AuthorizationException;
 import app.util.ValidationException;
+import app.web.RelativeRedirect;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
@@ -52,9 +53,7 @@ public class AccountSettingsView {
         FacesContext facesContext = FacesContext.getCurrentInstance();
         HttpServletRequest request = (HttpServletRequest) facesContext.getExternalContext().getRequest();
         AuthenticatedSessionSecurity.invalidateSessionAndLogout(request);
-        facesContext.getExternalContext().redirect(
-                facesContext.getExternalContext().getRequestContextPath() + "/login?passwordChanged=true");
-        facesContext.responseComplete();
+        RelativeRedirect.send(facesContext, "/login?passwordChanged=true");
     }
 
     public String getCurrentPassword() {

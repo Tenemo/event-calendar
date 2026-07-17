@@ -88,5 +88,7 @@ Run `mise run dev` in a separate terminal when another verification command need
 ## Completion standard
 
 - A task is done only when the relevant code, tests, documentation, and local verification are complete.
+- After every task, leave PostgreSQL and an application instance built from the current source running and accessible for manual testing. Verify that `/health` returns `200 ok` and that a representative browser page loads before handing off. Prefer the documented default local URL; if a pre-existing process already owns that port, do not stop it, start the current application on available non-default ports, and report the exact manual-testing URL.
+- Do not finish a task with the only verified application instance stopped. Leave the verified instance running unless the owner explicitly asks for it to be shut down.
 - For app features, verify the behavior through the smallest reliable automated or manual path that exercises the real application behavior.
 - Before claiming deployment or production readiness, verify Docker runtime behavior, database persistence, registration, calendar role behavior, public links, invite links, and backup/restore instructions.

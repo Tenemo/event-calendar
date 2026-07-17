@@ -7,6 +7,7 @@ import app.security.CurrentUser;
 import app.security.PasswordValidationState;
 import app.util.AuthorizationException;
 import app.util.ValidationException;
+import app.web.RelativeRedirect;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
@@ -69,8 +70,7 @@ public class RegistrationView {
                     ? "/app/calendars"
                     : "/" + invitation.getCalendar().getCalendarLinkToken();
             FacesContext facesContext = FacesContext.getCurrentInstance();
-            facesContext.getExternalContext().redirect(facesContext.getExternalContext().getRequestContextPath() + route);
-            facesContext.responseComplete();
+            RelativeRedirect.send(facesContext, route);
         } catch (AuthorizationException | ValidationException exception) {
             FacesContext.getCurrentInstance().addMessage(
                     null,
@@ -145,8 +145,7 @@ public class RegistrationView {
             AuthenticatedSessionSecurity.establishAuthenticatedSession(
                     request,
                     validatedPasswordVersion.getAsLong());
-            facesContext.getExternalContext().redirect(facesContext.getExternalContext().getRequestContextPath() + "/app/calendars");
-            facesContext.responseComplete();
+            RelativeRedirect.send(facesContext, "/app/calendars");
         } else if (status == AuthenticationStatus.SEND_CONTINUE) {
             facesContext.responseComplete();
         } else {
@@ -155,12 +154,9 @@ public class RegistrationView {
     }
 
     private void redirectToLoginAfterRegistration(FacesContext facesContext) throws IOException {
-        facesContext.getExternalContext().getFlash().setKeepMessages(true);
         facesContext.addMessage(
                 null,
                 new FacesMessage(FacesMessage.SEVERITY_INFO, "Registration succeeded.", "Sign in with the new account."));
-        facesContext.getExternalContext().redirect(
-                facesContext.getExternalContext().getRequestContextPath() + "/login");
-        facesContext.responseComplete();
+        RelativeRedirect.sendKeepingMessages(facesContext, "/login");
     }
 }

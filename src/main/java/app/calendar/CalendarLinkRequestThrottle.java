@@ -158,6 +158,7 @@ public class CalendarLinkRequestThrottle {
     public static final class Admission implements AutoCloseable {
         private final Semaphore concurrentRequestPermits;
         private final int retryAfterSeconds;
+        private final Object releaseLock = new Object();
         private boolean released;
 
         private Admission(Semaphore concurrentRequestPermits, int retryAfterSeconds) {
@@ -182,10 +183,12 @@ public class CalendarLinkRequestThrottle {
         }
 
         @Override
-        public synchronized void close() {
-            if (concurrentRequestPermits != null && !released) {
-                concurrentRequestPermits.release();
-                released = true;
+        public void close() {
+            synchronized (releaseLock) {
+                if (concurrentRequestPermits != null && !released) {
+                    concurrentRequestPermits.release();
+                    released = true;
+                }
             }
         }
     }

@@ -27,7 +27,11 @@ public class Invitation {
     @JoinColumn(name = "calendar_id")
     private Calendar calendar;
 
-    @Column(name = "invite_token", nullable = false, unique = true, length = 80)
+    @Column(
+            name = "invite_token",
+            nullable = false,
+            unique = true,
+            length = InvitationToken.MAXIMUM_LENGTH)
     private String invitationToken;
 
     @Enumerated(EnumType.STRING)

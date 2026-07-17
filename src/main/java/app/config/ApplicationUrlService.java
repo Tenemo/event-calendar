@@ -16,12 +16,33 @@ import java.net.URI;
 @TransactionAttribute(TransactionAttributeType.NOT_SUPPORTED)
 public class ApplicationUrlService {
     private static final String APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE = "APP_BASE_URL";
+    private static final String RAILWAY_ENVIRONMENT_ID_ENVIRONMENT_VARIABLE = "RAILWAY_ENVIRONMENT_ID";
 
-    private String configuredBaseUrl = System.getenv(APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE);
+    private String configuredBaseUrl;
+    private final boolean railwayEnvironment;
+
+    public ApplicationUrlService() {
+        this(
+                System.getenv(APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE),
+                System.getenv(RAILWAY_ENVIRONMENT_ID_ENVIRONMENT_VARIABLE));
+    }
+
+    ApplicationUrlService(String configuredBaseUrl, String railwayEnvironmentId) {
+        this.configuredBaseUrl = configuredBaseUrl;
+        railwayEnvironment = railwayEnvironmentId != null && !railwayEnvironmentId.isBlank();
+    }
 
     @PostConstruct
     void initialize() {
         configuredBaseUrl = normalizedConfiguredBaseUrl(configuredBaseUrl);
+        if (railwayEnvironment) {
+            if (configuredBaseUrl == null) {
+                throw new IllegalStateException("APP_BASE_URL is required in a Railway environment.");
+            }
+            if (!"https".equalsIgnoreCase(URI.create(configuredBaseUrl).getScheme())) {
+                throw new IllegalStateException("APP_BASE_URL must use HTTPS in a Railway environment.");
+            }
+        }
     }
 
     public String linkTo(String path) {

@@ -3,8 +3,9 @@
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     background: #f7f8fb;
     color: #111827;
+
     --app-background: #f7f8fb;
-    --surface: #ffffff;
+    --surface: #fff;
     --surface-muted: #eef2f7;
     --text: #111827;
     --muted-text: #5b6472;
@@ -22,7 +23,7 @@
     --danger: #b91c1c;
     --danger-strong: #991b1b;
     --focus-ring: #0f3d9e;
-    --shadow: 0 1px 3px rgba(17, 24, 39, 0.08);
+    --shadow: 0 1px 3px rgb(17 24 39 / 8%);
 }
 
 *,
@@ -49,7 +50,7 @@ a {
     padding: 0.75rem 1rem;
     border-radius: var(--control-radius);
     background: var(--text);
-    color: #ffffff;
+    color: #fff;
     font-weight: 700;
     text-decoration: none;
     transform: translateY(-200%);
@@ -69,7 +70,7 @@ a {
     gap: 2rem;
     padding: 0.9rem 2rem;
     border-bottom: 1px solid var(--border);
-    background: rgba(255, 255, 255, 0.94);
+    background: rgb(255 255 255 / 94%);
     backdrop-filter: blur(12px);
 }
 
@@ -126,7 +127,7 @@ a {
 .app-nav .nav-action,
 .primary-link {
     background: var(--primary);
-    color: #ffffff;
+    color: #fff;
 }
 
 .app-nav .nav-action:hover,
@@ -588,7 +589,7 @@ button,
     justify-content: center;
     border-radius: var(--control-radius);
     background: var(--text);
-    color: #ffffff;
+    color: #fff;
     font-weight: 800;
 }
 
@@ -733,7 +734,7 @@ body .ui-datepicker .ui-timepicker-timeinput input:focus {
 body .ui-chkbox .ui-chkbox-box.ui-state-active {
     border-color: var(--primary);
     background: var(--primary);
-    color: #ffffff;
+    color: #fff;
 }
 
 body .ui-chkbox .ui-chkbox-box.ui-state-active.ui-state-hover {
@@ -757,7 +758,7 @@ body .ui-paginator .ui-paginator-pages .ui-paginator-page.ui-state-active {
 body .ui-button {
     border-color: var(--primary);
     background: var(--primary);
-    color: #ffffff;
+    color: #fff;
 }
 
 body .ui-button:not(.ui-state-disabled):hover {
@@ -769,7 +770,7 @@ body .ui-button.ui-state-active,
 body .ui-button.ui-state-down {
     border-color: var(--primary-strong);
     background: var(--primary-strong);
-    color: #ffffff;
+    color: #fff;
 }
 
 body .ui-button.ui-button-outlined {
@@ -808,7 +809,7 @@ body .ui-button.ui-button-secondary:active {
 body .ui-button.ui-button-danger {
     border-color: var(--danger);
     background: var(--danger);
-    color: #ffffff;
+    color: #fff;
 }
 
 body .ui-button.ui-button-danger:not(.ui-state-disabled):hover {
@@ -821,7 +822,7 @@ body .ui-button.ui-button-danger.ui-state-down,
 body .ui-button.ui-button-danger:active {
     border-color: var(--danger-strong);
     background: var(--danger-strong);
-    color: #ffffff;
+    color: #fff;
 }
 
 body .ui-button.ui-button-danger.ui-button-outlined {
@@ -888,13 +889,13 @@ body .ui-button.ui-button-danger.ui-state-focus {
     overflow-wrap: anywhere;
 }
 
-@media (max-width: 1100px) {
+@media (width <= 1100px) {
     .intro-panel h1 {
         font-size: 3.3rem;
     }
 }
 
-@media (max-width: 820px) {
+@media (width <= 820px) {
     .app-header,
     .section-header,
     .preview-header {
@@ -954,7 +955,7 @@ body .ui-button.ui-button-danger.ui-state-focus {
     }
 }
 
-@media (max-height: 48rem) {
+@media (height <= 48rem) {
     .event-editor {
         position: static;
     }

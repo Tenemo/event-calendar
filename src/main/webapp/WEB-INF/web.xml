@@ -16,6 +16,11 @@
     </context-param>
 
     <filter>
+        <filter-name>Security headers filter</filter-name>
+        <filter-class>app.security.SecurityHeadersFilter</filter-class>
+    </filter>
+
+    <filter>
         <filter-name>Session cookie refresh filter</filter-name>
         <filter-class>app.security.SessionCookieRefreshFilter</filter-class>
     </filter>
@@ -24,6 +29,19 @@
         <filter-name>Calendar route filter</filter-name>
         <filter-class>app.calendar.CalendarRouteFilter</filter-class>
     </filter>
+
+    <filter>
+        <filter-name>Authenticated application filter</filter-name>
+        <filter-class>app.security.AuthenticatedApplicationFilter</filter-class>
+    </filter>
+
+    <filter-mapping>
+        <filter-name>Security headers filter</filter-name>
+        <url-pattern>/*</url-pattern>
+        <dispatcher>REQUEST</dispatcher>
+        <dispatcher>FORWARD</dispatcher>
+        <dispatcher>ERROR</dispatcher>
+    </filter-mapping>
 
     <filter-mapping>
         <filter-name>Calendar route filter</filter-name>
@@ -34,6 +52,13 @@
     <filter-mapping>
         <filter-name>Session cookie refresh filter</filter-name>
         <url-pattern>/*</url-pattern>
+        <dispatcher>REQUEST</dispatcher>
+        <dispatcher>FORWARD</dispatcher>
+    </filter-mapping>
+
+    <filter-mapping>
+        <filter-name>Authenticated application filter</filter-name>
+        <url-pattern>/app/*</url-pattern>
         <dispatcher>REQUEST</dispatcher>
         <dispatcher>FORWARD</dispatcher>
     </filter-mapping>
@@ -49,15 +74,14 @@
         <url-pattern>*.xhtml</url-pattern>
     </servlet-mapping>
 
-    <security-constraint>
-        <web-resource-collection>
-            <web-resource-name>Authenticated application pages</web-resource-name>
-            <url-pattern>/app/*</url-pattern>
-        </web-resource-collection>
-        <auth-constraint>
-            <role-name>USER</role-name>
-        </auth-constraint>
-    </security-constraint>
+    <session-config>
+        <session-timeout>30</session-timeout>
+        <cookie-config>
+            <http-only>true</http-only>
+            <secure>true</secure>
+        </cookie-config>
+        <tracking-mode>COOKIE</tracking-mode>
+    </session-config>
 
     <security-role>
         <role-name>USER</role-name>

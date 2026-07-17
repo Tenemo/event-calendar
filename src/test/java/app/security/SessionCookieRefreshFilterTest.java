@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.calendar.CalendarRouteFilter;
 import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -93,6 +92,71 @@ final class SessionCookieRefreshFilterTest {
     }
 
     @Test
+    void doesNotAskLibertyForSessionValidityAfterTheRequestBecomesAnonymous()
+            throws Exception {
+        AtomicInteger sessionValidityChecks = new AtomicInteger();
+        AtomicInteger filterChainCalls = new AtomicInteger();
+        HttpServletRequest anonymousRequest = (HttpServletRequest) Proxy.newProxyInstance(
+                HttpServletRequest.class.getClassLoader(),
+                new Class<?>[] {HttpServletRequest.class},
+                (proxy, method, arguments) -> switch (method.getName()) {
+                    case "getUserPrincipal" -> null;
+                    case "isRequestedSessionIdValid" -> {
+                        sessionValidityChecks.incrementAndGet();
+                        throw new AssertionError(
+                                "An anonymous request must not inspect a previously owned session.");
+                    }
+                    case "getCookies" -> new Cookie[] {new Cookie("JSESSIONID", SESSION_ID)};
+                    case "getContextPath" -> "";
+                    case "getRequestURI" -> "/app/calendars";
+                    default -> defaultValue(method.getReturnType());
+                });
+
+        new SessionCookieRefreshFilter(currentUser(false))
+                .doFilter(
+                        anonymousRequest,
+                        response(new ArrayList<>(), false),
+                        filterChain(filterChainCalls));
+
+        assertAll(
+                () -> assertEquals(1, filterChainCalls.get()),
+                () -> assertEquals(0, sessionValidityChecks.get()));
+    }
+
+    @Test
+    void expiresARejectedSingleSignOnCookieWithoutDiscardingTheAnonymousFacesSession()
+            throws Exception {
+        for (String requestUri : List.of("/", "/login", "/app/calendars")) {
+            List<Cookie> responseCookies = new ArrayList<>();
+            AtomicInteger filterChainCalls = new AtomicInteger();
+
+            new SessionCookieRefreshFilter(currentUser(false))
+                    .doFilter(
+                            requestAtPath(
+                                    requestUri,
+                                    true,
+                                    false,
+                                    false,
+                                    new Cookie("JSESSIONID", SESSION_ID),
+                                    new Cookie("LtpaToken2", "rejected-token")),
+                            response(responseCookies, false),
+                            filterChain(filterChainCalls));
+
+            Cookie expiredSingleSignOnCookie = responseCookies.getFirst();
+            assertAll(
+                    () -> assertEquals(1, filterChainCalls.get()),
+                    () -> assertEquals(1, responseCookies.size()),
+                    () -> assertEquals("LtpaToken2", expiredSingleSignOnCookie.getName()),
+                    () -> assertTrue(expiredSingleSignOnCookie.getValue().isEmpty()),
+                    () -> assertEquals("/", expiredSingleSignOnCookie.getPath()),
+                    () -> assertTrue(expiredSingleSignOnCookie.isHttpOnly()),
+                    () -> assertTrue(expiredSingleSignOnCookie.getSecure()),
+                    () -> assertEquals(0, expiredSingleSignOnCookie.getMaxAge()),
+                    () -> assertEquals("Lax", expiredSingleSignOnCookie.getAttribute("SameSite")));
+        }
+    }
+
+    @Test
     void doesNotRefreshAfterLogoutOrAfterTheResponseIsCommitted() throws Exception {
         AtomicBoolean authenticated = new AtomicBoolean(true);
         List<Cookie> logoutResponseCookies = new ArrayList<>();
@@ -142,30 +206,27 @@ final class SessionCookieRefreshFilterTest {
     }
 
     @Test
-    void invalidatesStaleApplicationAndCalendarPostbackSessionsWithTheFixedLoginRedirect() throws Exception {
+    void invalidatesStaleApplicationAndCalendarPostbackSessionsWithTheFixedLoginRedirect()
+            throws Exception {
         for (String requestUri : List.of("/app/calendars", "/calendar.xhtml")) {
-            AtomicBoolean loggedOut = new AtomicBoolean();
-            AtomicBoolean sessionInvalidated = new AtomicBoolean();
-            List<String> sessionCleanupOperations = new ArrayList<>();
+            StaleSessionCleanup sessionCleanup = new StaleSessionCleanup();
             AtomicReference<String> redirectLocation = new AtomicReference<>();
             AtomicInteger filterChainCalls = new AtomicInteger();
+            List<Cookie> responseCookies = new ArrayList<>();
 
             new SessionCookieRefreshFilter(currentUser(false))
                     .doFilter(
-                            staleSessionRequest(
-                                    requestUri,
-                                    loggedOut,
-                                    sessionInvalidated,
-                                    sessionCleanupOperations),
-                            redirectResponse(redirectLocation),
+                            staleSessionRequest(requestUri, sessionCleanup, null, "POST"),
+                            redirectResponse(redirectLocation, responseCookies),
                             filterChain(filterChainCalls));
 
             assertAll(
-                    () -> assertTrue(loggedOut.get()),
-                    () -> assertTrue(sessionInvalidated.get()),
-                    () -> assertEquals(List.of("session invalidated", "logout"), sessionCleanupOperations),
+                    () -> assertTrue(sessionCleanup.loggedOut.get()),
+                    () -> assertTrue(sessionCleanup.sessionInvalidated.get()),
+                    () -> assertEquals(List.of("logout", "session invalidated"), sessionCleanup.operations),
                     () -> assertEquals("/login?reauthenticationRequired=true", redirectLocation.get()),
-                    () -> assertEquals(0, filterChainCalls.get()));
+                    () -> assertEquals(0, filterChainCalls.get()),
+                    () -> assertExpiredSessionCookie(responseCookies));
         }
     }
 
@@ -174,30 +235,44 @@ final class SessionCookieRefreshFilterTest {
         for (StaleCalendarRequest requestCase : List.of(
                 new StaleCalendarRequest("/Abc_123-xY0", null),
                 new StaleCalendarRequest("/calendar.xhtml", "Abc_123-xY0"))) {
-            AtomicBoolean loggedOut = new AtomicBoolean();
-            AtomicBoolean sessionInvalidated = new AtomicBoolean();
-            List<String> sessionCleanupOperations = new ArrayList<>();
+            StaleSessionCleanup sessionCleanup = new StaleSessionCleanup();
             AtomicReference<String> redirectLocation = new AtomicReference<>();
             AtomicInteger filterChainCalls = new AtomicInteger();
+            List<Cookie> responseCookies = new ArrayList<>();
 
             new SessionCookieRefreshFilter(currentUser(false))
                     .doFilter(
                             staleSessionRequest(
                                     requestCase.requestUri(),
-                                    loggedOut,
-                                    sessionInvalidated,
-                                    sessionCleanupOperations,
-                                    requestCase.forwardedCalendarLinkToken()),
-                            redirectResponse(redirectLocation),
+                                    sessionCleanup,
+                                    requestCase.forwardedCalendarLinkToken(),
+                                    "GET"),
+                            redirectResponse(redirectLocation, responseCookies),
                             filterChain(filterChainCalls));
 
             assertAll(
-                    () -> assertTrue(loggedOut.get()),
-                    () -> assertTrue(sessionInvalidated.get()),
-                    () -> assertEquals(List.of("session invalidated", "logout"), sessionCleanupOperations),
+                    () -> assertTrue(sessionCleanup.loggedOut.get()),
+                    () -> assertTrue(sessionCleanup.sessionInvalidated.get()),
+                    () -> assertEquals(List.of("logout", "session invalidated"), sessionCleanup.operations),
                     () -> assertNull(redirectLocation.get()),
-                    () -> assertEquals(1, filterChainCalls.get()));
+                    () -> assertEquals(1, filterChainCalls.get()),
+                    () -> assertExpiredSessionCookie(responseCookies));
         }
+    }
+
+    private void assertExpiredSessionCookie(List<Cookie> responseCookies) {
+        assertEquals(2, responseCookies.size());
+        assertAll(
+                () -> assertEquals(
+                        List.of("JSESSIONID", "LtpaToken2"),
+                        responseCookies.stream().map(Cookie::getName).toList()),
+                () -> assertTrue(responseCookies.stream().allMatch(cookie -> cookie.getValue().isEmpty())),
+                () -> assertTrue(responseCookies.stream().allMatch(cookie -> "/".equals(cookie.getPath()))),
+                () -> assertTrue(responseCookies.stream().allMatch(Cookie::getSecure)),
+                () -> assertTrue(responseCookies.stream().allMatch(Cookie::isHttpOnly)),
+                () -> assertTrue(responseCookies.stream().allMatch(cookie -> cookie.getMaxAge() == 0)),
+                () -> assertTrue(responseCookies.stream()
+                        .allMatch(cookie -> "Lax".equals(cookie.getAttribute("SameSite")))));
     }
 
     private CurrentUser currentUser(boolean signedIn) {
@@ -214,10 +289,43 @@ final class SessionCookieRefreshFilterTest {
             boolean authenticated,
             boolean secure,
             Cookie... cookies) {
-        return request(requestedSessionIdValid, new AtomicBoolean(authenticated), secure, cookies);
+        return requestAtPath(
+                "/app/calendars",
+                requestedSessionIdValid,
+                new AtomicBoolean(authenticated),
+                secure,
+                cookies);
     }
 
     private HttpServletRequest request(
+            boolean requestedSessionIdValid,
+            AtomicBoolean authenticated,
+            boolean secure,
+            Cookie... cookies) {
+        return requestAtPath(
+                "/app/calendars",
+                requestedSessionIdValid,
+                authenticated,
+                secure,
+                cookies);
+    }
+
+    private HttpServletRequest requestAtPath(
+            String requestUri,
+            boolean requestedSessionIdValid,
+            boolean authenticated,
+            boolean secure,
+            Cookie... cookies) {
+        return requestAtPath(
+                requestUri,
+                requestedSessionIdValid,
+                new AtomicBoolean(authenticated),
+                secure,
+                cookies);
+    }
+
+    private HttpServletRequest requestAtPath(
+            String requestUri,
             boolean requestedSessionIdValid,
             AtomicBoolean authenticated,
             boolean secure,
@@ -232,7 +340,7 @@ final class SessionCookieRefreshFilterTest {
                     case "isRequestedSessionIdValid" -> requestedSessionIdValid;
                     case "isSecure" -> secure;
                     case "getContextPath" -> "";
-                    case "getRequestURI" -> "/app/calendars";
+                    case "getRequestURI" -> requestUri;
                     default -> defaultValue(method.getReturnType());
                 });
     }
@@ -264,33 +372,29 @@ final class SessionCookieRefreshFilterTest {
 
     private HttpServletRequest staleSessionRequest(
             String requestUri,
-            AtomicBoolean loggedOut,
-            AtomicBoolean sessionInvalidated,
-            List<String> sessionCleanupOperations) {
+            StaleSessionCleanup sessionCleanup) {
         return staleSessionRequest(
                 requestUri,
-                loggedOut,
-                sessionInvalidated,
-                sessionCleanupOperations,
-                null);
+                sessionCleanup,
+                null,
+                "GET");
     }
 
     private HttpServletRequest staleSessionRequest(
             String requestUri,
-            AtomicBoolean loggedOut,
-            AtomicBoolean sessionInvalidated,
-            List<String> sessionCleanupOperations,
-            String forwardedCalendarLinkToken) {
+            StaleSessionCleanup sessionCleanup,
+            String forwardedCalendarLinkToken,
+            String requestMethod) {
         HttpSession session = (HttpSession) Proxy.newProxyInstance(
                 HttpSession.class.getClassLoader(),
                 new Class<?>[] {HttpSession.class},
-                (proxy, method, arguments) -> {
-                    if (method.getName().equals("invalidate")) {
-                        sessionInvalidated.set(true);
-                        sessionCleanupOperations.add("session invalidated");
-                        return null;
+                (proxy, method, arguments) -> switch (method.getName()) {
+                    case "invalidate" -> {
+                        sessionCleanup.sessionInvalidated.set(true);
+                        sessionCleanup.operations.add("session invalidated");
+                        yield null;
                     }
-                    return defaultValue(method.getReturnType());
+                    default -> defaultValue(method.getReturnType());
                 });
         return (HttpServletRequest) Proxy.newProxyInstance(
                 HttpServletRequest.class.getClassLoader(),
@@ -298,17 +402,15 @@ final class SessionCookieRefreshFilterTest {
                 (proxy, method, arguments) -> switch (method.getName()) {
                     case "getUserPrincipal" -> (Principal) () -> "stale-user";
                     case "logout" -> {
-                        loggedOut.set(true);
-                        sessionCleanupOperations.add("logout");
+                        sessionCleanup.loggedOut.set(true);
+                        sessionCleanup.operations.add("logout");
                         yield null;
                     }
                     case "getSession" -> {
-                        if (loggedOut.get()) {
-                            throw new ServletException(
-                                    "SESN0008E: An anonymous user cannot access the authenticated user's session.");
-                        }
+                        assertEquals(Boolean.FALSE, arguments[0]);
                         yield session;
                     }
+                    case "getMethod" -> requestMethod;
                     case "getContextPath" -> "";
                     case "getRequestURI" -> requestUri;
                     case "getAttribute" ->
@@ -320,13 +422,20 @@ final class SessionCookieRefreshFilterTest {
                 });
     }
 
-    private HttpServletResponse redirectResponse(AtomicReference<String> redirectLocation) {
+    private HttpServletResponse redirectResponse(
+            AtomicReference<String> redirectLocation,
+            List<Cookie> responseCookies) {
         return (HttpServletResponse) Proxy.newProxyInstance(
                 HttpServletResponse.class.getClassLoader(),
                 new Class<?>[] {HttpServletResponse.class},
                 (proxy, method, arguments) -> {
-                    if (method.getName().equals("sendRedirect")) {
-                        redirectLocation.set((String) arguments[0]);
+                    if (method.getName().equals("setHeader")
+                            && arguments[0].equals("Location")) {
+                        redirectLocation.set((String) arguments[1]);
+                        return null;
+                    }
+                    if (method.getName().equals("addCookie")) {
+                        responseCookies.add((Cookie) arguments[0]);
                         return null;
                     }
                     return defaultValue(method.getReturnType());
@@ -354,5 +463,11 @@ final class SessionCookieRefreshFilterTest {
     }
 
     private record StaleCalendarRequest(String requestUri, String forwardedCalendarLinkToken) {
+    }
+
+    private static final class StaleSessionCleanup {
+        private final AtomicBoolean loggedOut = new AtomicBoolean();
+        private final AtomicBoolean sessionInvalidated = new AtomicBoolean();
+        private final List<String> operations = new ArrayList<>();
     }
 }

@@ -12,6 +12,11 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
 final class CalendarLinkRequestThrottleTest {
@@ -95,6 +100,39 @@ final class CalendarLinkRequestThrottleTest {
         }
         second.close();
         assertEquals(2, throttle.availableConcurrentRequestPermits());
+    }
+
+    @Test
+    void concurrentCloseCallsReleaseCapacityExactlyOnce() throws Exception {
+        CalendarLinkRequestThrottle throttle = throttle(
+                Clock.fixed(TEST_START, ZoneOffset.UTC), 100, 10, 1);
+        CalendarLinkRequestThrottle.Admission admission = throttle.tryAcquire("192.0.2.10");
+        int concurrentCloserCount = 64;
+        CountDownLatch closersReady = new CountDownLatch(concurrentCloserCount);
+        CountDownLatch startClosing = new CountDownLatch(1);
+
+        try (ExecutorService executorService = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<?>> closeResults = new ArrayList<>();
+            for (int closerIndex = 0; closerIndex < concurrentCloserCount; closerIndex++) {
+                closeResults.add(executorService.submit(() -> {
+                    closersReady.countDown();
+                    startClosing.await();
+                    admission.close();
+                    return null;
+                }));
+            }
+
+            assertTrue(closersReady.await(10, TimeUnit.SECONDS));
+            startClosing.countDown();
+            for (Future<?> closeResult : closeResults) {
+                closeResult.get(10, TimeUnit.SECONDS);
+            }
+        } finally {
+            startClosing.countDown();
+            admission.close();
+        }
+
+        assertEquals(1, throttle.availableConcurrentRequestPermits());
     }
 
     @Test

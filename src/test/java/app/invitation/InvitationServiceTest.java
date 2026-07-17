@@ -195,6 +195,26 @@ final class InvitationServiceTest {
     }
 
     @Test
+    void oversizedAndRedirectUnsafeTokensAreRejectedBeforeAnyDatabaseQuery() {
+        InvitationService service = service(
+                entityManagerStub(),
+                new FixedTokenService("unused"),
+                new RecordingAuditService());
+
+        assertAll(
+                () -> assertThrows(
+                        ValidationException.class,
+                        () -> service.requireAdmission(
+                                "a".repeat(InvitationToken.MAXIMUM_LENGTH + 1))),
+                () -> assertThrows(
+                        ValidationException.class,
+                        () -> service.requireAdmission("token\\suffix")),
+                () -> assertThrows(
+                        ValidationException.class,
+                        () -> service.claimRegistrationAdmission("token\r\nsuffix")));
+    }
+
+    @Test
     void bootstrapAdmissionIsClaimedOnceAndRejectsDatabasesWhereAnyUserHasEverExisted() {
         RegistrationBootstrapState availableBootstrapState = availableBootstrapState();
         InvitationService serviceWithoutUsers = serviceForMissingInvitation(false, "bootstrap-token", availableBootstrapState);
