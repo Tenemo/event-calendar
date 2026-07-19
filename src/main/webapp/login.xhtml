@@ -9,8 +9,8 @@
         <!-- Keep the previous continuation parameter readable while new links use token. -->
         <f:viewParam name="invite" value="#{loginView.invitationToken}"/>
         <f:viewParam name="token" value="#{loginView.invitationToken}"/>
-        <f:viewParam name="passwordChanged" value="#{loginView.passwordChanged}"/>
-        <f:viewParam name="reauthenticationRequired" value="#{loginView.reauthenticationRequired}"/>
+        <f:viewParam name="passwordChanged" value="#{loginView.passwordChangedParameter}"/>
+        <f:viewParam name="reauthenticationRequired" value="#{loginView.reauthenticationRequiredParameter}"/>
     </f:metadata>
     <ui:define name="title">Sign in - Shared calendar</ui:define>
 

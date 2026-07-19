@@ -3,7 +3,9 @@ package app.security;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.InetAddress;
+import java.net.Inet6Address;
 import java.net.UnknownHostException;
+import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.Optional;
 
@@ -95,7 +97,12 @@ public class ClientRequestSourceResolver {
         }
         try {
             InetAddress parsedAddress = InetAddress.getByName(candidate);
-            return Optional.of(parsedAddress.getHostAddress());
+            if (!(parsedAddress instanceof Inet6Address)) {
+                return Optional.of(parsedAddress.getHostAddress());
+            }
+            byte[] addressBytes = parsedAddress.getAddress();
+            Arrays.fill(addressBytes, addressBytes.length / 2, addressBytes.length, (byte) 0);
+            return Optional.of(InetAddress.getByAddress(addressBytes).getHostAddress() + "/64");
         } catch (UnknownHostException exception) {
             return Optional.empty();
         }

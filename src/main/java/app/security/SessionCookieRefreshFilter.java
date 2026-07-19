@@ -56,9 +56,10 @@ public class SessionCookieRefreshFilter implements Filter {
                     filterChain.doFilter(servletRequest, servletResponse);
                 } else {
                     RelativeRedirect.send(
+                            request,
                             response,
                             request.getContextPath(),
-                            "/login?reauthenticationRequired=true");
+                            ExpiredLoginViewExceptionHandler.RECOVERY_ROUTE);
                 }
                 return;
             }
@@ -86,7 +87,9 @@ public class SessionCookieRefreshFilter implements Filter {
     }
 
     private boolean isReadOnlyCanonicalCalendarRequest(HttpServletRequest request) {
-        return "GET".equalsIgnoreCase(request.getMethod()) && isCanonicalCalendarRequest(request);
+        return ("GET".equalsIgnoreCase(request.getMethod())
+                        || "HEAD".equalsIgnoreCase(request.getMethod()))
+                && isCanonicalCalendarRequest(request);
     }
 
     private void expireAuthenticationCookies(HttpServletResponse response) {

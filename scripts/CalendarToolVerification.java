@@ -67,6 +67,8 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
     private static final Duration APPLICATION_READY_TIMEOUT = Duration.ofSeconds(120);
     private static final Duration APPLICATION_READY_POLL_INTERVAL = Duration.ofSeconds(2);
     private static final List<String> APPLICATION_LOG_FAILURE_SIGNATURES = List.of(
+            "SEVERE:",
+            "\"loglevel\":\"SEVERE\"",
             "CWWKS4106E",
             "CWWKS4118E",
             "CWWKS4000E",

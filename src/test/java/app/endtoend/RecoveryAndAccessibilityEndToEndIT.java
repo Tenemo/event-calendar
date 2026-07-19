@@ -96,6 +96,9 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
                     "2027-05-15 11:00",
                     false);
             String publicCalendarLink = page.url();
+            String calendarId = Long.toString(findCalendarId(calendarName));
+            navigateToBearerLink(page, route("/app/calendar-settings?id=" + calendarId));
+            assertThat(page.locator("button:has-text('Save settings')")).isVisible();
             navigateToBearerLink(staleLoginPage, route("/login"));
             staleLoginPage.locator("input[id$='username']").fill(username);
             staleLoginPage.locator("input[id$='password']").fill(TEST_PASSWORD);
@@ -118,6 +121,13 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
                 }
             }
 
+            page.locator("button:has-text('Save settings')").click();
+            waitForUrlOrFail(
+                    page,
+                    "**/login?reauthenticationRequired=true",
+                    "stale AJAX settings submission recovery");
+            assertBodyContains(page, "Your session is no longer valid. Sign in again.");
+
             navigateToBearerLink(page, publicCalendarLink);
             assertBodyContains(page, calendarName);
             assertBodyContains(page, eventTitle);
@@ -131,7 +141,10 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
                     staleLoginPage,
                     staleLoginPage.locator("button:has-text('Sign in')"),
                     "expired sign-in form submission after restart");
-            staleLoginPage.waitForURL("**/login?reauthenticationRequired=true");
+            waitForUrlOrFail(
+                    staleLoginPage,
+                    "**/login?reauthenticationRequired=true",
+                    "expired sign-in recovery");
             assertBodyContains(staleLoginPage, "Your session is no longer valid. Sign in again.");
             submitSignInAndWaitForUrl(
                     staleLoginPage,

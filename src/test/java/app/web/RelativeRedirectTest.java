@@ -6,7 +6,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.lang.reflect.Proxy;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -52,6 +55,30 @@ final class RelativeRedirectTest {
         assertEquals(
                 "/calendar/app/calendar-settings?id=42",
                 response.headers.get("Location"));
+    }
+
+    @Test
+    void writesAProtocolCorrectPartialRedirectForFacesAjaxRequests() {
+        TestResponse response = new TestResponse();
+
+        RelativeRedirect.send(
+                request("partial/ajax"),
+                response.proxy(),
+                "/shared",
+                "/login?reauthenticationRequired=true&source=calendar");
+
+        assertAll(
+                () -> assertEquals(1, response.resetBufferCalls.get()),
+                () -> assertEquals(HttpServletResponse.SC_OK, response.status.get()),
+                () -> assertEquals("no-store", response.headers.get("Cache-Control")),
+                () -> assertFalse(response.headers.containsKey("Location")),
+                () -> assertEquals("text/xml;charset=UTF-8", response.contentType),
+                () -> assertEquals(
+                        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                                + "<partial-response><redirect url=\"/shared/login?"
+                                + "reauthenticationRequired=true&amp;source=calendar\"/>"
+                                + "</partial-response>",
+                        response.body.toString()));
     }
 
     @Test
@@ -163,10 +190,22 @@ final class RelativeRedirectTest {
         return 0;
     }
 
+    private static HttpServletRequest request(String facesRequestHeader) {
+        return (HttpServletRequest) Proxy.newProxyInstance(
+                HttpServletRequest.class.getClassLoader(),
+                new Class<?>[] {HttpServletRequest.class},
+                (ignoredProxy, method, arguments) -> method.getName().equals("getHeader")
+                                && "Faces-Request".equals(arguments[0])
+                        ? facesRequestHeader
+                        : defaultValue(method.getReturnType()));
+    }
+
     private static final class TestResponse {
         private final AtomicInteger resetBufferCalls = new AtomicInteger();
         private final AtomicInteger status = new AtomicInteger();
         private final Map<String, String> headers = new LinkedHashMap<>();
+        private final StringWriter body = new StringWriter();
+        private String contentType;
         private final HttpServletResponse proxy = (HttpServletResponse) Proxy.newProxyInstance(
                 HttpServletResponse.class.getClassLoader(),
                 new Class<?>[] {HttpServletResponse.class},
@@ -183,6 +222,11 @@ final class RelativeRedirectTest {
                         headers.put((String) arguments[0], (String) arguments[1]);
                         yield null;
                     }
+                    case "setContentType" -> {
+                        contentType = (String) arguments[0];
+                        yield null;
+                    }
+                    case "getWriter" -> new PrintWriter(body, true);
                     default -> defaultValue(method.getReturnType());
                 });
 

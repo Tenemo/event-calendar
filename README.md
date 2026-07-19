@@ -37,7 +37,7 @@ mise run db
 mise run dev
 ```
 
-The application listens on `http://localhost:9080` by default. Its database-aware health endpoint is `http://localhost:9080/health`. It returns `200 ok` only when PostgreSQL is reachable and `503 unavailable` otherwise.
+Open the application at `https://localhost:9443` by default. Liberty generates a local development certificate, so the browser may ask you to accept it the first time. The database-aware health endpoint remains available at `http://localhost:9080/health`; it returns `200 ok` only when PostgreSQL is reachable and `503 unavailable` otherwise.
 
 Jakarta Faces extensionless routing is enabled. Browser-facing routes include `/login`, `/register`, `/app/calendars`, `/app/account-settings`, `/app/calendar-members`, `/app/calendar-settings`, and `/app/invitations`. Every calendar uses one 11-character token directly at the root, such as `https://calendar.social/Abc_123-xY0`, as its canonical URL for editors, admins, and anonymous readers. The root 11-character Base64URL namespace is reserved for calendars. The `.xhtml` files are internal templates, not canonical browser URLs.
 
@@ -47,21 +47,21 @@ Copy `.env.example` to `.env` for local development. Do not commit `.env`.
 
 | Variable | Local default | Purpose |
 | --- | --- | --- |
-| `PORT` | `9080` | Liberty HTTP port, or the host port used by the Compose web service. Railway injects this value. |
-| `HTTPS_PORT` | `9443` | Optional local Liberty HTTPS listener. Railway terminates HTTPS at its proxy. |
+| `PORT` | `9080` | Liberty HTTP health and proxy port, or the host port used by the Compose web service. Railway injects this value. |
+| `HTTPS_PORT` | `9443` | Local HTTPS browser port. Railway terminates HTTPS at its proxy. |
 | `PGHOST` | `localhost` | PostgreSQL host. The Compose web container uses `postgres`. |
 | `PGPORT` | `5432` | PostgreSQL port. |
 | `PGDATABASE` | `calendar` | PostgreSQL database name. |
 | `PGUSER` | `calendar` | PostgreSQL user. |
 | `PGPASSWORD` | `calendar` | PostgreSQL password. Use a generated secret outside local development. |
 | `APP_TIMEZONE` | `Europe/Warsaw` | Default IANA time zone assigned to new calendars. |
-| `APP_BASE_URL` | `http://localhost:9080` | Canonical external base URL used for invitation and calendar links. |
+| `APP_BASE_URL` | `https://localhost:9443` | Canonical external base URL used for invitation and calendar links. |
 | `APP_LTPA_KEYS_PASSWORD` | `local-development-only` | Stable password used by Liberty to protect its generated authentication signing keys. |
 | `APP_BOOTSTRAP_INVITE_TOKEN` | blank | Optional one-time admission secret for creating the first account on a database that has never contained an account. |
 
 `APP_TIMEZONE` must be an identifier supported by Java's IANA time-zone database. Invalid values stop application startup.
 
-`APP_BASE_URL` must be an absolute HTTP or HTTPS URL without credentials, query parameters, or a fragment. A malformed configured value stops application startup. Railway startup also fails when the value is missing, blank, or not HTTPS. Request-derived links are accepted only on loopback hosts; explicit HTTP values remain supported outside Railway for local development.
+`APP_BASE_URL` must be an absolute HTTP or HTTPS URL without credentials, query parameters, or a fragment. A malformed configured value stops application startup. Railway startup also fails when the value is missing, blank, or not HTTPS. Request-derived links are accepted only on loopback hosts. Use HTTPS for browser-facing local development because authenticated cookies are unconditionally Secure; the HTTP listener is intended for local health checks and Railway's private proxy hop.
 
 `APP_LTPA_KEYS_PASSWORD` must be set to a generated high-entropy value of at least 32 characters on Railway. Keep it stable across application restarts so Liberty can decrypt its existing authentication signing keys. Missing, blank, or shorter Railway values stop application startup. The committed local value is deterministic only for disposable development and verification environments; never reuse it in production. Do not log or commit the production value.
 
@@ -152,7 +152,7 @@ mise run docker-up
 docker compose --profile application logs --follow web
 ```
 
-The Compose application profile uses the local database service. Session cookies are always Secure, including during local development; use the documented `localhost` URL or HTTPS rather than a plain-HTTP non-local hostname. Set `PORT` and `APP_BASE_URL` together if port `9080` is unavailable. For example, use `PORT=9082` and `APP_BASE_URL=http://localhost:9082` in `.env`.
+The Compose application profile uses the local database service and exposes both the HTTP health port and the HTTPS browser port. Session cookies are always Secure, including during local development, so use the documented HTTPS URL for browser workflows. If port `9443` is unavailable, set `HTTPS_PORT` and `APP_BASE_URL` together; for example, use `HTTPS_PORT=9446` and `APP_BASE_URL=https://localhost:9446` in `.env`. Set `PORT` separately if the HTTP health port is unavailable.
 
 Confirm the runtime directly:
 
@@ -217,7 +217,7 @@ The command accepts HTTPS origins without credentials, paths, query parameters, 
 
 After the automated check passes, verify registration, login, password change, calendar links, invitations, role changes, and event persistence through the normal manual release checklist. Redeploy, confirm that accounts and calendar data persist, then sign in again because HTTP sessions are intentionally in memory. Inspect logs to confirm that passwords, database credentials, calendar link tokens, and invitation tokens are absent. Railway's deployment health check is not continuous monitoring, so configure an external HTTPS uptime check for `https://calendar.social/health` before relying on the service.
 
-Railway protects its network below the application layer, but it does not provide an application-layer WAF. The application rejects malformed calendar paths before database access, limits each client source to 300 valid-looking calendar-link requests per minute, permits at most 16 such requests to execute concurrently, and bounds source tracking to 10,000 entries. Both calendar-link and login throttles use Railway's documented `X-Real-IP` address only when Railway's automatically provided `RAILWAY_ENVIRONMENT_ID` marks the deployment and the immediate peer is in Railway's documented `100.0.0.0/8` proxy range; elsewhere they ignore that header and use the direct TCP peer. Missing, malformed, ambiguous, or untrusted client-address headers fall back to that peer. These controls make online token iteration impractical from one source and shed excess application work without disrupting a busy shared network; they cannot absorb a volumetric or large distributed attack before traffic reaches Railway. For stronger public-internet protection, proxy `calendar.social` through a service such as Cloudflare with application-layer rate limiting and bot/WAF rules, then remove Railway's generated public domain so it cannot bypass that edge. Netlify is not required.
+Railway protects its network below the application layer, but it does not provide an application-layer WAF. The application rejects malformed calendar paths before database access, limits each client source to 300 valid-looking calendar-link requests per minute, permits at most 16 such requests to execute concurrently, and bounds source tracking to 10,000 entries. Both calendar-link and login throttles use Railway's documented `X-Real-IP` address only when Railway's automatically provided `RAILWAY_ENVIRONMENT_ID` marks the deployment and the immediate peer is in Railway's `100.0.0.0/8` proxy range; elsewhere they ignore that header and use the direct TCP peer. IPv4 clients are tracked by address, while IPv6 clients are grouped by their `/64` network prefix so rotating interface identifiers cannot bypass the limits. Missing, malformed, ambiguous, or untrusted client-address headers fall back to the peer-derived source. These controls make online token iteration impractical from one source and shed excess application work without disrupting a busy shared network; they cannot absorb a volumetric or large distributed attack before traffic reaches Railway. For stronger public-internet protection, proxy `calendar.social` through a service such as Cloudflare with application-layer rate limiting and bot/WAF rules, then remove Railway's generated public domain so it cannot bypass that edge. Netlify is not required.
 
 ## Registration
 
@@ -276,7 +276,7 @@ Invitation links are single-use bearer secrets and expire exactly seven days aft
 
 ## Backup and restore
 
-Backups use the `postgres:17` client inside Docker. No host `pg_dump` or `pg_restore` installation is needed.
+Backups use the pinned `postgres:17.10` client inside Docker. No host `pg_dump` or `pg_restore` installation is needed.
 Each backup is written to a unique partial file and replaces its requested destination only after `pg_dump` completes successfully, so a failed backup cannot truncate an earlier archive.
 
 Create a timestamped local backup under `target/backups`:
@@ -303,7 +303,7 @@ Restore replaces database objects and data. Stop the application first, keep a s
 mise run restore-postgres -- target/backups/calendar-before-upgrade.dump calendar
 ```
 
-For a remote database, set `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, and normally `PGSSLMODE=require`, then run the same backup or restore task. The tool cannot detect remote application instances, so stop them separately before restore. It uses a temporary `postgres:17` client container and passes the password through its environment, not its command line. The target database must already exist.
+For a remote database, set `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, and normally `PGSSLMODE=require`, then run the same backup or restore task. The tool cannot detect remote application instances, so stop them separately before restore. It uses a temporary pinned `postgres:17.10` client container and passes the password through its environment, not its command line. The target database must already exist.
 
 ## Troubleshooting
 
@@ -333,7 +333,7 @@ Check application startup logs for Flyway errors, verify all PostgreSQL variable
 
 ### Production container does not start locally
 
-Check `docker compose --profile application logs web postgres`, confirm that port `9080` is free or update both `PORT` and `APP_BASE_URL`, and verify that Docker Compose reports PostgreSQL as healthy.
+Check `docker compose --profile application logs web postgres`, confirm that ports `9080` and `9443` are free or update `PORT`, `HTTPS_PORT`, and `APP_BASE_URL` as described above, and verify that Docker Compose reports PostgreSQL as healthy.
 
 ### Backup cannot reach a remote database
 

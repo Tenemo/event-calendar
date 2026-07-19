@@ -2,6 +2,7 @@ package app.security;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.invitation.InvitationToken;
@@ -41,5 +42,28 @@ final class LoginViewTest {
                         LoginView.successfulLoginRoute(maximumLengthToken)),
                 () -> assertTrue(RelativeRedirect.isSafeApplicationPath(
                         LoginView.successfulLoginRoute("alpha beta&gamma"))));
+    }
+
+    @Test
+    void statusViewParametersAcceptOnlyTheLiteralTrueValue() {
+        LoginView loginView = new LoginView();
+
+        loginView.setPasswordChangedParameter("TRUE");
+        loginView.setReauthenticationRequiredParameter(" true ");
+        assertAll(
+                () -> assertFalse(loginView.isPasswordChanged()),
+                () -> assertFalse(loginView.isReauthenticationRequired()));
+
+        loginView.setPasswordChangedParameter("true");
+        loginView.setReauthenticationRequiredParameter("true");
+        assertAll(
+                () -> assertTrue(loginView.isPasswordChanged()),
+                () -> assertTrue(loginView.isReauthenticationRequired()));
+
+        loginView.setPasswordChangedParameter(null);
+        loginView.setReauthenticationRequiredParameter("not-a-boolean");
+        assertAll(
+                () -> assertFalse(loginView.isPasswordChanged()),
+                () -> assertFalse(loginView.isReauthenticationRequired()));
     }
 }

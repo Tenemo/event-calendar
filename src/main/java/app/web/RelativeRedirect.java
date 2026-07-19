@@ -1,7 +1,9 @@
 package app.web;
 
 import jakarta.faces.context.FacesContext;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Objects;
@@ -16,10 +18,19 @@ public final class RelativeRedirect {
         Objects.requireNonNull(facesContext, "Faces context is required.");
         HttpServletResponse response =
                 (HttpServletResponse) facesContext.getExternalContext().getResponse();
-        send(
-                response,
-                facesContext.getExternalContext().getRequestContextPath(),
-                applicationPath);
+        Object externalRequest = facesContext.getExternalContext().getRequest();
+        if (externalRequest instanceof HttpServletRequest request) {
+            send(
+                    request,
+                    response,
+                    facesContext.getExternalContext().getRequestContextPath(),
+                    applicationPath);
+        } else {
+            send(
+                    response,
+                    facesContext.getExternalContext().getRequestContextPath(),
+                    applicationPath);
+        }
         facesContext.responseComplete();
     }
 
@@ -37,6 +48,44 @@ public final class RelativeRedirect {
             String contextPath,
             String applicationPath) {
         Objects.requireNonNull(response, "HTTP response is required.");
+        String redirectTarget = validatedRedirectTarget(contextPath, applicationPath);
+        response.resetBuffer();
+        response.setHeader("Cache-Control", "no-store");
+        response.setStatus(HttpServletResponse.SC_FOUND);
+        response.setHeader("Location", redirectTarget);
+    }
+
+    public static void send(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            String contextPath,
+            String applicationPath) {
+        Objects.requireNonNull(request, "HTTP request is required.");
+        Objects.requireNonNull(response, "HTTP response is required.");
+        String redirectTarget = validatedRedirectTarget(contextPath, applicationPath);
+        if (!isFacesAjaxRequest(request)) {
+            send(response, contextPath, applicationPath);
+            return;
+        }
+
+        response.resetBuffer();
+        response.setHeader("Cache-Control", "no-store");
+        response.setStatus(HttpServletResponse.SC_OK);
+        response.setContentType("text/xml;charset=UTF-8");
+        try {
+            response.getWriter().write(
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                            + "<partial-response><redirect url=\""
+                            + escapeXmlAttribute(redirectTarget)
+                            + "\"/></partial-response>");
+        } catch (IOException exception) {
+            throw new IllegalStateException("Could not write the JSF AJAX redirect response.", exception);
+        }
+    }
+
+    private static String validatedRedirectTarget(
+            String contextPath,
+            String applicationPath) {
         if (!isSafeApplicationPath(applicationPath)) {
             throw new IllegalArgumentException(
                     "Redirect target must be an origin-relative application path.");
@@ -46,10 +95,19 @@ public final class RelativeRedirect {
                 > MAXIMUM_REDIRECT_TARGET_LENGTH) {
             throw new IllegalArgumentException("Redirect target is too long.");
         }
-        response.resetBuffer();
-        response.setHeader("Cache-Control", "no-store");
-        response.setStatus(HttpServletResponse.SC_FOUND);
-        response.setHeader("Location", normalizedContextPath + applicationPath);
+        return normalizedContextPath + applicationPath;
+    }
+
+    private static boolean isFacesAjaxRequest(HttpServletRequest request) {
+        return "partial/ajax".equalsIgnoreCase(request.getHeader("Faces-Request"));
+    }
+
+    private static String escapeXmlAttribute(String value) {
+        return value.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&apos;");
     }
 
     public static boolean isSafeApplicationPath(String applicationPath) {

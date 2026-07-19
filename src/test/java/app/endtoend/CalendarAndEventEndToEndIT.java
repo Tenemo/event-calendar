@@ -54,16 +54,32 @@ final class CalendarAndEventEndToEndIT extends SharedCalendarEndToEndSupport {
             page.locator("button:has-text('Save changes')").click();
             assertBodyContains(page, eventTitle + " updated");
 
-            page.locator("input[id$='eventTitle']").fill(allDayEventTitle);
-            page.locator("input[id$='eventStart_input']").fill("2026-07-22 13:30");
-            page.locator("input[id$='eventEnd_input']").fill("2026-07-25 00:00");
             Locator allDayCheckbox = page.getByLabel("All-day event");
+            Locator timedEventStartInput = page.locator("input[id$='eventStart_input']");
+            timedEventStartInput.fill("");
+            page.locator(".checkbox-field .ui-chkbox-box").click();
+            assertThat(allDayCheckbox).not().isChecked();
+            assertThat(timedEventStartInput).isVisible();
+            assertEquals(0, page.locator("input[id$='eventFirstDay_input']").count());
+            assertBodyContains(page, "Event start time is required.");
+
+            page.locator("input[id$='eventTitle']").fill(allDayEventTitle);
+            timedEventStartInput.fill("2026-07-22 13:30");
+            page.locator("input[id$='eventEnd_input']").fill("2026-07-25 00:00");
             page.locator(".checkbox-field .ui-chkbox-box").click();
             assertThat(allDayCheckbox).isChecked();
             Locator firstDayInput = page.locator("input[id$='eventFirstDay_input']");
             Locator lastDayInput = page.locator("input[id$='eventLastDay_input']");
             assertThat(firstDayInput).hasValue("2026-07-22");
             assertThat(lastDayInput).hasValue("2026-07-24");
+
+            firstDayInput.fill("");
+            page.locator(".checkbox-field .ui-chkbox-box").click();
+            assertThat(allDayCheckbox).isChecked();
+            assertThat(firstDayInput).isVisible();
+            assertEquals(0, timedEventStartInput.count());
+            assertBodyContains(page, "Event first day is required.");
+
             firstDayInput.fill("2026-07-23");
             lastDayInput.fill("2026-07-25");
             page.locator(".checkbox-field .ui-chkbox-box").click();

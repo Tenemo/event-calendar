@@ -18,6 +18,7 @@ import com.microsoft.playwright.Response;
 import com.microsoft.playwright.assertions.LocatorAssertions;
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -29,7 +30,12 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -60,6 +66,10 @@ abstract class SharedCalendarEndToEndSupport {
     static final String TEST_PASSWORD = "correct horse battery staple";
     static final Duration APPLICATION_READY_TIMEOUT = Duration.ofSeconds(15);
     static final Duration APPLICATION_READY_POLL_INTERVAL = Duration.ofMillis(500);
+    static final Duration BLOCKED_DATABASE_REQUEST_TIMEOUT = Duration.ofSeconds(20);
+    static final Duration BLOCKED_DATABASE_REQUEST_POLL_INTERVAL = Duration.ofMillis(50);
+    static final Duration AUTHENTICATED_SESSION_COOKIE_LIFETIME = Duration.ofDays(30);
+    static final Duration SESSION_COOKIE_EXPIRATION_TOLERANCE = Duration.ofMinutes(2);
     static final int[] RESPONSIVE_WIDTHS = {320, 390, 640, 768, 819, 820, 821, 1024, 1280};
 
     Playwright playwright;
@@ -170,7 +180,7 @@ abstract class SharedCalendarEndToEndSupport {
         navigateToBearerLink(page, invitationLink);
         fillRegistrationForm(page, username, displayName, calendarName, password);
         page.locator("button:has-text('Register')").click();
-        page.waitForURL("**/app/calendars");
+        waitForUrlOrFail(page, "**/app/calendars", "registration completion");
     }
 
     void fillRegistrationForm(
@@ -198,24 +208,33 @@ abstract class SharedCalendarEndToEndSupport {
         page.locator("input[id$='username']").fill(username);
         page.locator("input[id$='password']").fill(password);
         page.locator("button:has-text('Sign in')").click();
-        try {
-            page.waitForURL(expectedUrlPattern);
-            waitForPageResources(page);
-        } catch (RuntimeException exception) {
-            fail("Sign-in did not reach the expected application route. The browser remained at "
-                    + redactedDiagnosticUrl(page.url())
-                    + " with body: "
-                    + abbreviate(page.locator("body").innerText())
-                    + " ("
-                    + exception.getClass().getSimpleName()
-                    + ").");
-        }
+        waitForUrlOrFail(page, expectedUrlPattern, "sign-in completion");
+        waitForPageResources(page);
     }
 
     void signOut(Page page) {
         page.locator("input[value='Sign out']").click();
-        page.waitForURL(route("/"));
+        waitForUrlOrFail(page, route("/"), "sign-out completion");
         waitForPageResources(page);
+    }
+
+    void waitForUrlOrFail(
+            Page page,
+            String expectedUrlPattern,
+            String actionDescription) {
+        try {
+            page.waitForURL(expectedUrlPattern);
+        } catch (RuntimeException exception) {
+            fail("Browser navigation for "
+                    + bearerSecretRedactor.redact(actionDescription)
+                    + " did not reach "
+                    + bearerSecretRedactor.redact(expectedUrlPattern)
+                    + "; the browser remained at "
+                    + redactedDiagnosticUrl(page.url())
+                    + " ("
+                    + exception.getClass().getSimpleName()
+                    + ").");
+        }
     }
 
     void fillPasswordChangeForm(
@@ -326,13 +345,6 @@ abstract class SharedCalendarEndToEndSupport {
 
     void clickWithoutChangingFocus(Locator button) {
         button.evaluate("element => element.click()");
-    }
-
-    void scheduleClickAt(Locator button, long epochMilliseconds) {
-        button.evaluate(
-                "(element, clickTime) => window.setTimeout("
-                        + "() => element.click(), Math.max(0, Number(clickTime) - Date.now()))",
-                Long.toString(epochMilliseconds));
     }
 
     void waitForInvitationAcceptanceResult(Page page) {
@@ -696,6 +708,98 @@ abstract class SharedCalendarEndToEndSupport {
                 firstNonBlank(System.getenv(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE), "calendar"));
     }
 
+    Connection lockCalendarRowForConcurrentRequests(long calendarId) throws SQLException {
+        return lockDatabaseRow(
+                "select id from calendar where id = ? for update",
+                calendarId,
+                "calendar " + calendarId);
+    }
+
+    Connection lockInvitationRowForConcurrentRequests(String invitationLink) throws SQLException {
+        String invitationToken = invitationTokenFromLink(invitationLink);
+        return lockDatabaseRow(
+                "select id from app_invitation where invite_token = ? for update",
+                invitationToken,
+                "invitation row");
+    }
+
+    void waitForBlockedDatabaseRequests(
+            Connection blockingConnection,
+            int expectedBlockedRequests,
+            String operationDescription) throws SQLException, InterruptedException {
+        int blockingProcessIdentifier;
+        try (PreparedStatement statement = blockingConnection.prepareStatement("select pg_backend_pid()");
+                java.sql.ResultSet resultSet = statement.executeQuery()) {
+            assertTrue(resultSet.next(), "Expected the blocking database process identifier.");
+            blockingProcessIdentifier = resultSet.getInt(1);
+        }
+
+        long deadlineNanos = System.nanoTime() + BLOCKED_DATABASE_REQUEST_TIMEOUT.toNanos();
+        while (System.nanoTime() < deadlineNanos) {
+            long blockedRequestCount = queryLong(
+                    "with recursive blocked_processes(pid) as ("
+                            + "select pid from pg_stat_activity "
+                            + "where ? = any(pg_blocking_pids(pid)) "
+                            + "union "
+                            + "select activity.pid from pg_stat_activity activity "
+                            + "join blocked_processes blocking_process "
+                            + "on blocking_process.pid = any(pg_blocking_pids(activity.pid))) "
+                            + "select count(*) from blocked_processes",
+                    blockingProcessIdentifier);
+            if (blockedRequestCount >= expectedBlockedRequests) {
+                return;
+            }
+            Thread.sleep(BLOCKED_DATABASE_REQUEST_POLL_INTERVAL.toMillis());
+        }
+        fail("Expected "
+                + expectedBlockedRequests
+                + " requests for "
+                + operationDescription
+                + " to be blocked concurrently within "
+                + BLOCKED_DATABASE_REQUEST_TIMEOUT.toSeconds()
+                + " seconds.");
+    }
+
+    private Connection lockDatabaseRow(
+            String query,
+            Object queryParameter,
+            String rowDescription) throws SQLException {
+        Connection connection = openDatabaseConnection();
+        try {
+            connection.setAutoCommit(false);
+            try (PreparedStatement statement = connection.prepareStatement(query)) {
+                statement.setObject(1, queryParameter);
+                try (java.sql.ResultSet resultSet = statement.executeQuery()) {
+                    assertTrue(resultSet.next(), () -> "Expected " + rowDescription + " to exist.");
+                }
+            }
+            return connection;
+        } catch (RuntimeException | SQLException | Error exception) {
+            try {
+                connection.close();
+            } catch (SQLException closeException) {
+                exception.addSuppressed(closeException);
+            }
+            throw exception;
+        }
+    }
+
+    private String invitationTokenFromLink(String invitationLink) {
+        String rawQuery = URI.create(invitationLink).getRawQuery();
+        if (rawQuery != null) {
+            for (String queryParameter : rawQuery.split("&")) {
+                int separatorIndex = queryParameter.indexOf('=');
+                if (separatorIndex > 0
+                        && queryParameter.substring(0, separatorIndex).equals("token")) {
+                    return URLDecoder.decode(
+                            queryParameter.substring(separatorIndex + 1),
+                            StandardCharsets.UTF_8);
+                }
+            }
+        }
+        return fail("Expected an invitation link with a token parameter.");
+    }
+
     void seedUser(String username) throws SQLException {
         seedUser(username, "End-to-end user", true);
     }
@@ -941,19 +1045,72 @@ abstract class SharedCalendarEndToEndSupport {
     }
 
     void assertRollingSessionCookie(Response response) {
-        String sessionCookieHeader = response.headerValues("set-cookie").stream()
+        List<String> sessionCookieHeaders = response.headerValues("set-cookie").stream()
                 .filter(header -> header.contains("JSESSIONID="))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError(
-                        "Authenticated activity did not refresh the session cookie."));
-        assertTrue(sessionCookieHeader.contains("Path=/"));
-        assertTrue(sessionCookieHeader.contains("Secure"));
-        assertTrue(sessionCookieHeader.contains("HttpOnly"));
-        assertTrue(sessionCookieHeader.contains("SameSite=Lax"));
+                .toList();
+        assertFalse(
+                sessionCookieHeaders.isEmpty(),
+                "Authenticated activity did not refresh the session cookie.");
+        Instant assertionTime = Instant.now();
         assertTrue(
-                sessionCookieHeader.contains("Max-Age=2592000")
-                        || sessionCookieHeader.contains("Expires="),
-                "Refreshed session cookie did not have a persistent 30-day lifetime.");
+                sessionCookieHeaders.stream()
+                        .anyMatch(header -> isSecureRollingSessionCookie(header, assertionTime)),
+                () -> "None of the "
+                        + sessionCookieHeaders.size()
+                        + " refreshed session cookie headers had the secure configured 30-day lifetime.");
+    }
+
+    private boolean isSecureRollingSessionCookie(String header, Instant assertionTime) {
+        return hasCookieAttribute(header, "Path", "/")
+                && hasCookieAttribute(header, "Secure", null)
+                && hasCookieAttribute(header, "HttpOnly", null)
+                && hasCookieAttribute(header, "SameSite", "Lax")
+                && hasConfiguredSessionCookieLifetime(header, assertionTime);
+    }
+
+    private boolean hasConfiguredSessionCookieLifetime(String header, Instant assertionTime) {
+        String maximumAge = cookieAttributeValue(header, "Max-Age");
+        if (maximumAge != null) {
+            return Long.toString(AUTHENTICATED_SESSION_COOKIE_LIFETIME.toSeconds())
+                    .equals(maximumAge);
+        }
+
+        String expiration = cookieAttributeValue(header, "Expires");
+        if (expiration == null) {
+            return false;
+        }
+        try {
+            Duration remainingLifetime = Duration.between(
+                    assertionTime,
+                    ZonedDateTime.parse(expiration, DateTimeFormatter.RFC_1123_DATE_TIME)
+                            .toInstant());
+            return remainingLifetime.compareTo(AUTHENTICATED_SESSION_COOKIE_LIFETIME
+                            .minus(SESSION_COOKIE_EXPIRATION_TOLERANCE))
+                    >= 0
+                    && remainingLifetime.compareTo(AUTHENTICATED_SESSION_COOKIE_LIFETIME
+                            .plus(SESSION_COOKIE_EXPIRATION_TOLERANCE))
+                    <= 0;
+        } catch (DateTimeParseException exception) {
+            return false;
+        }
+    }
+
+    private boolean hasCookieAttribute(String header, String name, String expectedValue) {
+        return Arrays.stream(header.split(";"))
+                .map(String::trim)
+                .anyMatch(attribute -> expectedValue == null
+                        ? attribute.equalsIgnoreCase(name)
+                        : attribute.equalsIgnoreCase(name + "=" + expectedValue));
+    }
+
+    private String cookieAttributeValue(String header, String name) {
+        String prefix = name + "=";
+        return Arrays.stream(header.split(";"))
+                .map(String::trim)
+                .filter(attribute -> attribute.regionMatches(true, 0, prefix, 0, prefix.length()))
+                .map(attribute -> attribute.substring(prefix.length()))
+                .findFirst()
+                .orElse(null);
     }
 
     void assertAnonymousSessionCookie(Response response) {

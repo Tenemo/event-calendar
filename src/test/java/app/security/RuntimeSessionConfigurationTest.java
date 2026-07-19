@@ -3,7 +3,9 @@ package app.security;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,6 +19,8 @@ final class RuntimeSessionConfigurationTest {
             "src", "main", "liberty", "config", "server.xml");
     private static final Path WEB_CONFIGURATION_PATH = Path.of(
             "src", "main", "webapp", "WEB-INF", "web.xml");
+    private static final Path COMPOSE_CONFIGURATION_PATH = Path.of("docker-compose.yml");
+    private static final Path LOCAL_ENVIRONMENT_EXAMPLE_PATH = Path.of(".env.example");
 
     @Test
     void ltpaKeysUseAStableRuntimePasswordAndSecureSingleSignOnCookies()
@@ -92,6 +96,34 @@ final class RuntimeSessionConfigurationTest {
                         webSession.getElementsByTagName("tracking-mode").item(0).getTextContent()));
     }
 
+    @Test
+    void localBrowserOriginUsesHttpsWhenAuthenticationCookiesRequireSecureTransport() throws Exception {
+        Element serverConfiguration = readXmlRoot(SERVER_CONFIGURATION_PATH);
+        Element webApplicationSecurity = firstElement(serverConfiguration, "webAppSecurity");
+        String composeConfiguration = Files.readString(COMPOSE_CONFIGURATION_PATH);
+        String localEnvironmentExample = Files.readString(LOCAL_ENVIRONMENT_EXAMPLE_PATH);
+
+        assertAll(
+                () -> assertEquals(
+                        "true",
+                        webApplicationSecurity.getAttribute("ssoRequiresSSL")),
+                () -> assertTrue(
+                        containsTrimmedLine(
+                                composeConfiguration,
+                                "APP_BASE_URL: ${APP_BASE_URL:-https://localhost:9443}"),
+                        "The local Compose application must advertise an HTTPS browser origin."),
+                () -> assertTrue(
+                        containsTrimmedLine(
+                                composeConfiguration,
+                                "- \"${HTTPS_PORT:-9443}:9443\""),
+                        "The local Compose application must expose Liberty's HTTPS listener."),
+                () -> assertTrue(
+                        containsTrimmedLine(
+                                localEnvironmentExample,
+                                "APP_BASE_URL=https://localhost:9443"),
+                        "The example local environment must use the HTTPS browser origin."));
+    }
+
     private static Element readXmlRoot(Path configurationPath) throws Exception {
         DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
         documentBuilderFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
@@ -119,6 +151,10 @@ final class RuntimeSessionConfigurationTest {
         }
         throw new AssertionError(
                 "Expected server.xml to declare the " + expectedName + " variable.");
+    }
+
+    private static boolean containsTrimmedLine(String contents, String expectedLine) {
+        return contents.lines().map(String::trim).anyMatch(expectedLine::equals);
     }
 
     @Test

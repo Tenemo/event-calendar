@@ -65,12 +65,17 @@ public class CalendarRouteFilter implements Filter {
                 sendRateLimitResponse(response, admission.getRetryAfterSeconds());
                 return;
             }
-            if (!"GET".equals(request.getMethod())) {
+            if (!isReadOnlyRequest(request)) {
                 filterChain.doFilter(request, response);
                 return;
             }
             forwardCalendar(request, response, calendarLinkToken);
         }
+    }
+
+    private static boolean isReadOnlyRequest(HttpServletRequest request) {
+        return "GET".equalsIgnoreCase(request.getMethod())
+                || "HEAD".equalsIgnoreCase(request.getMethod());
     }
 
     private static boolean isLegacyCalendarRoute(HttpServletRequest request) {

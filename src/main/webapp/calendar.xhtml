@@ -145,10 +145,13 @@
                         <p:inputText id="eventLocation" value="#{calendarView.eventLocation}" pt:maxlength="200"/>
 
                         <div class="checkbox-field">
-                            <p:selectBooleanCheckbox id="allDay" value="#{calendarView.eventAllDaySelection}">
+                            <p:selectBooleanCheckbox id="allDay"
+                                                     widgetVar="eventAllDayCheckbox"
+                                                     value="#{calendarView.eventAllDaySelection}">
                                 <p:ajax listener="#{calendarView.changeEventAllDayMode}"
                                         process="eventScheduleFields @this"
-                                        update=":messages eventScheduleFields"/>
+                                        update=":messages @this eventScheduleFields"
+                                        oncomplete="if (args.validationFailed) { var checkbox = PF('eventAllDayCheckbox'); checkbox.isChecked() ? checkbox.uncheck(true) : checkbox.check(true); }"/>
                             </p:selectBooleanCheckbox>
                             <p:outputLabel for="allDay" value="All-day event"/>
                         </div>

@@ -37,7 +37,7 @@ public class InvitationService {
             "invitation.createdByUser.id = :actingUserId "
                     + "or exists ("
                     + "select calendarMembership.calendar.id from CalendarMembership calendarMembership "
-                    + "where calendarMembership.calendar = calendar "
+                    + "where calendarMembership.calendar = invitation.calendar "
                     + "and calendarMembership.user.id = :actingUserId "
                     + "and calendarMembership.role = :adminRole "
                     + "and calendarMembership.active = true "
@@ -88,9 +88,7 @@ public class InvitationService {
         requireActiveUser(actingUser);
         return bindInvitationVisibility(
                         entityManager.createQuery(
-                                "select count(invitation) from Invitation invitation "
-                                        + "left join invitation.calendar calendar "
-                                        + "where "
+                                "select count(invitation) from Invitation invitation where "
                                         + VISIBLE_INVITATION_PREDICATE,
                                 Long.class),
                         actingUser)
@@ -103,22 +101,37 @@ public class InvitationService {
             int maximumResults) {
         requireActiveUser(actingUser);
         requireValidInvitationPage(firstResult, maximumResults);
-        return bindInvitationVisibility(
+        List<Object[]> invitationRows = bindInvitationVisibility(
                         entityManager.createQuery(
-                                "select invitation from Invitation invitation "
-                                        + "left join fetch invitation.calendar calendar "
+                                "select invitation, case when invitation.acceptedAt is null "
+                                        + "and invitation.revokedAt is null "
+                                        + "and invitation.expiresAt > :currentTime "
+                                        + "then 0 else 1 end as availabilityOrder "
+                                        + "from Invitation invitation "
                                         + "where "
                                         + VISIBLE_INVITATION_PREDICATE
-                                        + " order by case when invitation.acceptedAt is null "
-                                        + "and invitation.revokedAt is null "
-                                        + "and invitation.expiresAt > :currentTime then 0 else 1 end, "
+                                        + " order by availabilityOrder, "
                                         + "invitation.createdAt desc, invitation.id desc",
-                                Invitation.class),
+                                Object[].class),
                         actingUser)
                 .setParameter("currentTime", OffsetDateTime.now(ZoneOffset.UTC))
                 .setFirstResult(firstResult)
                 .setMaxResults(maximumResults)
                 .getResultList();
+        return invitationRows.stream()
+                .map(invitationRow -> {
+                    if (invitationRow.length < 2
+                            || !(invitationRow[0] instanceof Invitation invitation)) {
+                        throw new IllegalStateException("Invitation query returned an invalid row.");
+                    }
+                    Calendar invitationCalendar = invitation.getCalendar();
+                    if (invitationCalendar != null && invitationCalendar.getName() == null) {
+                        throw new IllegalStateException(
+                                "Invitation query returned a calendar without a name.");
+                    }
+                    return invitation;
+                })
+                .toList();
     }
 
     public void revokeInvitation(ApplicationUser actingUser, Long invitationId) {

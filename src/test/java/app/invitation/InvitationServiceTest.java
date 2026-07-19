@@ -318,10 +318,13 @@ final class InvitationServiceTest {
 
     @Test
     void invitationHistoryIsCountedAndFetchedInBoundedPages() {
-        List<Invitation> invitations = List.of(registrationInvitation(activeUser(1L, "creator")));
+        Invitation invitation = registrationInvitation(activeUser(1L, "creator"));
+        List<Invitation> invitations = List.of(invitation);
         EntityManagerStub entityManagerStub = entityManagerStub()
                 .singleResult("select count(invitation)", 73L)
-                .resultList("from Invitation invitation", invitations);
+                .resultList(
+                        "from Invitation invitation",
+                        List.<Object[]>of(new Object[] {invitation, 0}));
         InvitationService service = service(
                 entityManagerStub,
                 new FixedTokenService("unused"),
@@ -336,8 +339,10 @@ final class InvitationServiceTest {
                 () -> assertEquals(invitations, invitationPage),
                 () -> assertEquals(50, queryPagination.firstResult()),
                 () -> assertEquals(23, queryPagination.maximumResults()),
-                () -> assertTrue(queryPagination.queryText().contains(
-                        "invitation.expiresAt > :currentTime then 0 else 1 end")),
+                () -> assertTrue(queryPagination.queryText().contains("as availabilityOrder")),
+                () -> assertTrue(queryPagination.queryText().contains("order by availabilityOrder")),
+                () -> assertFalse(queryPagination.queryText().contains(
+                        "join invitation.calendar")),
                 () -> assertFalse(entityManagerStub.maximumResultLimitedQueryTexts().isEmpty()),
                 () -> assertThrows(IllegalArgumentException.class, () -> service.listInvitations(creator, -1, 23)),
                 () -> assertThrows(IllegalArgumentException.class, () -> service.listInvitations(creator, 0, 0)),
@@ -367,7 +372,11 @@ final class InvitationServiceTest {
                 revokedInvitation,
                 expiredInvitation);
         EntityManagerStub listEntityManagerStub = entityManagerStub()
-                .resultList("where calendarMembership.calendar = calendar", calendarHistory);
+                .resultList(
+                        "where calendarMembership.calendar = invitation.calendar",
+                        calendarHistory.stream()
+                                .map(invitation -> new Object[] {invitation, 0})
+                                .toList());
         InvitationService listService = service(
                 listEntityManagerStub,
                 new FixedTokenService("unused"),

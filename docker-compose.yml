@@ -38,11 +38,12 @@ services:
       PGUSER: ${PGUSER:-calendar}
       PGPASSWORD: ${PGPASSWORD:-calendar}
       APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Warsaw}
-      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:9080}
+      APP_BASE_URL: ${APP_BASE_URL:-https://localhost:9443}
       APP_LTPA_KEYS_PASSWORD: ${APP_LTPA_KEYS_PASSWORD:-local-development-only}
       APP_BOOTSTRAP_INVITE_TOKEN: ${APP_BOOTSTRAP_INVITE_TOKEN:-}
     ports:
       - "${PORT:-9080}:9080"
+      - "${HTTPS_PORT:-9443}:9443"
     healthcheck:
       test: *application-health-command
       interval: 10s

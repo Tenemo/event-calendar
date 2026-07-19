@@ -102,13 +102,14 @@
                 </p:column>
                 <p:column headerText="Action">
                     <h:form rendered="#{invitation.revocable}">
+                        <input type="hidden" name="invitationId" value="#{invitation.id}"/>
                         <p:commandButton value="Revoke"
-                                         action="#{invitationView.revokeInvitation(invitation.id)}"
+                                         action="#{invitationView.revokeInvitation}"
                                          ajax="false"
                                          styleClass="ui-button-danger ui-button-outlined"
                                          pt:aria-label="Revoke invitation for #{invitation.scope}, created #{invitation.createdAt}">
                             <p:confirm header="Revoke invitation"
-                                       message="Revoke this invitation permanently?"
+                                       message="Revoke #{invitation.scope}, created #{invitation.createdAt}, permanently?"
                                        yesButtonLabel="Revoke invitation"
                                        yesButtonClass="ui-button-danger"
                                        noButtonLabel="Cancel"

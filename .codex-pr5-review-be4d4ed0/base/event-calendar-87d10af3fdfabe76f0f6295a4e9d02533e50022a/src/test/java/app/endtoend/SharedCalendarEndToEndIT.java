@@ -1,0 +1,1770 @@
+package app.endtoend;
+
+import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+
+import com.microsoft.playwright.Browser;
+import com.microsoft.playwright.BrowserContext;
+import com.microsoft.playwright.BrowserType;
+import com.microsoft.playwright.Locator;
+import com.microsoft.playwright.Page;
+import com.microsoft.playwright.Playwright;
+import com.microsoft.playwright.assertions.LocatorAssertions;
+import com.microsoft.playwright.options.ReducedMotion;
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+final class SharedCalendarEndToEndIT {
+    private static final String DEFAULT_APPLICATION_BASE_URL = "http://localhost:9080";
+    private static final String APPLICATION_BASE_URL_PROPERTY = "app.baseUrl";
+    private static final String APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE = "APP_BASE_URL";
+    private static final String BROWSER_ENVIRONMENT_VARIABLE = "BROWSER";
+    private static final String POSTGRESQL_HOST_ENVIRONMENT_VARIABLE = "PGHOST";
+    private static final String POSTGRESQL_PORT_ENVIRONMENT_VARIABLE = "PGPORT";
+    private static final String POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE = "PGDATABASE";
+    private static final String POSTGRESQL_USER_ENVIRONMENT_VARIABLE = "PGUSER";
+    private static final String POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE = "PGPASSWORD";
+    private static final String PLAYWRIGHT_HEADED_ENVIRONMENT_VARIABLE = "PLAYWRIGHT_HEADED";
+    private static final String PLAYWRIGHT_HEADLESS_ENVIRONMENT_VARIABLE = "PLAYWRIGHT_HEADLESS";
+    private static final String SEEDED_PASSWORD_HASH_FOR_TEST_PASSWORD =
+            "PBKDF2WithHmacSHA256:600000:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=:"
+                    + "YTpMNBE5TiT//mxRmUMHckVy5XS82Y6oz0V8ZImb+/4=";
+    private static final String TEST_PASSWORD = "correct horse battery staple";
+    private static final Duration APPLICATION_READY_TIMEOUT = Duration.ofSeconds(15);
+    private static final Duration APPLICATION_READY_POLL_INTERVAL = Duration.ofMillis(500);
+    private static final int[] RESPONSIVE_WIDTHS = {320, 390, 768, 820, 1024, 1280};
+
+    private Playwright playwright;
+    private Browser browser;
+    private URI applicationBaseUri;
+
+    @BeforeAll
+    void openBrowser() throws InterruptedException {
+        applicationBaseUri = resolveApplicationBaseUri();
+        waitForApplicationHealth();
+        playwright = Playwright.create();
+        browser = selectedBrowser(playwright)
+                .launch(new BrowserType.LaunchOptions().setHeadless(shouldRunHeadless()));
+    }
+
+    @AfterAll
+    void closeBrowser() {
+        if (browser != null) {
+            browser.close();
+        }
+        if (playwright != null) {
+            playwright.close();
+        }
+    }
+
+    @Test
+    void authenticationAndCalendarCreationAreIndependent() throws SQLException {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "auth-owner-" + uniqueSuffix;
+        String firstCalendarName = "Kayaking " + uniqueSuffix;
+        String secondCalendarName = "Dinner " + uniqueSuffix;
+        seedUser(ownerUsername);
+        List<String> browserMessages = new ArrayList<>();
+
+        try (BrowserContext browserContext = browser.newContext()) {
+            Page page = newPage(browserContext, browserMessages);
+
+            page.navigate(route("/login"));
+            assertEquals("Sign in", page.locator("h1").textContent().trim());
+            page.locator("input[id$='username']").fill(ownerUsername);
+            page.locator("input[id$='password']").fill(TEST_PASSWORD + "-wrong");
+            page.locator("button:has-text('Sign in')").click();
+            assertEquals("Sign in", page.locator("h1").textContent().trim());
+            assertBodyContains(page, "Sign-in failed.");
+
+            signIn(page, ownerUsername, TEST_PASSWORD);
+            createCalendar(page, firstCalendarName);
+            createCalendar(page, secondCalendarName);
+            assertBodyContains(page, firstCalendarName);
+            assertBodyContains(page, secondCalendarName);
+            assertBodyContains(page, "ADMIN");
+
+            openCalendar(page, firstCalendarName);
+            String calendarId = requiredQueryParameter(page.url(), "id");
+            assertRouteWithId(page, "/app/calendar", calendarId);
+            assertBodyContains(page, "Create event");
+
+            signOut(page);
+            assertTrue(
+                    URI.create(page.url()).getPath().equals("/") || URI.create(page.url()).getPath().isBlank(),
+                    () -> "Expected logout to redirect home, but browser URL was " + page.url() + ".");
+            assertBodyContains(page, "Sign in");
+            assertNoBrowserMessages(browserMessages);
+        }
+    }
+
+    @Test
+    void registrationAndInvitationAcceptanceUseUniqueSingleUseRecords() throws SQLException {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "invite-owner-" + uniqueSuffix;
+        String registrationUsername = "registration-user-" + uniqueSuffix;
+        String editorUsername = "invited-editor-" + uniqueSuffix;
+        String password = "long-enough-password-" + uniqueSuffix;
+        String ownerCalendarName = "Owner plans " + uniqueSuffix;
+        String registrationCalendarName = "Birthday " + uniqueSuffix;
+        String editorCalendarName = "Trip " + uniqueSuffix;
+        seedUser(ownerUsername);
+        List<String> browserMessages = new ArrayList<>();
+
+        try (BrowserContext browserContext = browser.newContext()) {
+            Page page = newPage(browserContext, browserMessages);
+            signIn(page, ownerUsername, TEST_PASSWORD);
+            createCalendar(page, ownerCalendarName);
+
+            String registrationInvitationLink = createRegistrationInvitation(page);
+            String editorInvitationLink = createEditorInvitation(page, ownerCalendarName);
+            String existingUserInvitationLink = createEditorInvitation(page, ownerCalendarName);
+            assertNotEquals(registrationInvitationLink, editorInvitationLink);
+            assertNotEquals(editorInvitationLink, existingUserInvitationLink);
+            signOut(page);
+
+            page.navigate(route("/register"));
+            fillRegistrationForm(
+                    page,
+                    "blocked-" + uniqueSuffix,
+                    "Blocked user " + uniqueSuffix,
+                    "Blocked calendar " + uniqueSuffix,
+                    password);
+            page.locator("button:has-text('Register')").click();
+            assertBodyContains(page, "Invitation is invalid or no longer available.");
+
+            registerNewUser(
+                    page,
+                    registrationInvitationLink,
+                    registrationUsername,
+                    "Registration user " + uniqueSuffix,
+                    registrationCalendarName,
+                    password);
+            assertBodyContains(page, registrationCalendarName);
+            assertFalse(
+                    page.locator("body").innerText().contains(ownerCalendarName),
+                    "A registration invitation must not grant access to the inviter's calendar.");
+
+            page.navigate(existingUserInvitationLink);
+            assertEquals("Accept invitation", page.locator("h1").textContent().trim());
+            assertBodyContains(page, "already signed in");
+            page.locator("button:has-text('Accept invitation')").click();
+            page.waitForURL("**/app/calendar?id=*");
+            assertBodyContains(page, ownerCalendarName);
+            signOut(page);
+
+            registerNewUser(
+                    page,
+                    editorInvitationLink,
+                    editorUsername,
+                    "Editor user " + uniqueSuffix,
+                    editorCalendarName,
+                    password);
+            assertBodyContains(page, editorCalendarName);
+            assertBodyContains(page, ownerCalendarName);
+            assertBodyContains(page, "EDITOR");
+            assertBodyContains(page, "ADMIN");
+
+            page.navigate(editorInvitationLink);
+            page.locator("button:has-text('Accept invitation')").click();
+            assertBodyContains(page, "Invitation is already accepted.");
+            assertNoBrowserMessages(browserMessages);
+        }
+    }
+
+    @Test
+    void eventCrudAndValidationUseFreshCalendarData() throws SQLException {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "event-owner-" + uniqueSuffix;
+        String calendarName = "River calendar " + uniqueSuffix;
+        String eventTitle = "River launch " + uniqueSuffix;
+        String allDayEventTitle = "River weekend " + uniqueSuffix;
+        String deletedEventTitle = "Temporary event " + uniqueSuffix;
+        seedUser(ownerUsername);
+        List<String> browserMessages = new ArrayList<>();
+
+        try (BrowserContext browserContext = browser.newContext()) {
+            Page page = newPage(browserContext, browserMessages);
+            signIn(page, ownerUsername, TEST_PASSWORD);
+            createCalendar(page, calendarName);
+            openCalendar(page, calendarName);
+            String calendarId = requiredQueryParameter(page.url(), "id");
+
+            page.locator("input[id$='eventTitle']").fill("");
+            page.locator("button:has-text('Create event')").click();
+            assertBodyContains(page, "Event title is required.");
+            assertRouteWithId(page, "/app/calendar", calendarId);
+
+            enterEvent(page, "Invalid event " + uniqueSuffix, null, "2026-07-20 12:00", "2026-07-20 10:00", false);
+            assertBodyContains(page, "Event end time must be after the start time.");
+            assertEquals(0, page.locator("article", new Page.LocatorOptions().setHasText("Invalid event " + uniqueSuffix)).count());
+
+            enterEvent(page, eventTitle, "North landing", "2026-07-20 10:00", "2026-07-20 12:00", false);
+            assertBodyContains(page, eventTitle);
+            assertBodyContains(page, "North landing");
+            Locator eventRow = page.locator("article", new Page.LocatorOptions().setHasText(eventTitle));
+            eventRow.locator("button:has-text('Edit')").click();
+            assertThat(page.locator("button:has-text('Save changes')")).isVisible();
+            page.locator("input[id$='eventTitle']").fill(eventTitle + " updated");
+            assertEquals(eventTitle + " updated", page.locator("input[id$='eventTitle']").inputValue());
+            page.locator("button:has-text('Save changes')").click();
+            assertBodyContains(page, eventTitle + " updated");
+
+            enterEvent(page, allDayEventTitle, null, "2026-07-22 00:00", "2026-07-24 00:00", true);
+            assertThat(page.locator("article", new Page.LocatorOptions().setHasText(allDayEventTitle)))
+                    .containsText("All day from Wed, Jul 22, 2026 to Fri, Jul 24, 2026");
+
+            enterEvent(page, deletedEventTitle, null, "2026-07-21 14:00", "2026-07-21 15:00", false);
+            Locator deletedEventRow = page.locator("article", new Page.LocatorOptions().setHasText(deletedEventTitle));
+            deletedEventRow.locator("button:has-text('Delete')").click();
+            Locator confirmButton = page.locator("button:has-text('Yes')");
+            assertVisibleFocus(confirmButton);
+            confirmButton.click();
+            assertBodyContains(page, "Event deleted.");
+            assertEquals(0, page.locator("article", new Page.LocatorOptions().setHasText(deletedEventTitle)).count());
+
+            page.reload();
+            assertRouteWithId(page, "/app/calendar", calendarId);
+            assertBodyContains(page, eventTitle + " updated");
+            assertBodyContains(page, allDayEventTitle);
+
+            page.locator("a:has-text('Settings')").click();
+            page.locator("input[id$='timeZone']").fill("Mars/Olympus");
+            page.locator("button:has-text('Save settings')").click();
+            assertBodyContains(page, "Time zone must be a valid region such as Europe/Warsaw.");
+            String calendarDescription = "Summer river plans " + uniqueSuffix;
+            page.locator("input[id$='timeZone']").fill("Europe/Warsaw");
+            page.locator("textarea[id$='calendarDescription']").fill(calendarDescription);
+            page.locator("button:has-text('Save settings')").click();
+            assertBodyContains(page, "Calendar settings saved.");
+            page.reload();
+            assertBodyContains(page, calendarDescription);
+            assertNoBrowserMessages(browserMessages);
+        }
+    }
+
+    @Test
+    void publicAccessTokenRotationAndReadOnlyBehaviorAreIsolated() throws SQLException {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "public-owner-" + uniqueSuffix;
+        String calendarName = "Public river " + uniqueSuffix;
+        String eventTitle = "Public launch " + uniqueSuffix;
+        String calendarDescription = "Public plans " + uniqueSuffix;
+        seedUser(ownerUsername);
+        List<String> browserMessages = new ArrayList<>();
+
+        try (BrowserContext browserContext = browser.newContext()) {
+            Page page = newPage(browserContext, browserMessages);
+            signIn(page, ownerUsername, TEST_PASSWORD);
+            createCalendar(page, calendarName);
+            openCalendar(page, calendarName);
+            enterEvent(page, eventTitle, "River", "2026-08-20 10:00", "2026-08-20 12:00", false);
+            page.locator("a:has-text('Settings')").click();
+            page.locator("textarea[id$='calendarDescription']").fill(calendarDescription);
+            page.locator("button:has-text('Save settings')").click();
+            assertBodyContains(page, "Calendar settings saved.");
+            Locator publicLinkInput = page.getByLabel("Public calendar link");
+            String publicCalendarLink = publicLinkInput.inputValue();
+            assertTrue(URI.create(publicCalendarLink).getPath().startsWith("/calendar/"));
+
+            try (BrowserContext publicBrowserContext = browser.newContext()) {
+                List<String> publicBrowserMessages = new ArrayList<>();
+                Page publicPage = newPage(publicBrowserContext, publicBrowserMessages);
+                com.microsoft.playwright.Response publicResponse = publicPage.navigate(publicCalendarLink);
+                assertEquals(200, publicResponse.status());
+                assertEquals("en", publicPage.locator("html").getAttribute("lang"));
+                assertEquals("noindex, nofollow", publicPage.locator("meta[name='robots']").getAttribute("content"));
+                assertBodyContains(publicPage, eventTitle);
+                assertBodyContains(publicPage, calendarDescription);
+                assertBodyContains(publicPage, "Read-only");
+                assertEquals(0, publicPage.locator("button:has-text('Create event')").count());
+                assertEquals(0, publicPage.locator("button:has-text('Edit')").count());
+                assertEquals(0, publicPage.locator("button:has-text('Delete')").count());
+                assertEquals(0, publicPage.locator("a:has-text('Settings')").count());
+                assertEquals(0, publicPage.locator("a:has-text('Members')").count());
+                assertNoBrowserMessages(publicBrowserMessages);
+            }
+
+            page.locator("button:has-text('Rotate public link')").click();
+            page.locator("button:has-text('Yes')").click();
+            assertBodyContains(page, "Public link rotated.");
+            String rotatedPublicCalendarLink = publicLinkInput.inputValue();
+            assertNotEquals(publicCalendarLink, rotatedPublicCalendarLink);
+
+            try (BrowserContext rotatedLinkBrowserContext = browser.newContext()) {
+                List<String> rotatedLinkBrowserMessages = new ArrayList<>();
+                Page rotatedLinkPage = newPage(rotatedLinkBrowserContext, rotatedLinkBrowserMessages);
+                assertEquals(404, rotatedLinkPage.navigate(publicCalendarLink).status());
+                assertBodyContains(rotatedLinkPage, "Calendar not found");
+                assertOnlyExpectedNotFoundNavigationMessage(rotatedLinkBrowserMessages);
+
+                List<String> currentLinkBrowserMessages = new ArrayList<>();
+                Page currentLinkPage = newPage(rotatedLinkBrowserContext, currentLinkBrowserMessages);
+                assertEquals(200, currentLinkPage.navigate(rotatedPublicCalendarLink).status());
+                assertBodyContains(currentLinkPage, eventTitle);
+                assertNoBrowserMessages(currentLinkBrowserMessages);
+            }
+            assertNoBrowserMessages(browserMessages);
+        }
+    }
+
+    @Test
+    void membershipChangesProtectTheLastAdminAndKeepViewersReadOnly() throws SQLException {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "member-owner-" + uniqueSuffix;
+        String firstMemberUsername = "member-viewer-" + uniqueSuffix;
+        String secondMemberUsername = "member-editor-" + uniqueSuffix;
+        String password = "long-enough-password-" + uniqueSuffix;
+        String calendarName = "Members calendar " + uniqueSuffix;
+        String eventTitle = "Members event " + uniqueSuffix;
+        seedUser(ownerUsername);
+        List<String> browserMessages = new ArrayList<>();
+
+        try (BrowserContext browserContext = browser.newContext()) {
+            Page page = newPage(browserContext, browserMessages);
+            signIn(page, ownerUsername, TEST_PASSWORD);
+            createCalendar(page, calendarName);
+            openCalendar(page, calendarName);
+            enterEvent(page, eventTitle, null, "2026-09-20 10:00", "2026-09-20 12:00", false);
+            String firstInvitationLink = createEditorInvitation(page, calendarName);
+            String secondInvitationLink = createEditorInvitation(page, calendarName);
+            signOut(page);
+
+            registerNewUser(
+                    page,
+                    firstInvitationLink,
+                    firstMemberUsername,
+                    "First member " + uniqueSuffix,
+                    "First member calendar " + uniqueSuffix,
+                    password);
+            signOut(page);
+            registerNewUser(
+                    page,
+                    secondInvitationLink,
+                    secondMemberUsername,
+                    "Second member " + uniqueSuffix,
+                    "Second member calendar " + uniqueSuffix,
+                    password);
+            signOut(page);
+
+            signIn(page, ownerUsername, TEST_PASSWORD);
+            openCalendar(page, calendarName);
+            String calendarId = requiredQueryParameter(page.url(), "id");
+            page.locator("a:has-text('Members')").click();
+            Locator firstMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(firstMemberUsername));
+            Locator secondMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(secondMemberUsername));
+            Locator ownerMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(ownerUsername));
+
+            firstMemberRow.locator("select").selectOption("ADMIN");
+            firstMemberRow.locator("button:has-text('Save role')").click();
+            assertBodyContains(page, "Member role saved.");
+            page.reload();
+            firstMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(firstMemberUsername));
+            secondMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(secondMemberUsername));
+            ownerMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(ownerUsername));
+            assertThat(firstMemberRow.locator("select")).hasValue("ADMIN");
+            assertFalse(ownerMemberRow.locator("select").isEnabled());
+            assertFalse(ownerMemberRow.locator("button:has-text('Save role')").isEnabled());
+            assertFalse(ownerMemberRow.locator("button:has-text('Remove access')").isEnabled());
+            assertThat(ownerMemberRow).containsText("Your admin role cannot be changed here.");
+
+            firstMemberRow.locator("select").selectOption("VIEWER");
+            firstMemberRow.locator("button:has-text('Save role')").click();
+            assertBodyContains(page, "Member role saved.");
+            page.reload();
+            firstMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(firstMemberUsername));
+            secondMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(secondMemberUsername));
+            assertThat(firstMemberRow.locator("select")).hasValue("VIEWER");
+
+            secondMemberRow.locator("button:has-text('Remove access')").click();
+            page.locator("button:has-text('Yes')").click();
+            assertBodyContains(page, "Member access removed.");
+            page.reload();
+            secondMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(secondMemberUsername));
+            assertThat(secondMemberRow).containsText("Inactive");
+            secondMemberRow.locator("select").selectOption("EDITOR");
+            secondMemberRow.locator("button:has-text('Save role')").click();
+            assertBodyContains(page, "Member role saved.");
+            page.reload();
+            secondMemberRow = page.locator("tr", new Page.LocatorOptions().setHasText(secondMemberUsername));
+            assertThat(secondMemberRow).containsText("Active");
+
+            List<String> missingIdentifierBrowserMessages = new ArrayList<>();
+            Page missingIdentifierPage = newPage(browserContext, missingIdentifierBrowserMessages);
+            assertEquals(404, missingIdentifierPage.navigate(route("/app/calendar-members")).status());
+            assertBodyContains(missingIdentifierPage, "Calendar not found");
+            assertFalse(missingIdentifierPage.locator("body").innerText().contains("Exception thrown"));
+            assertOnlyExpectedNotFoundNavigationMessage(missingIdentifierBrowserMessages);
+            missingIdentifierPage.close();
+
+            signOut(page);
+            signIn(page, firstMemberUsername, password);
+            openCalendar(page, calendarName);
+            assertRouteWithId(page, "/app/calendar", calendarId);
+            assertBodyContains(page, eventTitle);
+            assertEquals(0, page.locator("button:has-text('Create event')").count());
+            assertEquals(0, page.locator("button:has-text('Edit')").count());
+            assertEquals(0, page.locator("button:has-text('Delete')").count());
+            assertEquals(0, page.locator("a:has-text('Settings')").count());
+            assertNoBrowserMessages(browserMessages);
+        }
+    }
+
+    @Test
+    void roleAuthorizationIsEnforcedAcrossIndependentSessionsAndDirectRoutes() throws SQLException {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "role-owner-" + uniqueSuffix;
+        String editorUsername = "role-editor-" + uniqueSuffix;
+        String viewerUsername = "role-viewer-" + uniqueSuffix;
+        String unrelatedUsername = "role-unrelated-" + uniqueSuffix;
+        String password = "role-password-" + uniqueSuffix;
+        String calendarName = "Role matrix " + uniqueSuffix;
+        String eventTitle = "Owner event " + uniqueSuffix;
+        seedUser(ownerUsername);
+        seedUser(unrelatedUsername);
+        String calendarId;
+
+        try (BrowserContext setupContext = browser.newContext()) {
+            Page setupPage = setupContext.newPage();
+            signIn(setupPage, ownerUsername, TEST_PASSWORD);
+            createCalendar(setupPage, calendarName);
+            openCalendar(setupPage, calendarName);
+            calendarId = requiredQueryParameter(setupPage.url(), "id");
+            enterEvent(setupPage, eventTitle, null, "2026-10-01 10:00", "2026-10-01 11:00", false);
+            String editorInvitationLink = createEditorInvitation(setupPage, calendarName);
+            String viewerInvitationLink = createEditorInvitation(setupPage, calendarName);
+            signOut(setupPage);
+
+            registerNewUser(
+                    setupPage,
+                    editorInvitationLink,
+                    editorUsername,
+                    "Role editor " + uniqueSuffix,
+                    "Editor calendar " + uniqueSuffix,
+                    password);
+            signOut(setupPage);
+            registerNewUser(
+                    setupPage,
+                    viewerInvitationLink,
+                    viewerUsername,
+                    "Role viewer " + uniqueSuffix,
+                    "Viewer calendar " + uniqueSuffix,
+                    password);
+            signOut(setupPage);
+
+            signIn(setupPage, ownerUsername, TEST_PASSWORD);
+            setupPage.navigate(route("/app/calendar-members?id=" + calendarId));
+            Locator viewerRow = setupPage.locator("tr", new Page.LocatorOptions().setHasText(viewerUsername));
+            viewerRow.locator("select").selectOption("VIEWER");
+            viewerRow.locator("button:has-text('Save role')").click();
+            assertBodyContains(setupPage, "Member role saved.");
+        }
+
+        try (BrowserContext unauthenticatedContext = browser.newContext()) {
+            Page unauthenticatedPage = unauthenticatedContext.newPage();
+            for (String protectedRoute : List.of(
+                    "/app/calendars",
+                    "/app/invitations",
+                    "/app/calendar?id=" + calendarId,
+                    "/app/calendar-settings?id=" + calendarId,
+                    "/app/calendar-members?id=" + calendarId)) {
+                unauthenticatedPage.navigate(route(protectedRoute));
+                assertEquals("/login", URI.create(unauthenticatedPage.url()).getPath());
+                assertBodyContains(unauthenticatedPage, "Sign in");
+            }
+        }
+
+        try (BrowserContext editorContext = browser.newContext()) {
+            List<String> browserMessages = new ArrayList<>();
+            Page editorPage = newPage(editorContext, browserMessages);
+            signIn(editorPage, editorUsername, password);
+            openCalendar(editorPage, calendarName);
+            assertBodyContains(editorPage, eventTitle);
+            assertBodyContains(editorPage, "EDITOR");
+            assertThat(editorPage.locator("button:has-text('Create event')")).isVisible();
+            enterEvent(
+                    editorPage,
+                    "Editor event " + uniqueSuffix,
+                    null,
+                    "2026-10-02 10:00",
+                    "2026-10-02 11:00",
+                    false);
+            assertBodyContains(editorPage, "Editor event " + uniqueSuffix);
+            assertTrue(createEditorInvitation(editorPage, calendarName).contains("/register?token="));
+            editorPage.navigate(route("/app/calendar-settings?id=" + calendarId));
+            assertBodyContains(editorPage, "Calendar not found");
+            editorPage.navigate(route("/app/calendar-members?id=" + calendarId));
+            assertBodyContains(editorPage, "Calendar not found");
+            assertOnlyExpectedNotFoundNavigationMessages(browserMessages);
+        }
+
+        try (BrowserContext viewerContext = browser.newContext()) {
+            List<String> browserMessages = new ArrayList<>();
+            Page viewerPage = newPage(viewerContext, browserMessages);
+            signIn(viewerPage, viewerUsername, password);
+            openCalendar(viewerPage, calendarName);
+            assertBodyContains(viewerPage, eventTitle);
+            assertBodyContains(viewerPage, "VIEWER");
+            assertEquals(0, viewerPage.locator("button:has-text('Create event')").count());
+            assertEquals(0, viewerPage.locator("button:has-text('Edit')").count());
+            assertEquals(0, viewerPage.locator("button:has-text('Delete')").count());
+            viewerPage.navigate(route("/app/calendar-settings?id=" + calendarId));
+            assertBodyContains(viewerPage, "Calendar not found");
+            viewerPage.navigate(route("/app/calendar-members?id=" + calendarId));
+            assertBodyContains(viewerPage, "Calendar not found");
+            viewerPage.navigate(route("/app/invitations"));
+            assertEquals(
+                    0,
+                    viewerPage.locator("select[id$='calendar'] option", new Page.LocatorOptions().setHasText(calendarName)).count());
+            assertOnlyExpectedNotFoundNavigationMessages(browserMessages);
+        }
+
+        try (BrowserContext unrelatedContext = browser.newContext()) {
+            List<String> browserMessages = new ArrayList<>();
+            Page unrelatedPage = newPage(unrelatedContext, browserMessages);
+            signIn(unrelatedPage, unrelatedUsername, TEST_PASSWORD);
+            for (String inaccessibleRoute : List.of(
+                    "/app/calendar?id=" + calendarId,
+                    "/app/calendar-settings?id=" + calendarId,
+                    "/app/calendar-members?id=" + calendarId)) {
+                unrelatedPage.navigate(route(inaccessibleRoute));
+                assertBodyContains(unrelatedPage, "Calendar not found");
+            }
+            assertOnlyExpectedNotFoundNavigationMessages(browserMessages);
+        }
+    }
+
+    @Test
+    void invitationStatusesRevocationExpirationAndMalformedLinksAreEnforcedInTheBrowser() throws SQLException {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "status-owner-" + uniqueSuffix;
+        String password = "status-password-" + uniqueSuffix;
+        seedUser(ownerUsername);
+        String availableInvitationLink;
+        String revokedInvitationLink;
+        String expiredInvitationLink;
+        String usedInvitationLink;
+
+        try (BrowserContext ownerContext = browser.newContext()) {
+            Page ownerPage = ownerContext.newPage();
+            signIn(ownerPage, ownerUsername, TEST_PASSWORD);
+            availableInvitationLink = createRegistrationInvitation(ownerPage);
+            revokedInvitationLink = createRegistrationInvitation(ownerPage);
+            invitationRow(ownerPage, revokedInvitationLink).locator("button:has-text('Revoke')").click();
+            assertBodyContains(ownerPage, "Invitation revoked.");
+            assertThat(invitationRow(ownerPage, revokedInvitationLink)).containsText("Revoked");
+            assertEquals(0, invitationRow(ownerPage, revokedInvitationLink).locator("button:has-text('Revoke')").count());
+
+            expiredInvitationLink = insertExpiredInvitation(ownerUsername);
+            ownerPage.navigate(route("/app/invitations"));
+            assertThat(invitationRow(ownerPage, expiredInvitationLink)).containsText("Expired");
+            assertEquals(0, invitationRow(ownerPage, expiredInvitationLink).locator("button:has-text('Revoke')").count());
+            assertThat(invitationRow(ownerPage, availableInvitationLink)).containsText("Available");
+            assertThat(invitationRow(ownerPage, availableInvitationLink).locator("button:has-text('Revoke')")).isVisible();
+
+            usedInvitationLink = createRegistrationInvitation(ownerPage);
+            try (BrowserContext registrationContext = browser.newContext()) {
+                Page registrationPage = registrationContext.newPage();
+                registerNewUser(
+                        registrationPage,
+                        usedInvitationLink,
+                        "status-used-" + uniqueSuffix,
+                        "Used invitation " + uniqueSuffix,
+                        "Used calendar " + uniqueSuffix,
+                        password);
+            }
+            ownerPage.reload();
+            assertThat(invitationRow(ownerPage, usedInvitationLink)).containsText("Used");
+            assertEquals(0, invitationRow(ownerPage, usedInvitationLink).locator("button:has-text('Revoke')").count());
+        }
+
+        try (BrowserContext rejectedContext = browser.newContext()) {
+            Page rejectedPage = rejectedContext.newPage();
+            assertRegistrationRejected(
+                    rejectedPage, revokedInvitationLink, "revoked-" + uniqueSuffix, password, "Invitation is revoked.");
+            assertRegistrationRejected(
+                    rejectedPage, expiredInvitationLink, "expired-" + uniqueSuffix, password, "Invitation is expired.");
+            assertRegistrationRejected(
+                    rejectedPage,
+                    route("/register?token=malformed-" + uniqueSuffix),
+                    "malformed-" + uniqueSuffix,
+                    password,
+                    "Invitation is invalid or no longer available.");
+        }
+    }
+
+    @Test
+    void acceptedInvitationsPreserveStrongerRolesAndReactivateRemovedMembers() throws SQLException {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "membership-owner-" + uniqueSuffix;
+        String memberUsername = "membership-invitee-" + uniqueSuffix;
+        String password = "membership-password-" + uniqueSuffix;
+        String calendarName = "Invitation membership " + uniqueSuffix;
+        seedUser(ownerUsername);
+        String calendarId;
+
+        try (BrowserContext browserContext = browser.newContext()) {
+            Page page = browserContext.newPage();
+            signIn(page, ownerUsername, TEST_PASSWORD);
+            createCalendar(page, calendarName);
+            openCalendar(page, calendarName);
+            calendarId = requiredQueryParameter(page.url(), "id");
+            String initialInvitationLink = createEditorInvitation(page, calendarName);
+            signOut(page);
+            registerNewUser(
+                    page,
+                    initialInvitationLink,
+                    memberUsername,
+                    "Membership invitee " + uniqueSuffix,
+                    "Invitee calendar " + uniqueSuffix,
+                    password);
+            signOut(page);
+
+            signIn(page, ownerUsername, TEST_PASSWORD);
+            page.navigate(route("/app/calendar-members?id=" + calendarId));
+            Locator memberRow = page.locator("tr", new Page.LocatorOptions().setHasText(memberUsername));
+            memberRow.locator("select").selectOption("ADMIN");
+            memberRow.locator("button:has-text('Save role')").click();
+            assertBodyContains(page, "Member role saved.");
+            String strongerRoleInvitationLink = createEditorInvitation(page, calendarName);
+            signOut(page);
+
+            signIn(page, memberUsername, password);
+            page.navigate(strongerRoleInvitationLink);
+            page.locator("button:has-text('Accept invitation')").click();
+            page.waitForURL("**/app/calendar?id=*");
+            assertBodyContains(page, "ADMIN");
+            signOut(page);
+
+            signIn(page, ownerUsername, TEST_PASSWORD);
+            page.navigate(route("/app/calendar-members?id=" + calendarId));
+            memberRow = page.locator("tr", new Page.LocatorOptions().setHasText(memberUsername));
+            memberRow.locator("button:has-text('Remove access')").click();
+            page.locator("button:has-text('Yes')").click();
+            assertBodyContains(page, "Member access removed.");
+            String reactivationInvitationLink = createEditorInvitation(page, calendarName);
+            signOut(page);
+
+            signIn(page, memberUsername, password);
+            page.navigate(reactivationInvitationLink);
+            page.locator("button:has-text('Accept invitation')").click();
+            page.waitForURL("**/app/calendar?id=*");
+            assertBodyContains(page, calendarName);
+            assertBodyContains(page, "EDITOR");
+        }
+    }
+
+    @Test
+    void concurrentInvitationAcceptanceAllowsExactlyOneUserAndRevokedAccessInvalidatesOpenSessions()
+            throws SQLException {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "acceptance-owner-" + uniqueSuffix;
+        String firstCandidateUsername = "acceptance-first-" + uniqueSuffix;
+        String secondCandidateUsername = "acceptance-second-" + uniqueSuffix;
+        String calendarName = "Contested invitation " + uniqueSuffix;
+        seedUser(ownerUsername);
+        seedUser(firstCandidateUsername);
+        seedUser(secondCandidateUsername);
+        String calendarId;
+        String invitationLink;
+
+        try (BrowserContext setupContext = browser.newContext()) {
+            Page setupPage = setupContext.newPage();
+            signIn(setupPage, ownerUsername, TEST_PASSWORD);
+            createCalendar(setupPage, calendarName);
+            openCalendar(setupPage, calendarName);
+            calendarId = requiredQueryParameter(setupPage.url(), "id");
+            invitationLink = createEditorInvitation(setupPage, calendarName);
+        }
+
+        try (BrowserContext firstContext = browser.newContext();
+                BrowserContext secondContext = browser.newContext();
+                BrowserContext ownerContext = browser.newContext()) {
+            Page firstPage = firstContext.newPage();
+            Page secondPage = secondContext.newPage();
+            Page ownerPage = ownerContext.newPage();
+            signIn(firstPage, firstCandidateUsername, TEST_PASSWORD);
+            signIn(secondPage, secondCandidateUsername, TEST_PASSWORD);
+            firstPage.navigate(invitationLink);
+            secondPage.navigate(invitationLink);
+            Locator firstAcceptButton = firstPage.locator("button:has-text('Accept invitation')");
+            Locator secondAcceptButton = secondPage.locator("button:has-text('Accept invitation')");
+            assertThat(firstAcceptButton).isVisible();
+            assertThat(secondAcceptButton).isVisible();
+
+            long scheduledAcceptanceTime = System.currentTimeMillis() + 750;
+            scheduleClickAt(firstAcceptButton, scheduledAcceptanceTime);
+            scheduleClickAt(secondAcceptButton, scheduledAcceptanceTime);
+            waitForInvitationAcceptanceResult(firstPage);
+            waitForInvitationAcceptanceResult(secondPage);
+
+            boolean firstCandidateAccepted = URI.create(firstPage.url()).getPath().equals("/app/calendar");
+            boolean secondCandidateAccepted = URI.create(secondPage.url()).getPath().equals("/app/calendar");
+            assertNotEquals(
+                    firstCandidateAccepted,
+                    secondCandidateAccepted,
+                    "Exactly one contender should consume a single-use invitation.");
+
+            Page acceptedPage = firstCandidateAccepted ? firstPage : secondPage;
+            Page rejectedPage = firstCandidateAccepted ? secondPage : firstPage;
+            String acceptedUsername = firstCandidateAccepted ? firstCandidateUsername : secondCandidateUsername;
+            String rejectedUsername = firstCandidateAccepted ? secondCandidateUsername : firstCandidateUsername;
+            assertBodyContains(acceptedPage, calendarName);
+            assertBodyContains(acceptedPage, "EDITOR");
+            assertBodyContains(rejectedPage, "Invitation is already accepted.");
+
+            rejectedPage.navigate(route("/app/invitations"));
+            assertEquals(
+                    0,
+                    rejectedPage.locator("input[value=\"" + invitationLink + "\"]").count(),
+                    "Another user's invitation must not be exposed for revocation.");
+
+            signIn(ownerPage, ownerUsername, TEST_PASSWORD);
+            ownerPage.navigate(route("/app/calendar-members?id=" + calendarId));
+            Locator acceptedMemberRow = ownerPage.locator("tr", new Page.LocatorOptions().setHasText(acceptedUsername));
+            assertThat(acceptedMemberRow).containsText("Active");
+            assertEquals(
+                    0,
+                    ownerPage.locator("tr", new Page.LocatorOptions().setHasText(rejectedUsername)).count(),
+                    "The losing contender must not receive membership.");
+            acceptedMemberRow.locator("button:has-text('Remove access')").click();
+            ownerPage.locator("button:has-text('Yes')").click();
+            assertBodyContains(ownerPage, "Member access removed.");
+
+            acceptedPage.reload();
+            assertBodyContains(acceptedPage, "Calendar not found");
+        }
+    }
+
+    @Test
+    void concurrentAdministratorsCannotDemoteEachOtherAndLeaveTheCalendarWithoutAnAdmin() throws SQLException {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "admin-race-owner-" + uniqueSuffix;
+        String secondAdminUsername = "admin-race-second-" + uniqueSuffix;
+        String password = "admin-race-password-" + uniqueSuffix;
+        String calendarName = "Admin race " + uniqueSuffix;
+        seedUser(ownerUsername);
+        String calendarId;
+
+        try (BrowserContext setupContext = browser.newContext()) {
+            Page setupPage = setupContext.newPage();
+            signIn(setupPage, ownerUsername, TEST_PASSWORD);
+            createCalendar(setupPage, calendarName);
+            openCalendar(setupPage, calendarName);
+            calendarId = requiredQueryParameter(setupPage.url(), "id");
+            String invitationLink = createEditorInvitation(setupPage, calendarName);
+            signOut(setupPage);
+            registerNewUser(
+                    setupPage,
+                    invitationLink,
+                    secondAdminUsername,
+                    "Second administrator " + uniqueSuffix,
+                    "Second administrator calendar " + uniqueSuffix,
+                    password);
+            signOut(setupPage);
+            signIn(setupPage, ownerUsername, TEST_PASSWORD);
+            setupPage.navigate(route("/app/calendar-members?id=" + calendarId));
+            Locator secondAdminRow = setupPage.locator("tr", new Page.LocatorOptions().setHasText(secondAdminUsername));
+            secondAdminRow.locator("select").selectOption("ADMIN");
+            secondAdminRow.locator("button:has-text('Save role')").click();
+            assertBodyContains(setupPage, "Member role saved.");
+        }
+
+        try (BrowserContext ownerContext = browser.newContext(); BrowserContext secondAdminContext = browser.newContext()) {
+            Page ownerPage = ownerContext.newPage();
+            Page secondAdminPage = secondAdminContext.newPage();
+            signIn(ownerPage, ownerUsername, TEST_PASSWORD);
+            signIn(secondAdminPage, secondAdminUsername, password);
+            ownerPage.navigate(route("/app/calendar-members?id=" + calendarId));
+            secondAdminPage.navigate(route("/app/calendar-members?id=" + calendarId));
+
+            Locator ownerTargetingSecondAdmin = ownerPage.locator(
+                    "tr", new Page.LocatorOptions().setHasText(secondAdminUsername));
+            Locator secondAdminTargetingOwner = secondAdminPage.locator(
+                    "tr", new Page.LocatorOptions().setHasText(ownerUsername));
+            ownerTargetingSecondAdmin.locator("select").selectOption("VIEWER");
+            secondAdminTargetingOwner.locator("select").selectOption("VIEWER");
+
+            long scheduledRoleChangeTime = System.currentTimeMillis() + 750;
+            scheduleClickAt(
+                    ownerTargetingSecondAdmin.locator("button:has-text('Save role')"), scheduledRoleChangeTime);
+            scheduleClickAt(
+                    secondAdminTargetingOwner.locator("button:has-text('Save role')"), scheduledRoleChangeTime);
+            waitForMembershipChangeResult(ownerPage);
+            waitForMembershipChangeResult(secondAdminPage);
+
+            boolean ownerSucceeded = ownerPage.locator("body").innerText().contains("Member role saved.");
+            boolean secondAdminSucceeded = secondAdminPage.locator("body").innerText().contains("Member role saved.");
+            assertNotEquals(
+                    ownerSucceeded,
+                    secondAdminSucceeded,
+                    "Only one concurrent admin demotion may succeed.");
+            Page survivingAdminPage = ownerSucceeded ? ownerPage : secondAdminPage;
+            Page demotedAdminPage = ownerSucceeded ? secondAdminPage : ownerPage;
+            assertBodyContains(demotedAdminPage, "Admin access is required.");
+            assertEquals(1L, countActiveAdmins(Long.parseLong(calendarId)));
+
+            survivingAdminPage.navigate(route("/app/calendar-members?id=" + calendarId));
+            assertBodyContains(survivingAdminPage, calendarName);
+            demotedAdminPage.navigate(route("/app/calendar-members?id=" + calendarId));
+            assertBodyContains(demotedAdminPage, "Calendar not found");
+            demotedAdminPage.navigate(route("/app/calendar?id=" + calendarId));
+            assertBodyContains(demotedAdminPage, calendarName);
+            assertEquals(0, demotedAdminPage.locator("button:has-text('Create event')").count());
+        }
+    }
+
+    @Test
+    void publicAccessCanBeDisabledReenabledAndIsBlockedForInactiveCalendars() throws SQLException {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "public-toggle-owner-" + uniqueSuffix;
+        String calendarName = "Public toggle " + uniqueSuffix;
+        String eventTitle = "Toggle event " + uniqueSuffix;
+        seedUser(ownerUsername);
+
+        try (BrowserContext ownerContext = browser.newContext(); BrowserContext publicContext = browser.newContext()) {
+            Page ownerPage = ownerContext.newPage();
+            Page publicPage = publicContext.newPage();
+            signIn(ownerPage, ownerUsername, TEST_PASSWORD);
+            createCalendar(ownerPage, calendarName);
+            openCalendar(ownerPage, calendarName);
+            String calendarId = requiredQueryParameter(ownerPage.url(), "id");
+            enterEvent(ownerPage, eventTitle, null, "2026-11-01 10:00", "2026-11-01 11:00", false);
+            ownerPage.locator("a:has-text('Settings')").click();
+            String publicCalendarLink = ownerPage.getByLabel("Public calendar link").inputValue();
+
+            assertEquals(200, publicPage.navigate(publicCalendarLink).status());
+            assertBodyContains(publicPage, eventTitle);
+
+            setPublicAccess(ownerPage, false);
+            assertBodyContains(ownerPage, "Public access disabled");
+            ownerPage.reload();
+            assertFalse(ownerPage.getByLabel("Enable public read-only access").isChecked());
+            assertEquals(publicCalendarLink, ownerPage.getByLabel("Public calendar link").inputValue());
+            assertEquals(404, publicPage.navigate(publicCalendarLink).status());
+            assertBodyContains(publicPage, "Calendar not found");
+
+            setPublicAccess(ownerPage, true);
+            assertBodyContains(ownerPage, "Public access enabled");
+            ownerPage.reload();
+            assertTrue(ownerPage.getByLabel("Enable public read-only access").isChecked());
+            assertEquals(publicCalendarLink, ownerPage.getByLabel("Public calendar link").inputValue());
+            assertEquals(200, publicPage.navigate(publicCalendarLink).status());
+            assertBodyContains(publicPage, eventTitle);
+
+            setCalendarActive(Long.parseLong(calendarId), false);
+            assertEquals(404, publicPage.navigate(publicCalendarLink).status());
+            ownerPage.navigate(route("/app/calendar?id=" + calendarId));
+            assertBodyContains(ownerPage, "Calendar not found");
+        }
+    }
+
+    @Test
+    void registrationValidationInactiveAccountsAndLogoutSessionBoundariesAreEnforced() throws SQLException {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "registration-owner-" + uniqueSuffix;
+        String duplicateUsername = "duplicate-user-" + uniqueSuffix;
+        String inactiveUsername = "inactive-user-" + uniqueSuffix;
+        seedUser(ownerUsername);
+        seedUser(duplicateUsername);
+        seedUser(inactiveUsername, "Inactive user", false);
+        List<String> invitationLinks = new ArrayList<>();
+
+        try (BrowserContext ownerContext = browser.newContext()) {
+            Page ownerPage = ownerContext.newPage();
+            signIn(ownerPage, ownerUsername, TEST_PASSWORD);
+            for (int invitationIndex = 0; invitationIndex < 4; invitationIndex++) {
+                invitationLinks.add(createRegistrationInvitation(ownerPage));
+            }
+        }
+
+        try (BrowserContext registrationContext = browser.newContext()) {
+            Page registrationPage = registrationContext.newPage();
+            registrationPage.navigate(invitationLinks.get(0));
+            fillRegistrationForm(
+                    registrationPage,
+                    "weak-user-" + uniqueSuffix,
+                    "Weak password user",
+                    "Weak password calendar",
+                    "too-short");
+            registrationPage.locator("button:has-text('Register')").click();
+            assertBodyContains(registrationPage, "Password must be at least 14 characters.");
+
+            String matchingUsername = "matching-password-" + uniqueSuffix;
+            registrationPage.navigate(invitationLinks.get(1));
+            fillRegistrationForm(
+                    registrationPage,
+                    matchingUsername,
+                    "Matching password user",
+                    "Matching password calendar",
+                    matchingUsername);
+            registrationPage.locator("button:has-text('Register')").click();
+            assertBodyContains(registrationPage, "Password must not match the username.");
+
+            registrationPage.navigate(invitationLinks.get(2));
+            fillRegistrationForm(
+                    registrationPage,
+                    duplicateUsername.toUpperCase(Locale.ROOT),
+                    "Duplicate user",
+                    "Duplicate calendar",
+                    "valid-duplicate-password-" + uniqueSuffix);
+            registrationPage.locator("button:has-text('Register')").click();
+            assertBodyContains(registrationPage, "Username is already registered.");
+
+            registrationPage.navigate(invitationLinks.get(3));
+            Locator passwordInput = registrationPage.locator("input[id$='password']");
+            assertEquals("512", passwordInput.getAttribute("maxlength"));
+            passwordInput.fill("p".repeat(513));
+            assertEquals(512, passwordInput.inputValue().length());
+            fillRegistrationForm(
+                    registrationPage,
+                    "oversized-password-" + uniqueSuffix,
+                    "Oversized password user",
+                    "Oversized password calendar",
+                    "valid-placeholder-password");
+            setRawInputValue(passwordInput, "p".repeat(513));
+            registrationPage.locator("button:has-text('Register')").click();
+            assertBodyContains(registrationPage, "Password must be 512 characters or fewer.");
+        }
+
+        try (BrowserContext inactiveContext = browser.newContext()) {
+            Page inactivePage = inactiveContext.newPage();
+            inactivePage.navigate(route("/login"));
+            inactivePage.locator("input[id$='username']").fill(inactiveUsername);
+            inactivePage.locator("input[id$='password']").fill(TEST_PASSWORD);
+            inactivePage.locator("button:has-text('Sign in')").click();
+            assertBodyContains(inactivePage, "Sign-in failed.");
+        }
+
+        try (BrowserContext sessionContext = browser.newContext()) {
+            Page sessionPage = sessionContext.newPage();
+            signIn(sessionPage, ownerUsername, TEST_PASSWORD);
+            assertEquals("/app/calendars", URI.create(sessionPage.url()).getPath());
+            signOut(sessionPage);
+            sessionPage.navigate(route("/app/calendars"));
+            assertEquals("/login", URI.create(sessionPage.url()).getPath());
+            assertBodyContains(sessionPage, "Sign in");
+        }
+    }
+
+    @Test
+    void calendarAndEventBoundaryValidationResetAndNotFoundRoutesAreCovered() throws SQLException {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "boundary-owner-" + uniqueSuffix;
+        String calendarName = "Boundary calendar " + uniqueSuffix;
+        String eventTitle = "Boundary event " + uniqueSuffix;
+        seedUser(ownerUsername);
+
+        try (BrowserContext browserContext = browser.newContext()) {
+            Page page = browserContext.newPage();
+            signIn(page, ownerUsername, TEST_PASSWORD);
+            Locator calendarNameInput = page.locator("input[id$='calendarName']");
+            assertEquals("160", calendarNameInput.getAttribute("maxlength"));
+            calendarNameInput.fill("   ");
+            page.locator("button:has-text('Create calendar')").click();
+            assertBodyContains(page, "Calendar name is required.");
+            assertEquals("polite", page.locator(".ui-messages").getAttribute("aria-live"));
+
+            setRawInputValue(calendarNameInput, "c".repeat(161));
+            assertEquals(161, calendarNameInput.inputValue().length());
+            clickWithoutChangingFocus(page.locator("button:has-text('Create calendar')"));
+            assertBodyContains(page, "Calendar name must be 160 characters or fewer.");
+
+            createCalendar(page, calendarName);
+            openCalendar(page, calendarName);
+            String calendarId = requiredQueryParameter(page.url(), "id");
+            assertEquals("200", page.locator("input[id$='eventTitle']").getAttribute("maxlength"));
+            assertEquals("200", page.locator("input[id$='eventLocation']").getAttribute("maxlength"));
+
+            Locator eventTitleInput = page.locator("input[id$='eventTitle']");
+            Locator eventLocationInput = page.locator("input[id$='eventLocation']");
+            Locator eventStartInput = page.locator("input[id$='eventStart_input']");
+            Locator eventEndInput = page.locator("input[id$='eventEnd_input']");
+
+            eventStartInput.fill("2026-11-30 10:00");
+            eventEndInput.fill("2026-11-30 11:00");
+            setRawInputValue(eventTitleInput, "t".repeat(201));
+            assertEquals(201, eventTitleInput.inputValue().length());
+            clickWithoutChangingFocus(page.locator("button:has-text('Create event')"));
+            assertBodyContains(page, "Event title must be 200 characters or fewer.");
+
+            eventTitleInput.fill("Oversized location " + uniqueSuffix);
+            eventStartInput.fill("2026-11-30 10:00");
+            eventEndInput.fill("2026-11-30 11:00");
+            setRawInputValue(eventLocationInput, "l".repeat(201));
+            assertEquals(201, eventLocationInput.inputValue().length());
+            clickWithoutChangingFocus(page.locator("button:has-text('Create event')"));
+            assertBodyContains(page, "Event location must be 200 characters or fewer.");
+
+            eventTitleInput.fill("Missing start " + uniqueSuffix);
+            eventLocationInput.fill("");
+            eventStartInput.fill("");
+            eventEndInput.fill("2026-11-30 11:00");
+            page.locator("button:has-text('Create event')").click();
+            assertBodyContains(page, "Event start time is required.");
+
+            eventTitleInput.fill("Missing end " + uniqueSuffix);
+            eventStartInput.fill("2026-11-30 10:00");
+            eventEndInput.fill("");
+            page.locator("button:has-text('Create event')").click();
+            assertBodyContains(page, "Event end time is required.");
+
+            enterEvent(page, "Equal times " + uniqueSuffix, null, "2026-12-01 10:00", "2026-12-01 10:00", false);
+            assertBodyContains(page, "Event end time must be after the start time.");
+
+            page.locator("input[id$='eventTitle']").fill("Clock gap " + uniqueSuffix);
+            setRawInputValue(page.locator("input[id$='eventStart_input']"), "2026-03-29 02:30");
+            setRawInputValue(page.locator("input[id$='eventEnd_input']"), "2026-03-29 04:00");
+            page.locator("button:has-text('Create event')").click();
+            assertBodyContains(page, "The selected time does not exist in the calendar time zone because of a clock change.");
+            page.locator("input[id$='eventTitle']").fill("Clock overlap " + uniqueSuffix);
+            setRawInputValue(page.locator("input[id$='eventStart_input']"), "2026-10-25 02:30");
+            setRawInputValue(page.locator("input[id$='eventEnd_input']"), "2026-10-25 04:00");
+            page.locator("button:has-text('Create event')").click();
+            assertBodyContains(page, "The selected time occurs twice in the calendar time zone because of a clock change.");
+
+            enterEvent(page, eventTitle, "Boundary location", "2026-12-02 10:00", "2026-12-02 11:00", false);
+            Locator eventRow = page.locator("article", new Page.LocatorOptions().setHasText(eventTitle));
+            eventRow.locator("button:has-text('Edit')").click();
+            assertThat(page.locator("button:has-text('Save changes')")).isVisible();
+            setRawInputValue(eventStartInput, "2026-12-02 12:00");
+            setRawInputValue(eventEndInput, "2026-12-02 12:00");
+            assertEquals("2026-12-02 12:00", eventStartInput.inputValue());
+            assertEquals("2026-12-02 12:00", eventEndInput.inputValue());
+            page.locator("button:has-text('Save changes')").click();
+            assertBodyContains(page, "Event end time must be after the start time.");
+            page.locator("button:has-text('Cancel edit')").click();
+            assertThat(page.locator("button:has-text('Create event')")).isVisible();
+            assertEquals("", page.locator("input[id$='eventTitle']").inputValue());
+            page.reload();
+            assertBodyContains(page, eventTitle);
+            assertThat(page.locator("article", new Page.LocatorOptions().setHasText(eventTitle)))
+                    .containsText("Boundary location");
+
+            for (String routePath : List.of("/app/calendar", "/app/calendar-settings", "/app/calendar-members")) {
+                page.navigate(route(routePath));
+                assertBodyContains(page, "Calendar not found");
+                page.navigate(route(routePath + "?id=999999999"));
+                assertBodyContains(page, "Calendar not found");
+                page.navigate(route(routePath + "?id=not-a-number"));
+                assertFalse(page.locator("body").innerText().contains("Exception thrown"));
+            }
+            page.navigate(route("/app/calendar?id=" + calendarId));
+            assertBodyContains(page, eventTitle);
+        }
+    }
+
+    @Test
+    void concurrentSessionsRejectStaleEventAndCalendarUpdatesWithoutLostChanges() throws SQLException {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "concurrency-owner-" + uniqueSuffix;
+        String calendarName = "Concurrent calendar " + uniqueSuffix;
+        String eventTitle = "Concurrent event " + uniqueSuffix;
+        String deletionEventTitle = "Concurrent deletion " + uniqueSuffix;
+        seedUser(ownerUsername);
+        String calendarId;
+
+        try (BrowserContext setupContext = browser.newContext()) {
+            Page setupPage = setupContext.newPage();
+            signIn(setupPage, ownerUsername, TEST_PASSWORD);
+            createCalendar(setupPage, calendarName);
+            openCalendar(setupPage, calendarName);
+            calendarId = requiredQueryParameter(setupPage.url(), "id");
+            enterEvent(setupPage, eventTitle, null, "2026-12-10 10:00", "2026-12-10 11:00", false);
+            assertBodyContains(setupPage, eventTitle);
+            enterEvent(setupPage, deletionEventTitle, null, "2026-12-11 10:00", "2026-12-11 11:00", false);
+            assertBodyContains(setupPage, deletionEventTitle);
+        }
+
+        try (BrowserContext firstContext = browser.newContext();
+                BrowserContext secondContext = browser.newContext();
+                BrowserContext staleDeleteContext = browser.newContext()) {
+            Page firstPage = firstContext.newPage();
+            Page secondPage = secondContext.newPage();
+            Page staleDeletePage = staleDeleteContext.newPage();
+            signIn(firstPage, ownerUsername, TEST_PASSWORD);
+            signIn(secondPage, ownerUsername, TEST_PASSWORD);
+            signIn(staleDeletePage, ownerUsername, TEST_PASSWORD);
+            firstPage.navigate(route("/app/calendar?id=" + calendarId));
+            secondPage.navigate(route("/app/calendar?id=" + calendarId));
+            staleDeletePage.navigate(route("/app/calendar?id=" + calendarId));
+            firstPage.locator("article", new Page.LocatorOptions().setHasText(eventTitle))
+                    .locator("button:has-text('Edit')")
+                    .click();
+            assertThat(firstPage.locator("button:has-text('Save changes')")).isVisible();
+            secondPage.locator("article", new Page.LocatorOptions().setHasText(eventTitle))
+                    .locator("button:has-text('Edit')")
+                    .click();
+            assertThat(secondPage.locator("button:has-text('Save changes')")).isVisible();
+
+            firstPage.locator("input[id$='eventTitle']").fill(eventTitle + " first");
+            assertEquals(eventTitle + " first", firstPage.locator("input[id$='eventTitle']").inputValue());
+            firstPage.locator("button:has-text('Save changes')").click();
+            assertBodyContains(firstPage, eventTitle + " first");
+            secondPage.locator("input[id$='eventTitle']").fill(eventTitle + " second");
+            assertEquals(eventTitle + " second", secondPage.locator("input[id$='eventTitle']").inputValue());
+            secondPage.locator("button:has-text('Save changes')").click();
+            assertBodyContains(secondPage, "This event changed after you opened it. Reload the page and try again.");
+            secondPage.reload();
+            assertBodyContains(secondPage, eventTitle + " first");
+            assertFalse(secondPage.locator("body").innerText().contains(eventTitle + " second"));
+
+            Locator deletionEventRow = firstPage.locator(
+                    "article", new Page.LocatorOptions().setHasText(deletionEventTitle));
+            deletionEventRow.locator("button:has-text('Edit')").click();
+            assertThat(firstPage.locator("button:has-text('Save changes')")).isVisible();
+            firstPage.locator("input[id$='eventTitle']").fill(deletionEventTitle + " updated");
+            firstPage.locator("button:has-text('Save changes')").click();
+            assertBodyContains(firstPage, deletionEventTitle + " updated");
+
+            Locator staleDeletionEventRow = staleDeletePage.locator(
+                    "article", new Page.LocatorOptions().setHasText(deletionEventTitle));
+            staleDeletionEventRow.locator("button:has-text('Delete')").click();
+            staleDeletePage.locator("button:has-text('Yes')").click();
+            assertBodyContains(
+                    staleDeletePage,
+                    "This event changed after you opened it. Reload the page and try again.");
+            staleDeletePage.reload();
+            assertBodyContains(staleDeletePage, deletionEventTitle + " updated");
+
+            firstPage.navigate(route("/app/calendar-settings?id=" + calendarId));
+            secondPage.navigate(route("/app/calendar-settings?id=" + calendarId));
+            firstPage.locator("textarea[id$='calendarDescription']").fill("First settings update " + uniqueSuffix);
+            firstPage.locator("button:has-text('Save settings')").click();
+            assertBodyContains(firstPage, "Calendar settings saved.");
+            secondPage.locator("textarea[id$='calendarDescription']").fill("Second settings update " + uniqueSuffix);
+            secondPage.locator("button:has-text('Save settings')").click();
+            assertBodyContains(secondPage, "This calendar changed after you opened it. Reload the page and try again.");
+            secondPage.reload();
+            assertBodyContains(secondPage, "First settings update " + uniqueSuffix);
+            assertFalse(secondPage.locator("body").innerText().contains("Second settings update " + uniqueSuffix));
+        }
+    }
+
+    @Test
+    void semanticFocusReducedMotionAndResponsiveLayoutsRemainAccessible() throws SQLException {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "layout-owner-" + uniqueSuffix;
+        String longCalendarName = "Calendar-" + "x".repeat(140) + uniqueSuffix;
+        String longDisplayName = "Member-" + "m".repeat(145) + uniqueSuffix;
+        String longEventTitle = "Event-" + "t".repeat(180) + uniqueSuffix;
+        String longEventLocation = "Location-" + "l".repeat(180) + uniqueSuffix;
+        String longEventDescription = "Description-" + "d".repeat(320) + uniqueSuffix;
+        seedUser(ownerUsername, longDisplayName, true);
+        String publicCalendarLink;
+        String calendarId;
+
+        try (BrowserContext setupContext = browser.newContext()) {
+            Page setupPage = setupContext.newPage();
+            signIn(setupPage, ownerUsername, TEST_PASSWORD);
+            createCalendar(setupPage, longCalendarName);
+            openCalendar(setupPage, longCalendarName);
+            calendarId = requiredQueryParameter(setupPage.url(), "id");
+            enterEventWithDescription(
+                    setupPage,
+                    longEventTitle,
+                    longEventDescription,
+                    longEventLocation,
+                    "2026-12-20 10:00",
+                    "2026-12-20 11:00");
+            createRegistrationInvitation(setupPage);
+            createEditorInvitation(setupPage, longCalendarName);
+            setupPage.navigate(route("/app/calendar?id=" + calendarId));
+            Locator longEventRow = setupPage.locator("article", new Page.LocatorOptions().setHasText(longEventTitle));
+            longEventRow.locator("button:has-text('Delete')").click();
+            assertVisibleFocus(setupPage.locator("button:has-text('No')"));
+            setupPage.keyboard().press("Escape");
+            assertThat(setupPage.locator("button:has-text('Yes')")).isHidden();
+            assertBodyContains(setupPage, longEventTitle);
+            setupPage.locator("a:has-text('Settings')").click();
+            Locator publicAccessCheckbox = setupPage.getByLabel("Enable public read-only access");
+            publicAccessCheckbox.focus();
+            assertVisibleOutline(setupPage.locator(".ui-chkbox-box"));
+            publicCalendarLink = setupPage.getByLabel("Public calendar link").inputValue();
+        }
+
+        try (BrowserContext semanticContext = browser.newContext()) {
+            List<String> browserMessages = new ArrayList<>();
+            Page page = newPage(semanticContext, browserMessages);
+            page.navigate(route("/"));
+            assertEquals("en", page.locator("html").getAttribute("lang"));
+            assertEquals(1, page.locator("h1").count());
+            assertEquals("H1", page.locator("h1, h2, h3").first().evaluate("element => element.tagName"));
+            assertEquals(0, page.locator(".calendar-preview table").count());
+            assertBodyContains(page, "Create an account to start planning.");
+            Locator skipLink = page.locator(".skip-link");
+            page.keyboard().press("Tab");
+            assertEquals(true, skipLink.evaluate("element => document.activeElement === element"));
+            assertThat(skipLink).isVisible();
+            page.keyboard().press("Enter");
+            assertEquals("main-content", page.evaluate("document.activeElement.id"));
+
+            page.navigate(route("/login"));
+            Locator usernameInput = page.locator("input[id$='username']");
+            Locator passwordInput = page.locator("input[id$='password']");
+            Locator signInButton = page.locator("button:has-text('Sign in')");
+            pressTabUntilFocused(page, usernameInput, 10);
+            page.keyboard().press("Tab");
+            assertEquals(true, passwordInput.evaluate("element => document.activeElement === element"));
+            page.keyboard().press("Tab");
+            assertEquals(true, signInButton.evaluate("element => document.activeElement === element"));
+            assertVisibleOutline(signInButton);
+            assertEquals(1, page.locator("h1").count());
+            assertEquals("Sign in", page.locator("h1").textContent().trim());
+            page.navigate(route("/register"));
+            assertEquals(1, page.locator("h1").count());
+            assertEquals("Create your calendar", page.locator("h1").textContent().trim());
+            page.navigate(route("/login-error"));
+            assertEquals(1, page.locator("h1").count());
+            assertEquals("Sign-in error", page.locator("h1").textContent().trim());
+            assertNoBrowserMessages(browserMessages);
+        }
+
+        for (int viewportWidth : RESPONSIVE_WIDTHS) {
+            List<String> browserMessages = new ArrayList<>();
+            Browser.NewContextOptions options = new Browser.NewContextOptions().setViewportSize(viewportWidth, 900);
+            try (BrowserContext browserContext = browser.newContext(options)) {
+                Page page = newPage(browserContext, browserMessages);
+                page.navigate(publicCalendarLink);
+                assertEquals("en", page.locator("html").getAttribute("lang"));
+                assertBodyContains(page, longCalendarName);
+                assertBodyContains(page, longEventTitle);
+                assertBodyContains(page, longEventLocation);
+                assertBodyContains(page, longEventDescription);
+                assertFalse(hasHorizontalOverflow(page), "Public page overflowed at " + viewportWidth + " pixels.");
+                assertHeaderPosition(page, viewportWidth);
+
+                signIn(page, ownerUsername, TEST_PASSWORD);
+                assertBodyContains(page, longCalendarName);
+                assertFalse(hasHorizontalOverflow(page), "Authenticated page overflowed at " + viewportWidth + " pixels.");
+                assertHeaderPosition(page, viewportWidth);
+                assertResponsiveTableRegion(page, "Calendars table", viewportWidth);
+
+                page.navigate(route("/app/calendar?id=" + calendarId));
+                assertBodyContains(page, longEventTitle);
+                assertBodyContains(page, longEventLocation);
+                assertBodyContains(page, longEventDescription);
+                assertFalse(hasHorizontalOverflow(page), "Calendar page overflowed at " + viewportWidth + " pixels.");
+
+                page.navigate(route("/app/invitations"));
+                assertResponsiveTableRegion(page, "Invitations table", viewportWidth);
+                assertFalse(hasHorizontalOverflow(page), "Invitations page overflowed at " + viewportWidth + " pixels.");
+
+                page.navigate(route("/app/calendar-members?id=" + calendarId));
+                assertBodyContains(page, longDisplayName);
+                assertResponsiveTableRegion(page, "Calendar members table", viewportWidth);
+                assertFalse(hasHorizontalOverflow(page), "Members page overflowed at " + viewportWidth + " pixels.");
+                assertNoBrowserMessages(browserMessages);
+            }
+        }
+
+        try (BrowserContext reducedMotionContext = browser.newContext(
+                new Browser.NewContextOptions().setReducedMotion(ReducedMotion.REDUCE))) {
+            Page reducedMotionPage = reducedMotionContext.newPage();
+            reducedMotionPage.navigate(route("/"));
+            assertEquals(true, reducedMotionPage.evaluate("matchMedia('(prefers-reduced-motion: reduce)').matches"));
+            assertEquals(
+                    true,
+                    reducedMotionPage.locator(".skip-link").evaluate(
+                            "element => getComputedStyle(element).animationName === 'none' "
+                                    + "&& getComputedStyle(element).transitionDuration === '0s'"));
+        }
+    }
+
+    @Test
+    void invalidPublicCalendarLinkReturnsGenericNoindexNotFoundPage() {
+        List<String> browserMessages = new ArrayList<>();
+        try (BrowserContext browserContext = browser.newContext()) {
+            Page page = newPage(browserContext, browserMessages);
+            com.microsoft.playwright.Response response = page.navigate(route("/calendar/not-a-valid-calendar-token"));
+            assertEquals(404, response.status());
+            assertEquals("Calendar not found - Shared calendar", page.title());
+            assertEquals("Calendar not found", page.locator("h1").textContent().trim());
+            assertEquals("noindex, nofollow", page.locator("meta[name='robots']").getAttribute("content"));
+            assertBodyContains(page, "invalid or no longer available");
+            assertFalse(hasHorizontalOverflow(page));
+            assertOnlyExpectedNotFoundNavigationMessage(browserMessages);
+        }
+    }
+
+    private String createRegistrationInvitation(Page page) {
+        page.navigate(route("/app/invitations"));
+        page.locator("button:has-text('Generate registration link')").click();
+        Locator generatedInvitationLink = page.locator("input[id$='generatedInvitationLink']");
+        assertThat(generatedInvitationLink).isVisible();
+        String invitationLink = generatedInvitationLink.inputValue();
+        assertTrue(invitationLink.contains("/register?token="));
+        return invitationLink;
+    }
+
+    private Locator invitationRow(Page page, String invitationLink) {
+        Locator invitationLinkInput = page.locator("input[value=\"" + invitationLink + "\"]");
+        return page.locator("tr").filter(new Locator.FilterOptions().setHas(invitationLinkInput));
+    }
+
+    private String createEditorInvitation(Page page, String calendarName) {
+        page.navigate(route("/app/invitations"));
+        Locator calendarSelect = page.locator("select[id$='calendar']");
+        assertVisibleFocus(calendarSelect);
+        String calendarOptionValue = page.locator(
+                        "select[id$='calendar'] option",
+                        new Page.LocatorOptions().setHasText(calendarName))
+                .getAttribute("value");
+        calendarSelect.selectOption(calendarOptionValue);
+        page.locator("button:has-text('Generate editor link')").click();
+        String invitationLink = page.locator("input[id$='generatedInvitationLink']").inputValue();
+        assertTrue(invitationLink.contains("/register?token="));
+        return invitationLink;
+    }
+
+    private void registerNewUser(
+            Page page,
+            String invitationLink,
+            String username,
+            String displayName,
+            String calendarName,
+            String password) {
+        page.navigate(invitationLink);
+        fillRegistrationForm(page, username, displayName, calendarName, password);
+        page.locator("button:has-text('Register')").click();
+        page.waitForURL("**/app/calendars");
+    }
+
+    private void fillRegistrationForm(
+            Page page,
+            String username,
+            String displayName,
+            String calendarName,
+            String password) {
+        page.locator("input[id$='username']").fill(username);
+        page.locator("input[id$='displayName']").fill(displayName);
+        page.locator("input[id$='calendarName']").fill(calendarName);
+        page.locator("input[id$='password']").fill(password);
+    }
+
+    private void signIn(Page page, String username, String password) {
+        page.navigate(route("/login"));
+        page.locator("input[id$='username']").fill(username);
+        page.locator("input[id$='password']").fill(password);
+        page.locator("button:has-text('Sign in')").click();
+        page.waitForURL("**/app/calendars");
+    }
+
+    private void signOut(Page page) {
+        page.locator("input[value='Sign out']").click();
+    }
+
+    private void createCalendar(Page page, String calendarName) {
+        page.locator("input[id$='calendarName']").fill(calendarName);
+        page.locator("button:has-text('Create calendar')").click();
+        assertBodyContains(page, calendarName);
+    }
+
+    private void openCalendar(Page page, String calendarName) {
+        if (!URI.create(page.url()).getPath().equals("/app/calendars")) {
+            page.navigate(route("/app/calendars"));
+        }
+        page.locator("a", new Page.LocatorOptions().setHasText(calendarName)).first().click();
+        page.waitForURL("**/app/calendar?id=*");
+    }
+
+    private void enterEvent(
+            Page page,
+            String title,
+            String location,
+            String startTime,
+            String endTime,
+            boolean allDay) {
+        page.locator("input[id$='eventTitle']").fill(title);
+        if (location != null) {
+            page.locator("input[id$='eventLocation']").fill(location);
+        }
+        page.locator("input[id$='eventStart_input']").fill(startTime);
+        page.locator("input[id$='eventEnd_input']").fill(endTime);
+        if (allDay) {
+            Locator allDayCheckbox = page.getByLabel("All-day event");
+            page.locator(".checkbox-field .ui-chkbox-box").click();
+            assertThat(allDayCheckbox).isChecked();
+        }
+        page.locator("button:has-text('Create event')").click();
+    }
+
+    private void enterEventWithDescription(
+            Page page,
+            String title,
+            String description,
+            String location,
+            String startTime,
+            String endTime) {
+        page.locator("input[id$='eventTitle']").fill(title);
+        page.locator("input[id$='eventLocation']").fill(location);
+        page.locator("input[id$='eventStart_input']").fill(startTime);
+        page.locator("input[id$='eventEnd_input']").fill(endTime);
+        page.locator("textarea[id$='eventDescription']").fill(description);
+        page.locator("button:has-text('Create event')").click();
+        assertBodyContains(page, title);
+    }
+
+    private void assertRegistrationRejected(
+            Page page,
+            String invitationLink,
+            String username,
+            String password,
+            String expectedMessage) {
+        page.navigate(invitationLink);
+        fillRegistrationForm(page, username, "Rejected user", "Rejected calendar", password);
+        page.locator("button:has-text('Register')").click();
+        assertBodyContains(page, expectedMessage);
+    }
+
+    private void setPublicAccess(Page page, boolean enabled) {
+        Locator publicAccessCheckbox = page.getByLabel("Enable public read-only access");
+        if (publicAccessCheckbox.isChecked() != enabled) {
+            page.locator(".checkbox-field .ui-chkbox-box").click();
+        }
+        page.locator("button:has-text('Save settings')").click();
+        assertBodyContains(page, enabled ? "Public access enabled" : "Public access disabled");
+    }
+
+    private void setRawInputValue(Locator input, String value) {
+        input.evaluate(
+                "(element, rawValue) => { element.removeAttribute('maxlength'); element.value = rawValue; }",
+                value);
+    }
+
+    private void clickWithoutChangingFocus(Locator button) {
+        button.evaluate("element => element.click()");
+    }
+
+    private void scheduleClickAt(Locator button, long epochMilliseconds) {
+        button.evaluate(
+                "(element, clickTime) => window.setTimeout("
+                        + "() => element.click(), Math.max(0, Number(clickTime) - Date.now()))",
+                Long.toString(epochMilliseconds));
+    }
+
+    private void waitForInvitationAcceptanceResult(Page page) {
+        page.waitForFunction(
+                "() => location.pathname === '/app/calendar' "
+                        + "|| document.body.innerText.includes('Invitation is already accepted.')");
+    }
+
+    private void waitForMembershipChangeResult(Page page) {
+        page.waitForFunction(
+                "() => document.body.innerText.includes('Member role saved.') "
+                        + "|| document.body.innerText.includes('Admin access is required.')");
+    }
+
+    private void assertVisibleFocus(Locator locator) {
+        locator.focus();
+        assertVisibleOutline(locator);
+    }
+
+    private void pressTabUntilFocused(Page page, Locator target, int maximumTabPresses) {
+        for (int tabPress = 0; tabPress < maximumTabPresses; tabPress++) {
+            page.keyboard().press("Tab");
+            if (Boolean.TRUE.equals(target.evaluate("element => document.activeElement === element"))) {
+                return;
+            }
+        }
+        fail("The target control was not reachable within " + maximumTabPresses + " Tab presses.");
+    }
+
+    private void assertVisibleOutline(Locator locator) {
+        assertEquals(
+                true,
+                locator.evaluate(
+                        "element => { const style = getComputedStyle(element); "
+                                + "return style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0; }"),
+                "The focused control should have a visible outline.");
+    }
+
+    private void assertHeaderPosition(Page page, int viewportWidth) {
+        String position = (String) page.locator(".app-header").evaluate("element => getComputedStyle(element).position");
+        assertEquals(viewportWidth <= 820 ? "static" : "sticky", position);
+    }
+
+    private void assertResponsiveTableRegion(Page page, String accessibleLabel, int viewportWidth) {
+        Locator tableRegion = page.locator(".table-scroll-region[aria-label='" + accessibleLabel + "']");
+        tableRegion.focus();
+        assertEquals(true, tableRegion.evaluate("element => document.activeElement === element"));
+        assertVisibleOutline(tableRegion);
+        if (viewportWidth <= 390) {
+            assertEquals(
+                    true,
+                    tableRegion.evaluate("element => element.scrollWidth > element.clientWidth"),
+                    accessibleLabel + " should scroll horizontally within its labeled region on small screens.");
+        }
+    }
+
+    private Page newPage(BrowserContext browserContext, List<String> browserMessages) {
+        Page page = browserContext.newPage();
+        page.onConsoleMessage(message -> {
+            if (message.type().equals("error") || message.type().equals("warning")) {
+                browserMessages.add(message.type() + ": " + message.text());
+            }
+        });
+        return page;
+    }
+
+    private void waitForApplicationHealth() throws InterruptedException {
+        URI healthUri = URI.create(removeTrailingSlashes(applicationBaseUri.toString()) + "/health");
+        HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
+        long deadlineNanos = System.nanoTime() + APPLICATION_READY_TIMEOUT.toNanos();
+        String lastHealthCheckResult = "no response";
+
+        while (System.nanoTime() < deadlineNanos) {
+            HttpRequest request = HttpRequest.newBuilder(healthUri).timeout(Duration.ofSeconds(5)).GET().build();
+            try {
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                String responseBody = response.body().trim();
+                if (response.statusCode() == 200 && responseBody.equals("ok")) {
+                    return;
+                }
+                lastHealthCheckResult = "HTTP " + response.statusCode() + " with body '" + abbreviate(responseBody) + "'";
+            } catch (IOException exception) {
+                lastHealthCheckResult = exception.getClass().getSimpleName() + ": " + exception.getMessage();
+            }
+            Thread.sleep(APPLICATION_READY_POLL_INTERVAL.toMillis());
+        }
+
+        fail("The application did not become healthy at " + healthUri + " within "
+                + APPLICATION_READY_TIMEOUT.toSeconds() + " seconds. Last result: "
+                + lastHealthCheckResult + ". Start the app with 'mise run dev' before running browser tests.");
+    }
+
+    private URI resolveApplicationBaseUri() {
+        return URI.create(removeTrailingSlashes(firstNonBlank(
+                System.getProperty(APPLICATION_BASE_URL_PROPERTY),
+                System.getenv(APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE),
+                DEFAULT_APPLICATION_BASE_URL)));
+    }
+
+    private void seedUser(String username) throws SQLException {
+        seedUser(username, "End-to-end user", true);
+    }
+
+    private void seedUser(String username, String displayName, boolean active) throws SQLException {
+        String jdbcUrl = "jdbc:postgresql://"
+                + firstNonBlank(System.getenv(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE), "localhost")
+                + ":"
+                + firstNonBlank(System.getenv(POSTGRESQL_PORT_ENVIRONMENT_VARIABLE), "5432")
+                + "/"
+                + firstNonBlank(System.getenv(POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE), "calendar");
+
+        try (Connection connection = DriverManager.getConnection(
+                        jdbcUrl,
+                        firstNonBlank(System.getenv(POSTGRESQL_USER_ENVIRONMENT_VARIABLE), "calendar"),
+                        firstNonBlank(System.getenv(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE), "calendar"));
+                PreparedStatement statement = connection.prepareStatement(
+                        "insert into app_user "
+                                + "(username, display_name, password_hash, active, created_at, updated_at) "
+                                + "values (?, ?, ?, ?, now(), now())")) {
+            statement.setString(1, username);
+            statement.setString(2, displayName);
+            statement.setString(3, SEEDED_PASSWORD_HASH_FOR_TEST_PASSWORD);
+            statement.setBoolean(4, active);
+            statement.executeUpdate();
+        }
+    }
+
+    private String insertExpiredInvitation(String creatorUsername) throws SQLException {
+        String invitationToken = "expired-test-" + UUID.randomUUID().toString().replace("-", "");
+        String jdbcUrl = "jdbc:postgresql://"
+                + firstNonBlank(System.getenv(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE), "localhost")
+                + ":"
+                + firstNonBlank(System.getenv(POSTGRESQL_PORT_ENVIRONMENT_VARIABLE), "5432")
+                + "/"
+                + firstNonBlank(System.getenv(POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE), "calendar");
+        try (Connection connection = DriverManager.getConnection(
+                        jdbcUrl,
+                        firstNonBlank(System.getenv(POSTGRESQL_USER_ENVIRONMENT_VARIABLE), "calendar"),
+                        firstNonBlank(System.getenv(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE), "calendar"));
+                PreparedStatement statement = connection.prepareStatement(
+                        "insert into app_invitation "
+                                + "(invite_token, calendar_id, role_name, created_by_user_id, expires_at, created_at) "
+                                + "select ?, null, null, id, now() - interval '1 minute', now() "
+                                + "from app_user where username = ?")) {
+            statement.setString(1, invitationToken);
+            statement.setString(2, creatorUsername);
+            assertEquals(1, statement.executeUpdate(), "Expected one expired invitation to be inserted for test setup.");
+        }
+        return route("/register?token=" + invitationToken);
+    }
+
+    private void setCalendarActive(long calendarId, boolean active) throws SQLException {
+        executeDatabaseUpdate("update calendar set active = ? where id = ?", active, calendarId);
+    }
+
+    private long countActiveAdmins(long calendarId) throws SQLException {
+        String jdbcUrl = "jdbc:postgresql://"
+                + firstNonBlank(System.getenv(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE), "localhost")
+                + ":"
+                + firstNonBlank(System.getenv(POSTGRESQL_PORT_ENVIRONMENT_VARIABLE), "5432")
+                + "/"
+                + firstNonBlank(System.getenv(POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE), "calendar");
+        try (Connection connection = DriverManager.getConnection(
+                        jdbcUrl,
+                        firstNonBlank(System.getenv(POSTGRESQL_USER_ENVIRONMENT_VARIABLE), "calendar"),
+                        firstNonBlank(System.getenv(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE), "calendar"));
+                PreparedStatement statement = connection.prepareStatement(
+                        "select count(*) from calendar_member "
+                                + "where calendar_id = ? and role_name = 'ADMIN' and active = true")) {
+            statement.setLong(1, calendarId);
+            try (java.sql.ResultSet resultSet = statement.executeQuery()) {
+                assertTrue(resultSet.next(), "Expected the active-admin count query to return one row.");
+                return resultSet.getLong(1);
+            }
+        }
+    }
+
+    private void executeDatabaseUpdate(String sql, Object... parameters) throws SQLException {
+        String jdbcUrl = "jdbc:postgresql://"
+                + firstNonBlank(System.getenv(POSTGRESQL_HOST_ENVIRONMENT_VARIABLE), "localhost")
+                + ":"
+                + firstNonBlank(System.getenv(POSTGRESQL_PORT_ENVIRONMENT_VARIABLE), "5432")
+                + "/"
+                + firstNonBlank(System.getenv(POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE), "calendar");
+        try (Connection connection = DriverManager.getConnection(
+                        jdbcUrl,
+                        firstNonBlank(System.getenv(POSTGRESQL_USER_ENVIRONMENT_VARIABLE), "calendar"),
+                        firstNonBlank(System.getenv(POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE), "calendar"));
+                PreparedStatement statement = connection.prepareStatement(sql)) {
+            for (int parameterIndex = 0; parameterIndex < parameters.length; parameterIndex++) {
+                statement.setObject(parameterIndex + 1, parameters[parameterIndex]);
+            }
+            assertEquals(1, statement.executeUpdate(), "Expected one database record to be updated for test setup.");
+        }
+    }
+
+    private BrowserType selectedBrowser(Playwright playwright) {
+        String browserName = firstNonBlank(System.getenv(BROWSER_ENVIRONMENT_VARIABLE), "chromium")
+                .toLowerCase(Locale.ROOT);
+        return switch (browserName) {
+            case "chromium" -> playwright.chromium();
+            case "firefox" -> playwright.firefox();
+            case "webkit" -> playwright.webkit();
+            default -> fail("Unsupported Playwright browser '" + browserName + "'. Use chromium, firefox, or webkit.");
+        };
+    }
+
+    private boolean shouldRunHeadless() {
+        if (Boolean.parseBoolean(firstNonBlank(System.getenv(PLAYWRIGHT_HEADED_ENVIRONMENT_VARIABLE), "false"))) {
+            return false;
+        }
+        return Boolean.parseBoolean(firstNonBlank(System.getenv(PLAYWRIGHT_HEADLESS_ENVIRONMENT_VARIABLE), "true"));
+    }
+
+    private String route(String path) {
+        return removeTrailingSlashes(applicationBaseUri.toString()) + path;
+    }
+
+    private void assertRouteWithId(Page page, String expectedPath, String expectedId) {
+        URI currentUri = URI.create(page.url());
+        assertEquals(expectedPath, currentUri.getPath(), () -> "Unexpected path in browser URL " + page.url() + ".");
+        assertEquals(
+                expectedId,
+                requiredQueryParameter(page.url(), "id"),
+                () -> "Unexpected calendar identifier in browser URL " + page.url() + ".");
+    }
+
+    private String requiredQueryParameter(String url, String parameterName) {
+        String rawQuery = URI.create(url).getRawQuery();
+        if (rawQuery != null) {
+            for (String parameter : rawQuery.split("&")) {
+                String[] nameAndValue = parameter.split("=", 2);
+                if (nameAndValue[0].equals(parameterName) && nameAndValue.length == 2) {
+                    return nameAndValue[1];
+                }
+            }
+        }
+        fail("Expected URL " + url + " to contain query parameter '" + parameterName + "'.");
+        return "";
+    }
+
+    private void assertBodyContains(Page page, String expectedText) {
+        try {
+            assertThat(page.locator("body"))
+                    .containsText(expectedText, new LocatorAssertions.ContainsTextOptions().setTimeout(5_000));
+        } catch (AssertionError assertionError) {
+            String bodyText = page.locator("body").innerText();
+            fail(
+                    "Expected page body to contain '" + expectedText + "' at " + page.url()
+                            + " with title '" + page.title() + "', but body was: " + abbreviate(bodyText),
+                    assertionError);
+        }
+    }
+
+    private void assertNoBrowserMessages(List<String> browserMessages) {
+        assertTrue(
+                browserMessages.isEmpty(),
+                () -> "Expected no browser console errors or warnings, but saw: " + browserMessages);
+    }
+
+    private void assertOnlyExpectedNotFoundNavigationMessage(List<String> browserMessages) {
+        assertTrue(
+                browserMessages.size() <= 1
+                        && browserMessages.stream().allMatch(message -> message.contains("status of 404")),
+                () -> "Expected only the browser's failed-navigation message for the intentional 404, but saw: "
+                        + browserMessages);
+    }
+
+    private void assertOnlyExpectedNotFoundNavigationMessages(List<String> browserMessages) {
+        assertTrue(
+                !browserMessages.isEmpty()
+                        && browserMessages.stream().allMatch(message -> message.contains("status of 404")),
+                () -> "Expected only intentional 404 navigation messages, but saw: " + browserMessages);
+    }
+
+    private boolean hasHorizontalOverflow(Page page) {
+        return Boolean.TRUE.equals(page.evaluate(
+                "() => document.documentElement.scrollWidth > document.documentElement.clientWidth"));
+    }
+
+    private String uniqueSuffix() {
+        return UUID.randomUUID().toString().substring(0, 8);
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value.trim();
+            }
+        }
+        throw new IllegalArgumentException("At least one non-blank value is required.");
+    }
+
+    private String removeTrailingSlashes(String value) {
+        String normalizedValue = value;
+        while (normalizedValue.endsWith("/")) {
+            normalizedValue = normalizedValue.substring(0, normalizedValue.length() - 1);
+        }
+        return normalizedValue;
+    }
+
+    private String abbreviate(String value) {
+        String normalizedValue = value.replaceAll("\\s+", " ").trim();
+        return normalizedValue.length() <= 240 ? normalizedValue : normalizedValue.substring(0, 240) + "...";
+    }
+}

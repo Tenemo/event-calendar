@@ -111,7 +111,10 @@ final class AuthenticationAndRegistrationEndToEndIT extends SharedCalendarEndToE
             assertBodyContains(canonicalCalendarSessionPage, "Create event");
 
             changingPage.locator("a:has-text('Account settings')").click();
-            changingPage.waitForURL("**/app/account-settings");
+            waitForUrlOrFail(
+                    changingPage,
+                    "**/app/account-settings",
+                    "account settings navigation");
             assertEquals("Account settings", changingPage.locator("h1").textContent().trim());
             assertBodyContains(changingPage, "Signed in as " + username);
             assertBodyContains(changingPage, "invalidates your other signed-in sessions");
@@ -150,7 +153,10 @@ final class AuthenticationAndRegistrationEndToEndIT extends SharedCalendarEndToE
 
             fillPasswordChangeForm(changingPage, TEST_PASSWORD, newPassword, newPassword);
             changingPage.locator("button:has-text('Change password')").click();
-            changingPage.waitForURL("**/login?passwordChanged=true");
+            waitForUrlOrFail(
+                    changingPage,
+                    "**/login?passwordChanged=true",
+                    "password change completion");
             assertBodyContains(changingPage, "Your password was changed. Sign in with the new password.");
             assertEquals(1, queryLong("select password_version from app_user where username = ?", username));
             assertEquals(

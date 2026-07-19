@@ -631,10 +631,11 @@ final class CalendarToolTest {
         CalendarToolVerification.validateApplicationRuntimeLogs("");
         CalendarToolVerification.validateApplicationRuntimeLogs(
                 "CWWKS4105I: LTPA configuration is ready.\n"
-                        + "SEVERE: No locations found matching pattern: classpath:db/callback\n"
                         + "CWWKZ0001I: Application started.");
 
         List<String> failureSignatures = List.of(
+                "SEVERE:",
+                "\"loglevel\":\"SEVERE\"",
                 "CWWKS4106E",
                 "CWWKS4118E",
                 "CWWKS4000E",

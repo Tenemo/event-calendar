@@ -112,7 +112,7 @@ final class CrossBrowserSmokeEndToEndIT {
             assertFalse(hasHorizontalOverflow(page), "The calendar page must not overflow horizontally.");
 
             page.locator("input[value='Sign out']").click();
-            page.waitForURL(route("/"));
+            waitForUrlOrFail(page, route("/"), "cross-browser sign-out completion");
             assertThat(page.locator("header nav a:has-text('Sign in')")).isVisible();
         }
 
@@ -165,7 +165,7 @@ final class CrossBrowserSmokeEndToEndIT {
         page.locator("input[id$='password']").fill(TEST_PASSWORD);
         waitForPrimeFacesIdle(page);
         page.locator("button:has-text('Sign in')").click();
-        page.waitForURL("**/app/calendars");
+        waitForUrlOrFail(page, "**/app/calendars", "cross-browser registration completion");
         waitForPrimeFacesIdle(page);
     }
 
@@ -197,6 +197,25 @@ final class CrossBrowserSmokeEndToEndIT {
                 "() => typeof PrimeFaces !== 'undefined' && (!PrimeFaces.ajax "
                         + "|| (PrimeFaces.ajax.Queue.isEmpty() && PrimeFaces.ajax.Queue.xhrs.length === 0)) "
                         + "&& (!document.fonts || document.fonts.status === 'loaded')");
+    }
+
+    private void waitForUrlOrFail(
+            Page page,
+            String expectedUrlPattern,
+            String actionDescription) {
+        try {
+            page.waitForURL(expectedUrlPattern);
+        } catch (RuntimeException exception) {
+            fail("Browser navigation for "
+                    + bearerSecretRedactor.redact(actionDescription)
+                    + " did not reach "
+                    + bearerSecretRedactor.redact(expectedUrlPattern)
+                    + "; the browser remained at "
+                    + redactedDiagnosticUrl(page.url())
+                    + " ("
+                    + exception.getClass().getSimpleName()
+                    + ").");
+        }
     }
 
     private void waitForCanonicalCalendarRoute(Page page) {

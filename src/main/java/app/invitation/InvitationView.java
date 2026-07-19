@@ -78,13 +78,35 @@ public class InvitationView {
         }
     }
 
-    public void revokeInvitation(Long invitationId) {
+    public void revokeInvitation() {
         try {
             ApplicationUser actingUser = currentUser.require();
+            Long invitationId = parseInvitationId(FacesContext.getCurrentInstance()
+                    .getExternalContext()
+                    .getRequestParameterMap()
+                    .get("invitationId"));
             invitationService.revokeInvitation(actingUser, invitationId);
             addMessage(FacesMessage.SEVERITY_INFO, "Invitation revoked.", "The link can no longer be used.");
         } catch (AuthorizationException | NotFoundException | ValidationException exception) {
             addMessage(FacesMessage.SEVERITY_ERROR, "Revoke failed.", exception.getMessage());
+        }
+    }
+
+    static Long parseInvitationId(String submittedInvitationId) {
+        if (submittedInvitationId == null
+                || submittedInvitationId.isBlank()
+                || submittedInvitationId.length() > 19
+                || !submittedInvitationId.chars().allMatch(Character::isDigit)) {
+            throw new ValidationException("Invitation is invalid.");
+        }
+        try {
+            long invitationId = Long.parseLong(submittedInvitationId);
+            if (invitationId < 1) {
+                throw new ValidationException("Invitation is invalid.");
+            }
+            return invitationId;
+        } catch (NumberFormatException exception) {
+            throw new ValidationException("Invitation is invalid.");
         }
     }
 

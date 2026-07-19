@@ -12,6 +12,7 @@ import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import java.net.URI;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -67,7 +68,10 @@ final class MembershipAndInvitationEndToEndIT extends SharedCalendarEndToEndSupp
             String invitationToken = expectedInvitationQuery.substring("token=".length());
 
             signInContinuation.click();
-            page.waitForURL("**/login?token=*");
+            waitForUrlOrFail(
+                    page,
+                    "**/login?token=*",
+                    "invitation sign-in continuation");
             submitSignInAndWaitForUrl(page, ownerUsername, TEST_PASSWORD, "**/register?token=*");
             assertTrue(
                     expectedInvitationQuery.equals(URI.create(page.url()).getRawQuery()),
@@ -706,7 +710,7 @@ final class MembershipAndInvitationEndToEndIT extends SharedCalendarEndToEndSupp
     }
 
     @Test
-    void concurrentDistinctInvitationsForOneUserCreateOnlyOneMembershipWithoutFailure() throws SQLException {
+    void concurrentDistinctInvitationsForOneUserCreateOnlyOneMembershipWithoutFailure() throws Exception {
         String uniqueSuffix = uniqueSuffix();
         String ownerUsername = "distinct-invite-owner-" + uniqueSuffix;
         String candidateUsername = "distinct-invite-candidate-" + uniqueSuffix;
@@ -715,11 +719,13 @@ final class MembershipAndInvitationEndToEndIT extends SharedCalendarEndToEndSupp
         seedUser(candidateUsername);
         String firstInvitationLink;
         String secondInvitationLink;
+        long calendarId;
 
         try (BrowserContext ownerContext = browser.newContext()) {
             Page ownerPage = ownerContext.newPage();
             signIn(ownerPage, ownerUsername, TEST_PASSWORD);
             createCalendar(ownerPage, calendarName);
+            calendarId = findCalendarId(calendarName);
             firstInvitationLink = createEditorInvitation(ownerPage, calendarName);
             secondInvitationLink = createEditorInvitation(ownerPage, calendarName);
         }
@@ -736,9 +742,15 @@ final class MembershipAndInvitationEndToEndIT extends SharedCalendarEndToEndSupp
             assertThat(firstAcceptButton).isVisible();
             assertThat(secondAcceptButton).isVisible();
 
-            long scheduledAcceptanceTime = System.currentTimeMillis() + 750;
-            scheduleClickAt(firstAcceptButton, scheduledAcceptanceTime);
-            scheduleClickAt(secondAcceptButton, scheduledAcceptanceTime);
+            try (Connection blockingConnection = lockCalendarRowForConcurrentRequests(calendarId)) {
+                clickWithoutChangingFocus(firstAcceptButton);
+                clickWithoutChangingFocus(secondAcceptButton);
+                waitForBlockedDatabaseRequests(
+                        blockingConnection,
+                        2,
+                        "distinct invitation acceptance");
+                blockingConnection.commit();
+            }
             waitForInvitationAcceptanceResult(firstPage);
             waitForInvitationAcceptanceResult(secondPage);
 
@@ -748,12 +760,20 @@ final class MembershipAndInvitationEndToEndIT extends SharedCalendarEndToEndSupp
             assertBodyContains(secondPage, calendarName);
             assertBodyContains(firstPage, "Editor");
             assertBodyContains(secondPage, "Editor");
+            assertEquals(
+                    1L,
+                    queryLong(
+                            "select count(*) from calendar_member "
+                                    + "where calendar_id = ? and user_id = "
+                                    + "(select id from app_user where username = ?)",
+                            calendarId,
+                            candidateUsername));
         }
     }
 
     @Test
     void concurrentInvitationAcceptanceAllowsExactlyOneUserAndRemovedEditorsLoseMutationAccess()
-            throws SQLException {
+            throws Exception {
         String uniqueSuffix = uniqueSuffix();
         String ownerUsername = "acceptance-owner-" + uniqueSuffix;
         String firstCandidateUsername = "acceptance-first-" + uniqueSuffix;
@@ -789,9 +809,15 @@ final class MembershipAndInvitationEndToEndIT extends SharedCalendarEndToEndSupp
             assertThat(firstAcceptButton).isVisible();
             assertThat(secondAcceptButton).isVisible();
 
-            long scheduledAcceptanceTime = System.currentTimeMillis() + 750;
-            scheduleClickAt(firstAcceptButton, scheduledAcceptanceTime);
-            scheduleClickAt(secondAcceptButton, scheduledAcceptanceTime);
+            try (Connection blockingConnection = lockInvitationRowForConcurrentRequests(invitationLink)) {
+                clickWithoutChangingFocus(firstAcceptButton);
+                clickWithoutChangingFocus(secondAcceptButton);
+                waitForBlockedDatabaseRequests(
+                        blockingConnection,
+                        2,
+                        "single-use invitation acceptance");
+                blockingConnection.commit();
+            }
             waitForInvitationAcceptanceResult(firstPage);
             waitForInvitationAcceptanceResult(secondPage);
 
@@ -835,7 +861,7 @@ final class MembershipAndInvitationEndToEndIT extends SharedCalendarEndToEndSupp
     }
 
     @Test
-    void concurrentAdministratorsCannotDemoteEachOtherAndLeaveTheCalendarWithoutAnAdmin() throws SQLException {
+    void concurrentAdministratorsCannotDemoteEachOtherAndLeaveTheCalendarWithoutAnAdmin() throws Exception {
         String uniqueSuffix = uniqueSuffix();
         String ownerUsername = "admin-race-owner-" + uniqueSuffix;
         String secondAdminUsername = "admin-race-second-" + uniqueSuffix;
@@ -883,11 +909,18 @@ final class MembershipAndInvitationEndToEndIT extends SharedCalendarEndToEndSupp
             ownerTargetingSecondAdmin.locator("select").selectOption("EDITOR");
             secondAdminTargetingOwner.locator("select").selectOption("EDITOR");
 
-            long scheduledRoleChangeTime = System.currentTimeMillis() + 750;
-            scheduleClickAt(
-                    ownerTargetingSecondAdmin.locator("button:has-text('Save role')"), scheduledRoleChangeTime);
-            scheduleClickAt(
-                    secondAdminTargetingOwner.locator("button:has-text('Save role')"), scheduledRoleChangeTime);
+            try (Connection blockingConnection =
+                    lockCalendarRowForConcurrentRequests(Long.parseLong(calendarId))) {
+                clickWithoutChangingFocus(
+                        ownerTargetingSecondAdmin.locator("button:has-text('Save role')"));
+                clickWithoutChangingFocus(
+                        secondAdminTargetingOwner.locator("button:has-text('Save role')"));
+                waitForBlockedDatabaseRequests(
+                        blockingConnection,
+                        2,
+                        "concurrent administrator demotion");
+                blockingConnection.commit();
+            }
             waitForMembershipChangeResult(ownerPage);
             waitForMembershipChangeResult(secondAdminPage);
 

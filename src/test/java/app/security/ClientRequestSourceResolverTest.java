@@ -85,8 +85,33 @@ final class ClientRequestSourceResolverTest {
                 () -> assertEquals(
                         "198.51.100.7",
                         railwayResolver.resolve(request("100.64.2.3", "198.051.100.007"))),
+                () -> assertEquals(
+                        "2001:db8:1234:5678:0:0:0:0/64",
+                        directResolver.resolve(request("2001:0db8:1234:5678:1:2:3:4"))),
                 () -> assertEquals("<unknown-source>", directResolver.resolve(request("proxy.internal"))),
                 () -> assertEquals("<unknown-source>", directResolver.resolve(null)));
+    }
+
+    @Test
+    void bucketsInternetProtocolVersionSixClientsByNetworkPrefix() {
+        ClientRequestSourceResolver resolver = new ClientRequestSourceResolver("production-environment-id");
+
+        assertAll(
+                () -> assertEquals(
+                        "2001:db8:abcd:42:0:0:0:0/64",
+                        resolver.resolve(request(
+                                "100.64.9.4",
+                                "2001:db8:abcd:42:1111:2222:3333:4444"))),
+                () -> assertEquals(
+                        "2001:db8:abcd:42:0:0:0:0/64",
+                        resolver.resolve(request(
+                                "100.64.9.4",
+                                "2001:db8:abcd:42:ffff:eeee:dddd:cccc"))),
+                () -> assertEquals(
+                        "2001:db8:abcd:43:0:0:0:0/64",
+                        resolver.resolve(request(
+                                "100.64.9.4",
+                                "2001:db8:abcd:43::1"))));
     }
 
     private static HttpServletRequest request(String remoteAddress, String... realIpHeaders) {

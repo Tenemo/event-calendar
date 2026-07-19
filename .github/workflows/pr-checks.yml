@@ -216,6 +216,7 @@ jobs:
 
       - name: Export exact production image
         run: |
+          set -euo pipefail
           mkdir -p .build/production-image
           docker image inspect --format '{{.Id}}' "$PRODUCTION_IMAGE_NAME" > .build/production-image/image-id.txt
           docker image save "$PRODUCTION_IMAGE_NAME" | gzip --best > .build/production-image/shared-calendar-image.tar.gz
@@ -522,6 +523,7 @@ jobs:
 
       - name: Scan production image
         run: |
+          set -euo pipefail
           mkdir -p .build/ci-diagnostics
           mise run image-scan 2>&1 | tee .build/ci-diagnostics/image-scan.log
 
@@ -568,6 +570,7 @@ jobs:
 
       - name: Verify backup and restore
         run: |
+          set -euo pipefail
           mkdir -p .build/ci-diagnostics
           mise run verify-backup-restore 2>&1 | tee .build/ci-diagnostics/backup-restore.log
 

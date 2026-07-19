@@ -1,0 +1,43 @@
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:f="jakarta.faces.core"
+                xmlns:h="jakarta.faces.html"
+                xmlns:ui="jakarta.faces.facelets"
+                xmlns:p="primefaces"
+                template="/WEB-INF/templates/main.xhtml">
+    <f:metadata>
+        <f:viewParam name="invite" value="#{loginView.invitationToken}"/>
+    </f:metadata>
+    <ui:define name="title">Sign in - Shared calendar</ui:define>
+
+    <ui:define name="content">
+        <section class="narrow-section">
+            <h1>Sign in</h1>
+            <p:panel styleClass="surface-panel form-panel">
+                <h:form styleClass="stacked-form">
+                    <h:inputHidden value="#{loginView.invitationToken}"/>
+                    <p:outputLabel for="username" value="Username"/>
+                    <p:inputText id="username"
+                                 value="#{loginView.username}"
+                                 autocomplete="username"
+                                 maxlength="80"
+                                 required="true"
+                                 requiredMessage="Username is required."/>
+
+                    <p:outputLabel for="password" value="Password"/>
+                    <p:password id="password"
+                                value="#{loginView.password}"
+                                autocomplete="current-password"
+                                feedback="false"
+                                maxlength="#{passwordService.maximumPasswordLength}"
+                                required="true"
+                                requiredMessage="Password is required."/>
+
+                    <p:commandButton value="Sign in" action="#{loginView.login}" ajax="false"/>
+                </h:form>
+                <p class="form-footer">
+                    Registration requires an invitation link.
+                </p>
+            </p:panel>
+        </section>
+    </ui:define>
+</ui:composition>

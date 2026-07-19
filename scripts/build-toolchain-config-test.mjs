@@ -2,7 +2,21 @@ import { readFileSync } from "node:fs";
 
 const wrapperProperties = readFileSync(".mvn/wrapper/maven-wrapper.properties", "utf8");
 const dockerfile = readFileSync("Dockerfile", "utf8");
+const miseConfiguration = readFileSync(".mise.toml", "utf8");
 const pom = readFileSync("pom.xml", "utf8");
+
+const miseJavaMatch = requiredMatch(
+    miseConfiguration,
+    /^java = "temurin-(\d+\.\d+\.\d+)\+(\d+)\.0\.LTS"$/m,
+    "Pinned mise Java toolchain",
+);
+const dockerJavaMatch = requiredMatch(
+    dockerfile,
+    /^FROM eclipse-temurin:(\d+\.\d+\.\d+)_(\d+)-jdk@sha256:[0-9a-f]{64} AS build$/m,
+    "Pinned Docker Java build stage",
+);
+requireEqual(dockerJavaMatch[1], miseJavaMatch[1], "Docker and mise Java feature version");
+requireEqual(dockerJavaMatch[2], miseJavaMatch[2], "Docker and mise Java build number");
 
 const distributionUrl = requiredProperty(wrapperProperties, "distributionUrl");
 const wrapperVersion = requiredMatch(
@@ -13,7 +27,11 @@ const wrapperVersion = requiredMatch(
 
 const mavenImageMatch = requiredMatch(
     dockerfile,
-    /^FROM maven:(\d+\.\d+\.\d+)-eclipse-temurin-25@sha256:[0-9a-f]{64} AS maven-toolchain$/m,
+    new RegExp(
+        `^FROM maven:(\\d+\\.\\d+\\.\\d+)-eclipse-temurin-${miseJavaMatch[1].split(".")[0]}`
+            + "@sha256:[0-9a-f]{64} AS maven-toolchain$",
+        "m",
+    ),
     "Pinned Maven Docker stage",
 );
 requireEqual(mavenImageMatch[1], wrapperVersion, "Maven Docker image version");
@@ -70,7 +88,10 @@ if (
     );
 }
 
-console.log(`Build toolchain configuration contract test passed for Maven ${wrapperVersion}.`);
+console.log(
+    `Build toolchain configuration contract test passed for Maven ${wrapperVersion} `
+        + `and Java ${miseJavaMatch[1]}+${miseJavaMatch[2]}.`,
+);
 
 function requiredProperty(contents, propertyName) {
     const matchingLine = contents

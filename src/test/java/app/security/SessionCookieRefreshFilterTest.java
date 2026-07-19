@@ -231,10 +231,50 @@ final class SessionCookieRefreshFilterTest {
     }
 
     @Test
+    void invalidatesStaleFacesAjaxSessionsWithAProtocolRedirect() throws Exception {
+        StaleSessionCleanup sessionCleanup = new StaleSessionCleanup();
+        AtomicInteger filterChainCalls = new AtomicInteger();
+        AtomicInteger responseStatus = new AtomicInteger();
+        AtomicReference<String> contentType = new AtomicReference<>();
+        StringWriter responseBody = new StringWriter();
+        List<Cookie> responseCookies = new ArrayList<>();
+
+        new SessionCookieRefreshFilter(currentUser(false))
+                .doFilter(
+                        staleSessionRequest(
+                                "/calendar.xhtml",
+                                sessionCleanup,
+                                null,
+                                "POST",
+                                "partial/ajax"),
+                        partialRedirectResponse(
+                                responseStatus,
+                                contentType,
+                                responseBody,
+                                responseCookies),
+                        filterChain(filterChainCalls));
+
+        assertAll(
+                () -> assertTrue(sessionCleanup.loggedOut.get()),
+                () -> assertTrue(sessionCleanup.sessionInvalidated.get()),
+                () -> assertEquals(0, filterChainCalls.get()),
+                () -> assertEquals(HttpServletResponse.SC_OK, responseStatus.get()),
+                () -> assertEquals("text/xml;charset=UTF-8", contentType.get()),
+                () -> assertEquals(
+                        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                                + "<partial-response><redirect url=\"/login?"
+                                + "reauthenticationRequired=true\"/></partial-response>",
+                        responseBody.toString()),
+                () -> assertExpiredSessionCookie(responseCookies));
+    }
+
+    @Test
     void continuesStaleCanonicalCalendarRequestsAnonymouslyBeforeAndAfterForwarding() throws Exception {
         for (StaleCalendarRequest requestCase : List.of(
-                new StaleCalendarRequest("/Abc_123-xY0", null),
-                new StaleCalendarRequest("/calendar.xhtml", "Abc_123-xY0"))) {
+                new StaleCalendarRequest("/Abc_123-xY0", null, "GET"),
+                new StaleCalendarRequest("/calendar.xhtml", "Abc_123-xY0", "GET"),
+                new StaleCalendarRequest("/Abc_123-xY0", null, "HEAD"),
+                new StaleCalendarRequest("/calendar.xhtml", "Abc_123-xY0", "HEAD"))) {
             StaleSessionCleanup sessionCleanup = new StaleSessionCleanup();
             AtomicReference<String> redirectLocation = new AtomicReference<>();
             AtomicInteger filterChainCalls = new AtomicInteger();
@@ -246,7 +286,7 @@ final class SessionCookieRefreshFilterTest {
                                     requestCase.requestUri(),
                                     sessionCleanup,
                                     requestCase.forwardedCalendarLinkToken(),
-                                    "GET"),
+                                    requestCase.requestMethod()),
                             redirectResponse(redirectLocation, responseCookies),
                             filterChain(filterChainCalls));
 
@@ -385,6 +425,20 @@ final class SessionCookieRefreshFilterTest {
             StaleSessionCleanup sessionCleanup,
             String forwardedCalendarLinkToken,
             String requestMethod) {
+        return staleSessionRequest(
+                requestUri,
+                sessionCleanup,
+                forwardedCalendarLinkToken,
+                requestMethod,
+                null);
+    }
+
+    private HttpServletRequest staleSessionRequest(
+            String requestUri,
+            StaleSessionCleanup sessionCleanup,
+            String forwardedCalendarLinkToken,
+            String requestMethod,
+            String facesRequestHeader) {
         HttpSession session = (HttpSession) Proxy.newProxyInstance(
                 HttpSession.class.getClassLoader(),
                 new Class<?>[] {HttpSession.class},
@@ -413,11 +467,40 @@ final class SessionCookieRefreshFilterTest {
                     case "getMethod" -> requestMethod;
                     case "getContextPath" -> "";
                     case "getRequestURI" -> requestUri;
+                    case "getHeader" -> "Faces-Request".equals(arguments[0])
+                            ? facesRequestHeader
+                            : null;
                     case "getAttribute" ->
                             CalendarRouteFilter.CALENDAR_LINK_TOKEN_REQUEST_ATTRIBUTE.equals(arguments[0])
                                     ? forwardedCalendarLinkToken
                                     : null;
                     case "getQueryString" -> null;
+                    default -> defaultValue(method.getReturnType());
+                });
+    }
+
+    private HttpServletResponse partialRedirectResponse(
+            AtomicInteger responseStatus,
+            AtomicReference<String> contentType,
+            StringWriter responseBody,
+            List<Cookie> responseCookies) {
+        return (HttpServletResponse) Proxy.newProxyInstance(
+                HttpServletResponse.class.getClassLoader(),
+                new Class<?>[] {HttpServletResponse.class},
+                (proxy, method, arguments) -> switch (method.getName()) {
+                    case "addCookie" -> {
+                        responseCookies.add((Cookie) arguments[0]);
+                        yield null;
+                    }
+                    case "setStatus" -> {
+                        responseStatus.set((Integer) arguments[0]);
+                        yield null;
+                    }
+                    case "setContentType" -> {
+                        contentType.set((String) arguments[0]);
+                        yield null;
+                    }
+                    case "getWriter" -> new PrintWriter(responseBody, true);
                     default -> defaultValue(method.getReturnType());
                 });
     }
@@ -462,7 +545,10 @@ final class SessionCookieRefreshFilterTest {
     private record TestCase(CurrentUser currentUser, HttpServletRequest request) {
     }
 
-    private record StaleCalendarRequest(String requestUri, String forwardedCalendarLinkToken) {
+    private record StaleCalendarRequest(
+            String requestUri,
+            String forwardedCalendarLinkToken,
+            String requestMethod) {
     }
 
     private static final class StaleSessionCleanup {

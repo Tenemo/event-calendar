@@ -7,6 +7,7 @@ import app.user.ApplicationUser;
 import app.util.AuthorizationException;
 import app.util.NotFoundException;
 import app.util.ValidationException;
+import app.web.ViewParameterParser;
 import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
 import jakarta.faces.view.ViewScoped;
@@ -15,6 +16,7 @@ import jakarta.inject.Named;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.Serializable;
 import java.util.List;
+import java.util.OptionalLong;
 
 @Named
 @ViewScoped
@@ -29,6 +31,7 @@ public class CalendarMembersView implements Serializable {
     private CalendarMembershipService calendarMembershipService;
 
     private Long calendarId;
+    private String calendarIdParameter;
     private Long currentUserId;
     private String calendarName;
     private String calendarLinkToken;
@@ -37,6 +40,11 @@ public class CalendarMembersView implements Serializable {
 
     public void load() {
         try {
+            OptionalLong parsedCalendarId = ViewParameterParser.positiveLong(calendarIdParameter);
+            if (parsedCalendarId.isEmpty()) {
+                throw new NotFoundException("Calendar was not found.");
+            }
+            calendarId = parsedCalendarId.getAsLong();
             ApplicationUser actingUser = currentUser.require();
             currentUserId = actingUser.getId();
             Calendar calendar = calendarService.requireAdminCalendar(actingUser, calendarId);
@@ -158,6 +166,8 @@ public class CalendarMembersView implements Serializable {
 
     public Long getCalendarId() { return calendarId; }
     public void setCalendarId(Long calendarId) { this.calendarId = calendarId; }
+    public String getCalendarIdParameter() { return calendarIdParameter; }
+    public void setCalendarIdParameter(String calendarIdParameter) { this.calendarIdParameter = calendarIdParameter; }
     public String getCalendarName() { return calendarName; }
     public String getCalendarLinkToken() { return calendarLinkToken; }
     public boolean isAvailable() { return available; }

@@ -1,0 +1,55 @@
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:h="jakarta.faces.html"
+                xmlns:ui="jakarta.faces.facelets"
+                template="/WEB-INF/templates/main.xhtml">
+    <ui:define name="title">#{publicCalendarView.available ? publicCalendarView.calendarName : 'Calendar not found'} - Shared calendar</ui:define>
+    <ui:define name="head">
+        <meta name="robots" content="noindex, nofollow"/>
+    </ui:define>
+
+    <ui:define name="content">
+        <h:panelGroup layout="block" styleClass="page-section public-calendar-page" rendered="#{publicCalendarView.available}">
+            <div class="section-header compact-heading">
+                <div>
+                    <div class="heading-meta">
+                        <span class="role-chip">Read-only</span>
+                        <span>#{publicCalendarView.timeZone}</span>
+                    </div>
+                    <h1>#{publicCalendarView.calendarName}</h1>
+                    <h:outputText value="#{publicCalendarView.calendarDescription}"
+                                  styleClass="lead-text"
+                                  rendered="#{not empty publicCalendarView.calendarDescription}"/>
+                </div>
+            </div>
+
+            <section class="event-list-section" aria-labelledby="public-events-heading">
+                <div class="subsection-header">
+                    <div>
+                        <h2 id="public-events-heading">Events</h2>
+                        <p>Times are shown in #{publicCalendarView.timeZone}.</p>
+                    </div>
+                </div>
+                <h:panelGroup layout="block" styleClass="event-board" rendered="#{not empty publicCalendarView.events}">
+                    <ui:repeat value="#{publicCalendarView.events}" var="event">
+                        <article class="event-item event-row">
+                            <span class="event-date">#{event.dateLabel}</span>
+                            <div class="event-copy">
+                                <h3>#{event.title}</h3>
+                                <p>#{event.detailLabel}</p>
+                                <h:panelGroup layout="block"
+                                              styleClass="event-description"
+                                              rendered="#{not empty event.description}">#{event.description}</h:panelGroup>
+                            </div>
+                        </article>
+                    </ui:repeat>
+                </h:panelGroup>
+                <h:panelGroup layout="block" styleClass="empty-state" rendered="#{empty publicCalendarView.events}">No events yet.</h:panelGroup>
+            </section>
+        </h:panelGroup>
+
+        <h:panelGroup layout="block" styleClass="narrow-section not-found-state" rendered="#{not publicCalendarView.available}">
+            <h1>Calendar not found</h1>
+            <p>This public calendar link is invalid or no longer available.</p>
+        </h:panelGroup>
+    </ui:define>
+</ui:composition>

@@ -128,6 +128,35 @@ final class CalendarRouteFilterTest {
     }
 
     @Test
+    void forwardsHeadRequestsToTheSameCanonicalCalendarResource() throws Exception {
+        AtomicInteger accessCalls = new AtomicInteger();
+        AtomicInteger forwardCount = new AtomicInteger();
+        CalendarRouteFilter filter = filter(new CalendarAccessService() {
+            @Override
+            public Calendar requireCalendarReadableByLinkToken(
+                    ApplicationUser candidate,
+                    String calendarLinkToken) {
+                accessCalls.incrementAndGet();
+                return new Calendar();
+            }
+        }, null, throttle(1, 10));
+
+        filter.doFilter(
+                request(
+                        "HEAD",
+                        "/" + CALENDAR_LINK_TOKEN,
+                        forwardingDispatcher(forwardCount),
+                        new HashMap<>(),
+                        "192.0.2.10"),
+                response(new ResponseState()),
+                filterChain(new AtomicInteger()));
+
+        assertAll(
+                () -> assertEquals(1, accessCalls.get()),
+                () -> assertEquals(1, forwardCount.get()));
+    }
+
+    @Test
     void doesNotTreatAnExceptionFromTheForwardedViewAsAFailedCalendarLookupAndReleasesCapacity() {
         AtomicInteger forwardCount = new AtomicInteger();
         RequestDispatcher requestDispatcher = new RequestDispatcher() {

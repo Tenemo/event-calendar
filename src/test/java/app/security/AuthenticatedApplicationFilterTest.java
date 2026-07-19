@@ -9,6 +9,8 @@ import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.lang.reflect.Proxy;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -54,6 +56,29 @@ final class AuthenticatedApplicationFilterTest {
     }
 
     @Test
+    void anonymousFacesAjaxRequestsReceiveAPartialRedirectInsteadOfLoginHtml() throws Exception {
+        AtomicInteger filterChainCalls = new AtomicInteger();
+        TestResponse response = new TestResponse();
+
+        new AuthenticatedApplicationFilter(currentUser(false))
+                .doFilter(
+                        request("/shared", "partial/ajax"),
+                        response.proxy(),
+                        countingFilterChain(filterChainCalls));
+
+        assertAll(
+                () -> assertEquals(0, filterChainCalls.get()),
+                () -> assertEquals(HttpServletResponse.SC_OK, response.status.get()),
+                () -> assertNull(response.headers.get("Location")),
+                () -> assertEquals("text/xml;charset=UTF-8", response.contentType),
+                () -> assertEquals(
+                        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                                + "<partial-response><redirect url=\"/shared/login?reauthenticationRequired=true\"/>"
+                                + "</partial-response>",
+                        response.body.toString()));
+    }
+
+    @Test
     void anonymousRedirectDoesNotReadClientControlledAuthorityOrForwardingHeaders() throws Exception {
         AtomicInteger filterChainCalls = new AtomicInteger();
         TestResponse response = new TestResponse();
@@ -63,6 +88,10 @@ final class AuthenticatedApplicationFilterTest {
                 (ignoredProxy, method, arguments) -> {
                     if (method.getName().equals("getContextPath")) {
                         return "";
+                    }
+                    if (method.getName().equals("getHeader")
+                            && "Faces-Request".equals(arguments[0])) {
+                        return null;
                     }
                     throw new AssertionError(
                             "Admission filter unexpectedly consulted request data through "
@@ -114,12 +143,20 @@ final class AuthenticatedApplicationFilterTest {
     }
 
     private static HttpServletRequest request(String contextPath) {
+        return request(contextPath, null);
+    }
+
+    private static HttpServletRequest request(String contextPath, String facesRequestHeader) {
         return (HttpServletRequest) Proxy.newProxyInstance(
                 HttpServletRequest.class.getClassLoader(),
                 new Class<?>[] {HttpServletRequest.class},
-                (ignoredProxy, method, arguments) -> method.getName().equals("getContextPath")
-                        ? contextPath
-                        : defaultValue(method.getReturnType()));
+                (ignoredProxy, method, arguments) -> switch (method.getName()) {
+                    case "getContextPath" -> contextPath;
+                    case "getHeader" -> "Faces-Request".equals(arguments[0])
+                            ? facesRequestHeader
+                            : null;
+                    default -> defaultValue(method.getReturnType());
+                });
     }
 
     @SuppressWarnings("unchecked")
@@ -147,6 +184,8 @@ final class AuthenticatedApplicationFilterTest {
         private final AtomicInteger resetBufferCalls = new AtomicInteger();
         private final AtomicInteger status = new AtomicInteger();
         private final Map<String, String> headers = new LinkedHashMap<>();
+        private final StringWriter body = new StringWriter();
+        private String contentType;
         private final HttpServletResponse proxy = (HttpServletResponse) Proxy.newProxyInstance(
                 HttpServletResponse.class.getClassLoader(),
                 new Class<?>[] {HttpServletResponse.class},
@@ -163,6 +202,11 @@ final class AuthenticatedApplicationFilterTest {
                         headers.put((String) arguments[0], (String) arguments[1]);
                         yield null;
                     }
+                    case "setContentType" -> {
+                        contentType = (String) arguments[0];
+                        yield null;
+                    }
+                    case "getWriter" -> new PrintWriter(body, true);
                     default -> defaultValue(method.getReturnType());
                 });
 

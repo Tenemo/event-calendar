@@ -104,12 +104,28 @@ public class LoginView {
         this.passwordChanged = passwordChanged;
     }
 
+    public String getPasswordChangedParameter() {
+        return Boolean.toString(passwordChanged);
+    }
+
+    public void setPasswordChangedParameter(String passwordChangedParameter) {
+        passwordChanged = "true".equals(passwordChangedParameter);
+    }
+
     public boolean isReauthenticationRequired() {
         return reauthenticationRequired;
     }
 
     public void setReauthenticationRequired(boolean reauthenticationRequired) {
         this.reauthenticationRequired = reauthenticationRequired;
+    }
+
+    public String getReauthenticationRequiredParameter() {
+        return Boolean.toString(reauthenticationRequired);
+    }
+
+    public void setReauthenticationRequiredParameter(String reauthenticationRequiredParameter) {
+        reauthenticationRequired = "true".equals(reauthenticationRequiredParameter);
     }
 
     static String successfulLoginRoute(String invitationToken) {

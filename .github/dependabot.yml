@@ -36,3 +36,12 @@ updates:
       time: "05:45"
       timezone: Europe/Warsaw
     open-pull-requests-limit: 5
+
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Warsaw
+    open-pull-requests-limit: 5

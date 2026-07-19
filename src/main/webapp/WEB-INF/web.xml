@@ -83,6 +83,16 @@
         <tracking-mode>COOKIE</tracking-mode>
     </session-config>
 
+    <error-page>
+        <error-code>500</error-code>
+        <location>/error.html</location>
+    </error-page>
+
+    <error-page>
+        <exception-type>java.lang.Throwable</exception-type>
+        <location>/error.html</location>
+    </error-page>
+
     <security-role>
         <role-name>USER</role-name>
     </security-role>

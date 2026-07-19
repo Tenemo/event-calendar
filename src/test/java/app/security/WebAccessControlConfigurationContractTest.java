@@ -83,6 +83,34 @@ final class WebAccessControlConfigurationContractTest {
         }
     }
 
+    @Test
+    void unexpectedFailuresUseAStaticGenericErrorPage() throws Exception {
+        Document webConfiguration = parseXml(WEB_CONFIGURATION_PATH);
+        NodeList errorPages = webConfiguration.getElementsByTagName("error-page");
+        List<String> mappings = new ArrayList<>();
+        for (int errorPageIndex = 0; errorPageIndex < errorPages.getLength(); errorPageIndex++) {
+            Element errorPage = (Element) errorPages.item(errorPageIndex);
+            List<String> statusCodes = textValues(errorPage, "error-code");
+            List<String> exceptionTypes = textValues(errorPage, "exception-type");
+            String trigger = statusCodes.isEmpty()
+                    ? exceptionTypes.getFirst()
+                    : statusCodes.getFirst();
+            mappings.add(trigger + " -> " + textValues(errorPage, "location").getFirst());
+        }
+        Path errorPagePath = WEB_APPLICATION_ROOT.resolve("error.html");
+        String errorPageContents = Files.readString(errorPagePath);
+
+        assertAll(
+                () -> assertEquals(
+                        List.of(
+                                "500 -> /error.html",
+                                "java.lang.Throwable -> /error.html"),
+                        mappings),
+                () -> assertTrue(Files.isRegularFile(errorPagePath)),
+                () -> assertTrue(errorPageContents.contains("<h1>Something went wrong</h1>")),
+                () -> assertFalse(errorPageContents.contains("#{")));
+    }
+
     private static boolean matchesServletPathPattern(String pattern, String requestPath) {
         if (pattern.endsWith("/*")) {
             String pathPrefix = pattern.substring(0, pattern.length() - 1);
