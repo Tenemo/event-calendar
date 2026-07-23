@@ -1,8 +1,0 @@
-**
-!.mvn
-!.mvn/**
-!mvnw
-!pom.xml
-!src
-!src/main
-!src/main/**
