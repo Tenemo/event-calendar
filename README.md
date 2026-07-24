@@ -113,7 +113,7 @@ The production deployment verifier has deterministic self-tests for argument val
 
 Pull requests run Java static analysis, CSS linting, the Maven build and reproducibility check, the full PostgreSQL-backed Chromium suite, focused Firefox and WebKit smoke journeys, bootstrap-concurrency verification, the exact production image smoke test, image SBOM generation and vulnerability scan, backup/restore verification, Dependency Review, and CodeQL. A separate daily and manually dispatchable workflow rebuilds the current default-branch production image, regenerates its SBOM, and blocks on high or critical vulnerabilities so newly disclosed issues are detected between pull requests.
 
-In GitHub's repository ruleset, require the stable `Required PR checks` and `Code analysis` status checks before merging. Also enable GitHub's native automatic Maven dependency submission, Dependabot alerts, and Dependabot security updates. These are GitHub UI settings rather than additional workflows; the committed Dependabot configuration supplies weekly update pull requests for GitHub Actions, Maven, npm, and Docker dependencies.
+In GitHub's repository ruleset, require the stable `Required PR checks` and `Code analysis` status checks before merging. Also enable GitHub's native automatic Maven dependency submission. Dependency updates are intentionally initiated and reviewed manually; do not enable automated dependency-update bots.
 
 ## Running with Liberty dev mode
 
