@@ -8,6 +8,7 @@ import app.util.AuthorizationException;
 import app.util.NotFoundException;
 import app.util.ValidationException;
 import app.web.ViewParameterParser;
+import app.web.FacesMessages;
 import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
 import jakarta.faces.view.ViewScoped;
@@ -161,11 +162,9 @@ public class CalendarMembersView implements Serializable {
     }
 
     private void addMessage(FacesMessage.Severity severity, String summary, String detail) {
-        FacesContext.getCurrentInstance().addMessage(null, new FacesMessage(severity, summary, detail));
+        FacesMessages.add(severity, summary, detail);
     }
 
-    public Long getCalendarId() { return calendarId; }
-    public void setCalendarId(Long calendarId) { this.calendarId = calendarId; }
     public String getCalendarIdParameter() { return calendarIdParameter; }
     public void setCalendarIdParameter(String calendarIdParameter) { this.calendarIdParameter = calendarIdParameter; }
     public String getCalendarName() { return calendarName; }

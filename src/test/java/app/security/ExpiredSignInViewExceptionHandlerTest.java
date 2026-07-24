@@ -30,7 +30,7 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import org.junit.jupiter.api.Test;
 import org.w3c.dom.NodeList;
 
-final class ExpiredLoginViewExceptionHandlerTest {
+final class ExpiredSignInViewExceptionHandlerTest {
     private static final Path FACES_CONFIGURATION_PATH =
             Path.of("src", "main", "webapp", "WEB-INF", "faces-config.xml");
 

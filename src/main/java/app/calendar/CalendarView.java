@@ -14,6 +14,7 @@ import app.util.ConflictException;
 import app.util.NotFoundException;
 import app.util.ValidationException;
 import app.web.RelativeRedirect;
+import app.web.FacesMessages;
 import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
 import jakarta.faces.view.ViewScoped;
@@ -345,7 +346,7 @@ public class CalendarView implements Serializable {
     }
 
     private void addMessage(FacesMessage.Severity severity, String summary, String detail) {
-        FacesContext.getCurrentInstance().addMessage(null, new FacesMessage(severity, summary, detail));
+        FacesMessages.add(severity, summary, detail);
     }
 
     public Long getCalendarId() { return calendarId; }

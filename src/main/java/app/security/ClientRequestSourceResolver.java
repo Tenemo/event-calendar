@@ -1,5 +1,6 @@
 package app.security;
 
+import app.config.ApplicationEnvironmentVariables;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.InetAddress;
@@ -11,8 +12,6 @@ import java.util.Optional;
 
 @ApplicationScoped
 public class ClientRequestSourceResolver {
-    static final String RAILWAY_ENVIRONMENT_ID_ENVIRONMENT_VARIABLE = "RAILWAY_ENVIRONMENT_ID";
-
     private static final String RAILWAY_REAL_IP_HEADER = "X-Real-IP";
     private static final String UNKNOWN_SOURCE = "<unknown-source>";
     private static final int MAXIMUM_REAL_IP_HEADER_LENGTH = 64;
@@ -23,7 +22,7 @@ public class ClientRequestSourceResolver {
     private final boolean railwayEnvironment;
 
     public ClientRequestSourceResolver() {
-        this(System.getenv(RAILWAY_ENVIRONMENT_ID_ENVIRONMENT_VARIABLE));
+        this(System.getenv(ApplicationEnvironmentVariables.RAILWAY_ENVIRONMENT_ID));
     }
 
     public ClientRequestSourceResolver(String railwayEnvironmentId) {

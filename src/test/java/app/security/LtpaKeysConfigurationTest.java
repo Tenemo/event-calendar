@@ -13,7 +13,7 @@ import jakarta.ejb.Startup;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-final class ApplicationAuthenticationConfigurationTest {
+final class LtpaKeysConfigurationTest {
     @Test
     void validatesAuthenticationConfigurationDuringApplicationStartup()
             throws NoSuchMethodException {

@@ -32,6 +32,9 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 final class InvitationServiceTest {
+    private static final String VALID_BOOTSTRAP_INVITATION_TOKEN =
+            "6RrWdXJO3P9mQ1fUh8zGkV2nY5cBsA7tEeL0iNxC4_o";
+
     @Test
     void activeUsersCanCreateRegistrationInvitations() {
         EntityManagerStub entityManagerStub = entityManagerStub()
@@ -217,10 +220,17 @@ final class InvitationServiceTest {
     @Test
     void bootstrapAdmissionIsClaimedOnceAndRejectsDatabasesWhereAnyUserHasEverExisted() {
         RegistrationBootstrapState availableBootstrapState = availableBootstrapState();
-        InvitationService serviceWithoutUsers = serviceForMissingInvitation(false, "bootstrap-token", availableBootstrapState);
-        InvitationService serviceWithUsers = serviceForMissingInvitation(true, "bootstrap-token", availableBootstrapState());
+        InvitationService serviceWithoutUsers = serviceForMissingInvitation(
+                false,
+                VALID_BOOTSTRAP_INVITATION_TOKEN,
+                availableBootstrapState);
+        InvitationService serviceWithUsers = serviceForMissingInvitation(
+                true,
+                VALID_BOOTSTRAP_INVITATION_TOKEN,
+                availableBootstrapState());
 
-        RegistrationAdmission admission = serviceWithoutUsers.claimRegistrationAdmission(" bootstrap-token ");
+        RegistrationAdmission admission = serviceWithoutUsers.claimRegistrationAdmission(
+                " " + VALID_BOOTSTRAP_INVITATION_TOKEN + " ");
 
         assertAll(
                 () -> assertTrue(admission.bootstrap()),
@@ -228,8 +238,12 @@ final class InvitationServiceTest {
                 () -> assertEquals(ZoneOffset.UTC, availableBootstrapState.getConsumedAt().getOffset()),
                 () -> assertThrows(
                         ValidationException.class,
-                        () -> serviceWithoutUsers.claimRegistrationAdmission("bootstrap-token")),
-                () -> assertThrows(ValidationException.class, () -> serviceWithUsers.requireAdmission("bootstrap-token")),
+                        () -> serviceWithoutUsers.claimRegistrationAdmission(
+                                VALID_BOOTSTRAP_INVITATION_TOKEN)),
+                () -> assertThrows(
+                        ValidationException.class,
+                        () -> serviceWithUsers.requireAdmission(
+                                VALID_BOOTSTRAP_INVITATION_TOKEN)),
                 () -> assertThrows(ValidationException.class, () -> serviceWithoutUsers.requireAdmission("wrong-token")));
     }
 
@@ -437,7 +451,10 @@ final class InvitationServiceTest {
                         .singleResult("select count(applicationUser)", anyUserHasEverExisted ? 1L : 0L),
                 new FixedTokenService("unused"),
                 new RecordingAuditService());
-        setField(service, "bootstrapInvitationToken", bootstrapInvitationToken);
+        RegistrationInvitationConfiguration configuration =
+                new RegistrationInvitationConfiguration(bootstrapInvitationToken);
+        configuration.validate();
+        setField(service, "registrationInvitationConfiguration", configuration);
         return service;
     }
 
@@ -457,7 +474,10 @@ final class InvitationServiceTest {
         setField(service, "invitationPolicy", new InvitationPolicy());
         setField(service, "tokenService", tokenService);
         setField(service, "auditService", auditService);
-        setField(service, "bootstrapInvitationToken", "");
+        setField(
+                service,
+                "registrationInvitationConfiguration",
+                new RegistrationInvitationConfiguration(""));
         return service;
     }
 

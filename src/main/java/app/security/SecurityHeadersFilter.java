@@ -1,5 +1,6 @@
 package app.security;
 
+import app.config.ApplicationEnvironmentVariables;
 import jakarta.servlet.Filter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.DispatcherType;
@@ -14,10 +15,6 @@ import java.io.IOException;
 
 public final class SecurityHeadersFilter implements Filter {
     private static final String FACES_RESOURCE_PATH_PREFIX = "/jakarta.faces.resource/";
-    private static final String RAILWAY_ENVIRONMENT_ID_ENVIRONMENT_VARIABLE =
-            "RAILWAY_ENVIRONMENT_ID";
-    private static final String RAILWAY_ENVIRONMENT_NAME_ENVIRONMENT_VARIABLE =
-            "RAILWAY_ENVIRONMENT_NAME";
     private static final String PRODUCTION_ENVIRONMENT_NAME = "production";
 
     static final String CONTENT_SECURITY_POLICY =
@@ -31,8 +28,8 @@ public final class SecurityHeadersFilter implements Filter {
 
     public SecurityHeadersFilter() {
         this(
-                System.getenv(RAILWAY_ENVIRONMENT_ID_ENVIRONMENT_VARIABLE),
-                System.getenv(RAILWAY_ENVIRONMENT_NAME_ENVIRONMENT_VARIABLE));
+                System.getenv(ApplicationEnvironmentVariables.RAILWAY_ENVIRONMENT_ID),
+                System.getenv(ApplicationEnvironmentVariables.RAILWAY_ENVIRONMENT_NAME));
     }
 
     SecurityHeadersFilter(String railwayEnvironmentId, String railwayEnvironmentName) {

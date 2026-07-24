@@ -101,7 +101,7 @@
                                                          ajax="true"
                                                          process="@this"
                                                          update=":messages :calendarContent"
-                                                         oncomplete="focusElementByIdSuffix('eventTitle');"
+                                                         oncomplete="focusAfterSuccessfulAjax(args, 'eventTitle');"
                                                          styleClass="ui-button-outlined"/>
                                     </h:form>
                                     <h:form>
@@ -111,7 +111,7 @@
                                                          ajax="true"
                                                          process="@this"
                                                          update=":messages :calendarContent"
-                                                         oncomplete="focusElementByIdSuffix('events-heading');"
+                                                         oncomplete="focusAfterSuccessfulAjax(args, 'events-heading');"
                                                          styleClass="ui-button-danger ui-button-outlined">
                                             <p:confirm header="Delete event"
                                                        message="Delete this event permanently?"

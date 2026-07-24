@@ -15,16 +15,13 @@ import java.net.URI;
 @Lock(LockType.READ)
 @TransactionAttribute(TransactionAttributeType.NOT_SUPPORTED)
 public class ApplicationUrlService {
-    private static final String APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE = "APP_BASE_URL";
-    private static final String RAILWAY_ENVIRONMENT_ID_ENVIRONMENT_VARIABLE = "RAILWAY_ENVIRONMENT_ID";
-
     private String configuredBaseUrl;
     private final boolean railwayEnvironment;
 
     public ApplicationUrlService() {
         this(
-                System.getenv(APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE),
-                System.getenv(RAILWAY_ENVIRONMENT_ID_ENVIRONMENT_VARIABLE));
+                System.getenv(ApplicationEnvironmentVariables.APPLICATION_BASE_URL),
+                System.getenv(ApplicationEnvironmentVariables.RAILWAY_ENVIRONMENT_ID));
     }
 
     ApplicationUrlService(String configuredBaseUrl, String railwayEnvironmentId) {

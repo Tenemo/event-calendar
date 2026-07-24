@@ -9,15 +9,16 @@ import jakarta.inject.Inject;
 
 @Singleton
 @Startup
-public class CalendarConfiguration {
-    private static final String DEFAULT_TIME_ZONE_ENVIRONMENT_VARIABLE = "APP_TIMEZONE";
+public class NewCalendarDefaults {
     private static final String FALLBACK_DEFAULT_TIME_ZONE = "Europe/Warsaw";
 
     @Inject
     private CalendarTimeService calendarTimeService;
 
     private String configuredDefaultTimeZone =
-            System.getenv().getOrDefault(DEFAULT_TIME_ZONE_ENVIRONMENT_VARIABLE, FALLBACK_DEFAULT_TIME_ZONE);
+            System.getenv().getOrDefault(
+                    ApplicationEnvironmentVariables.DEFAULT_TIME_ZONE,
+                    FALLBACK_DEFAULT_TIME_ZONE);
     private String defaultTimeZone;
 
     @PostConstruct

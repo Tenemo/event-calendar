@@ -1,29 +1,25 @@
 package app.security;
 
+import app.config.ApplicationEnvironmentVariables;
 import jakarta.annotation.PostConstruct;
 import jakarta.ejb.Singleton;
 import jakarta.ejb.Startup;
 
 @Singleton
 @Startup
-public class ApplicationAuthenticationConfiguration {
-    static final String LTPA_KEYS_PASSWORD_ENVIRONMENT_VARIABLE =
-            "APP_LTPA_KEYS_PASSWORD";
+public class LtpaKeysConfiguration {
     static final int MINIMUM_LTPA_KEYS_PASSWORD_LENGTH = 32;
-
-    private static final String RAILWAY_ENVIRONMENT_ID_ENVIRONMENT_VARIABLE =
-            "RAILWAY_ENVIRONMENT_ID";
 
     private final String configuredLtpaKeysPassword;
     private final boolean railwayEnvironment;
 
-    public ApplicationAuthenticationConfiguration() {
+    public LtpaKeysConfiguration() {
         this(
-                System.getenv(LTPA_KEYS_PASSWORD_ENVIRONMENT_VARIABLE),
-                System.getenv(RAILWAY_ENVIRONMENT_ID_ENVIRONMENT_VARIABLE));
+                System.getenv(ApplicationEnvironmentVariables.LTPA_KEYS_PASSWORD),
+                System.getenv(ApplicationEnvironmentVariables.RAILWAY_ENVIRONMENT_ID));
     }
 
-    ApplicationAuthenticationConfiguration(
+    LtpaKeysConfiguration(
             String configuredLtpaKeysPassword,
             String railwayEnvironmentId) {
         this.configuredLtpaKeysPassword = configuredLtpaKeysPassword;

@@ -7,6 +7,7 @@ import app.user.ApplicationUser;
 import app.util.AuthorizationException;
 import app.util.NotFoundException;
 import app.util.ValidationException;
+import app.web.ViewParameterParser;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.faces.application.FacesMessage;
@@ -93,21 +94,8 @@ public class InvitationView {
     }
 
     static Long parseInvitationId(String submittedInvitationId) {
-        if (submittedInvitationId == null
-                || submittedInvitationId.isBlank()
-                || submittedInvitationId.length() > 19
-                || !submittedInvitationId.chars().allMatch(Character::isDigit)) {
-            throw new ValidationException("Invitation is invalid.");
-        }
-        try {
-            long invitationId = Long.parseLong(submittedInvitationId);
-            if (invitationId < 1) {
-                throw new ValidationException("Invitation is invalid.");
-            }
-            return invitationId;
-        } catch (NumberFormatException exception) {
-            throw new ValidationException("Invitation is invalid.");
-        }
+        return ViewParameterParser.positiveLong(submittedInvitationId)
+                .orElseThrow(() -> new ValidationException("Invitation is invalid."));
     }
 
     public Long getSelectedCalendarId() {

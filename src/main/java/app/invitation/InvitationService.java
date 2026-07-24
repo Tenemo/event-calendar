@@ -20,8 +20,6 @@ import jakarta.persistence.LockModeType;
 import jakarta.persistence.NoResultException;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -31,8 +29,7 @@ import java.util.Optional;
 public class InvitationService {
     static final int MAXIMUM_INVITATIONS_PER_PAGE = 50;
 
-    private static final int MAXIMUM_TOKEN_GENERATION_ATTEMPTS = 10;
-    private static final String BOOTSTRAP_INVITATION_TOKEN_ENVIRONMENT_VARIABLE = "APP_BOOTSTRAP_INVITE_TOKEN";
+    private static final int MAXIMUM_INVITATION_TOKEN_GENERATION_ATTEMPTS = 10;
     private static final String VISIBLE_INVITATION_PREDICATE =
             "invitation.createdByUser.id = :actingUserId "
                     + "or exists ("
@@ -65,7 +62,8 @@ public class InvitationService {
     @Inject
     private AuditService auditService;
 
-    private String bootstrapInvitationToken = System.getenv(BOOTSTRAP_INVITATION_TOKEN_ENVIRONMENT_VARIABLE);
+    @Inject
+    private RegistrationInvitationConfiguration registrationInvitationConfiguration;
 
     public Invitation createRegistrationInvitation(ApplicationUser actingUser) {
         requireActiveUser(actingUser);
@@ -395,7 +393,7 @@ public class InvitationService {
     }
 
     private String generateUniqueInvitationToken() {
-        for (int attempt = 0; attempt < MAXIMUM_TOKEN_GENERATION_ATTEMPTS; attempt++) {
+        for (int attempt = 0; attempt < MAXIMUM_INVITATION_TOKEN_GENERATION_ATTEMPTS; attempt++) {
             String token = tokenService.generateInvitationToken();
             Long existingCount = entityManager
                     .createQuery(
@@ -412,14 +410,7 @@ public class InvitationService {
     }
 
     private boolean matchesBootstrapInvitationToken(String invitationToken) {
-        String configuredBootstrapInvitationToken = InvitationToken.normalize(bootstrapInvitationToken);
-        if (!InvitationToken.isValidCandidate(configuredBootstrapInvitationToken)) {
-            return false;
-        }
-
-        return MessageDigest.isEqual(
-                configuredBootstrapInvitationToken.getBytes(StandardCharsets.UTF_8),
-                invitationToken.getBytes(StandardCharsets.UTF_8));
+        return registrationInvitationConfiguration.matchesBootstrapInvitationToken(invitationToken);
     }
 
     private ValidationException invalidInvitationException() {

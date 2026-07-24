@@ -1,5 +1,6 @@
 package app.security;
 
+import app.config.ApplicationEnvironmentVariables;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -30,8 +31,7 @@ final class RuntimeSessionConfigurationTest {
         Element webApplicationSecurity = firstElement(serverConfiguration, "webAppSecurity");
         Element ltpaPasswordVariable = variable(
                 serverConfiguration,
-                ApplicationAuthenticationConfiguration
-                        .LTPA_KEYS_PASSWORD_ENVIRONMENT_VARIABLE);
+                ApplicationEnvironmentVariables.LTPA_KEYS_PASSWORD);
 
         assertAll(
                 () -> assertEquals(

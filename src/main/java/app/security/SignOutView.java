@@ -10,7 +10,7 @@ import java.io.IOException;
 
 @Named
 @RequestScoped
-public class LogoutView {
+public class SignOutView {
     public void logout() throws IOException, ServletException {
         FacesContext facesContext = FacesContext.getCurrentInstance();
         HttpServletRequest request = (HttpServletRequest) facesContext.getExternalContext().getRequest();

@@ -9,7 +9,7 @@ import app.invitation.InvitationToken;
 import app.web.RelativeRedirect;
 import org.junit.jupiter.api.Test;
 
-final class LoginViewTest {
+final class SignInViewTest {
     @Test
     void successfulLoginUsesTheFixedDefaultForMissingOrUnsafeInvitationTokens() {
         String defaultRoute = AuthenticatedApplicationFilter.DEFAULT_AUTHENTICATED_ROUTE;

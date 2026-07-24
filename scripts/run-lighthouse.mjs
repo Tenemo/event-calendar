@@ -18,6 +18,10 @@ const LIGHTHOUSE_OUTPUT_DIRECTORY = path.join(
     BROWSER_PROFILE_PARENT_DIRECTORY,
     "lighthouse",
 );
+const LIGHTHOUSE_WORKING_DIRECTORY = path.join(
+    PROJECT_DIRECTORY,
+    ".lighthouseci",
+);
 const BROWSER_READY_TIMEOUT_MILLISECONDS = 30_000;
 const BROWSER_READY_POLL_INTERVAL_MILLISECONDS = 100;
 const BROWSER_EXIT_TIMEOUT_MILLISECONDS = 10_000;
@@ -81,7 +85,9 @@ async function runLighthouse() {
     }
     if (lighthouseExitCode !== 0) {
         process.exitCode = lighthouseExitCode;
+        return;
     }
+    fs.rmSync(LIGHTHOUSE_WORKING_DIRECTORY, { recursive: true, force: true });
 }
 
 async function waitForDevToolsPort(browserProfileDirectory, browserExitPromise) {

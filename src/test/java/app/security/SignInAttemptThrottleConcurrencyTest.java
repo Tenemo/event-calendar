@@ -19,7 +19,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
-final class LoginAttemptThrottleConcurrencyTest {
+final class SignInAttemptThrottleConcurrencyTest {
     private static final Clock FIXED_CLOCK = Clock.fixed(
             Instant.parse("2026-07-17T10:00:00Z"),
             ZoneOffset.UTC);

@@ -12,7 +12,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
 
-final class LoginAttemptThrottleTest {
+final class SignInAttemptThrottleTest {
     private static final Instant TEST_START = Instant.parse("2026-07-15T10:00:00Z");
     private static final String TEST_SOURCE = "192.0.2.10";
 

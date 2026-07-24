@@ -9,7 +9,7 @@ import app.calendar.CalendarTimeService;
 import app.util.ValidationException;
 import org.junit.jupiter.api.Test;
 
-final class CalendarConfigurationTest {
+final class NewCalendarDefaultsTest {
     @Test
     void normalizesTheConfiguredDefaultTimeZoneAtStartup() {
         CalendarConfiguration calendarConfiguration = configurationWithTimeZone(" Europe/London ");

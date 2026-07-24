@@ -1,6 +1,6 @@
 # Project specification
 
-This file is the authoritative specification for product behavior, architecture, security, user experience, testing, deployment, and operations. Milestone files contain dependency-ordered implementation and verification steps only. A milestone must not introduce requirements that are absent here.
+This file preserves private product and architecture context. Tracked project files and repository instructions are authoritative when they differ from this reference.
 
 ## 1. Non-negotiable decisions
 
@@ -9,7 +9,7 @@ Use these decisions unless the repository owner explicitly changes them later.
 | Area                         | Decision                                                                                                     |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | Runtime Java                 | Java 25 LTS                                                                                                  |
-| Compiler compatibility level | Java 21 by default; later Java 17 if required after all; Java 25 only after MVP if portability is not a goal |
+| Compiler compatibility level | Java 25                                                                                                      |
 | Build tool                   | Maven                                                                                                        |
 | Packaging                    | WAR                                                                                                          |
 | Runtime                      | Open Liberty container                                                                                       |
@@ -47,10 +47,10 @@ xmlns:p="primefaces"
 
 ### 1.1 Java 25 policy
 
-Use Java 25 LTS for the local developer JDK and production Open Liberty runtime. Compile application code with Java 21 compatibility by default:
+Use Java 25 LTS for the local developer JDK, compiler target, and production Open Liberty runtime:
 
 ```xml
-<maven.compiler.release>21</maven.compiler.release>
+<maven.compiler.release>25</maven.compiler.release>
 ```
 
 Do not use preview features. Do not modify global `JAVA_HOME`; use repository-scoped tooling.
@@ -71,17 +71,6 @@ Git clone
 ```
 
 Do not put downloaded JDKs, Maven distributions, PostgreSQL driver jars, PostgreSQL data volumes, `.env`, `target/`, or IDE state in source control.
-
-### 1.3 Implementation phases
-
-Each implementation phase must leave the repository runnable and verified. The phase files sequence work; the requirements themselves remain in this specification.
-
-| Milestone                         | Outcome                                                                                                                | Includes                                                                                                                                                             |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M0: project foundation            | A reproducible Jakarta EE web app that builds and starts locally                                                       | Repository skeleton, Maven wrapper, `mise`, Docker Compose PostgreSQL, Open Liberty config, health endpoint, placeholder JSF/PrimeFaces pages, flat responsive shell |
-| M1: persistence and security core | Database-backed registration, sign-in, password change, calendars, memberships, calendar-link tokens, invitations, and audit foundation | Flyway migrations, JPA entities, Jakarta Security password hashing, session revocation, registration, calendar-level authorization, focused tests |
-| M2: calendar and account workflows | One canonical calendar view, account settings, event CRUD, calendar creation, invitation links, and member management     | PrimeFaces calendar and account UI, bearer-link reads, role-aware event actions, settings, invitation acceptance, audit logging, manual role checks |
-| M3: production readiness          | The app is packaged, deployable, and recoverable                                                                       | Docker production image, local Docker runtime test, Railway deployment, custom domain, Dockerized backup/restore, README runbook                                     |
 
 ## 2. Product scope
 
@@ -349,7 +338,7 @@ Optional v1.1 hardening:
 8. Keep role names centralized.
 9. Keep password policy and Jakarta Security password-hash parameters centralized.
 10. Keep calendar-token format/generation and invitation-token generation centralized without weakening invitation tokens when calendar URLs change.
-11. Use small verified checkpoints inside each milestone.
+11. Use small verified checkpoints for each coherent change.
 12. Prefer boring code over clever abstractions.
 13. Do not introduce Spring Boot into this repo.
 14. Do not introduce a JavaScript frontend framework into this repo.

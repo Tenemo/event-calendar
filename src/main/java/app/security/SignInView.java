@@ -21,7 +21,7 @@ import java.util.OptionalLong;
 
 @Named
 @RequestScoped
-public class LoginView {
+public class SignInView {
     @Inject
     private SecurityContext securityContext;
 

@@ -11,10 +11,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.Iterator;
 
-final class ExpiredLoginViewExceptionHandler extends ExceptionHandlerWrapper {
+final class ExpiredSignInViewExceptionHandler extends ExceptionHandlerWrapper {
     static final String RECOVERY_ROUTE = "/login?reauthenticationRequired=true";
 
-    ExpiredLoginViewExceptionHandler(ExceptionHandler wrappedHandler) {
+    ExpiredSignInViewExceptionHandler(ExceptionHandler wrappedHandler) {
         super(wrappedHandler);
     }
 

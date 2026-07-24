@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 
 @ApplicationScoped
-public class LoginAttemptThrottle {
+public class SignInAttemptThrottle {
     static final int MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE = 5;
     static final int MAXIMUM_FAILED_ATTEMPTS_PER_SOURCE = 25;
     static final Duration FAILURE_WINDOW = Duration.ofMinutes(15);
@@ -37,7 +37,7 @@ public class LoginAttemptThrottle {
     private final Object[] validationLocks;
     private Instant saturationBlockedUntil;
 
-    public LoginAttemptThrottle() {
+    public SignInAttemptThrottle() {
         this(
                 Clock.systemUTC(),
                 MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE,
@@ -48,7 +48,7 @@ public class LoginAttemptThrottle {
                 MAXIMUM_TRACKED_SOURCES);
     }
 
-    LoginAttemptThrottle(
+    SignInAttemptThrottle(
             Clock clock,
             int maximumFailedAttemptsPerUsernameAndSource,
             int maximumFailedAttemptsPerSource,

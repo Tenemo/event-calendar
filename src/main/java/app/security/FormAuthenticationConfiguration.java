@@ -10,5 +10,5 @@ import jakarta.security.enterprise.authentication.mechanism.http.LoginToContinue
                 loginPage = "/login",
                 errorPage = "/sign-in-error",
                 useForwardToLogin = false))
-public class SecurityConfiguration {
+public class FormAuthenticationConfiguration {
 }
