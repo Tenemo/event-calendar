@@ -28,7 +28,7 @@ RUN revision_resource="src/main/resources/META-INF/deployment-revision" \
     fi \
     && ./mvnw -B -ntp -o -Dmaven.test.skip=true package
 
-FROM icr.io/appcafe/open-liberty:kernel-slim-java25-openj9-ubi-minimal@sha256:b923eaba0d4489d98ef484e2386a0fbe8bf3a40124451a611d42dced393ce1cd
+FROM icr.io/appcafe/open-liberty:kernel-slim-java25-openj9-ubi-minimal@sha256:3f3a3004ad3a31e6ee7151e77c566de3f00638fd2937841f08a2396cf3d7112a
 
 USER 1001
 
