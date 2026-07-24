@@ -32,6 +32,14 @@ final class CalendarToolPostgresql extends CalendarToolProcessRunner {
     private static final String DEFAULT_DATABASE_PORT = "5432";
     private static final String DEFAULT_DATABASE_NAME = "calendar";
     private static final String DEFAULT_DATABASE_USER = "calendar";
+    private static final String BACKUP_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE =
+            "BACKUP_VERIFICATION_APPLICATION_PORT";
+    private static final String DEFAULT_BACKUP_VERIFICATION_APPLICATION_PORT = "9083";
+    private static final String BACKUP_VERIFICATION_APPLICATION_SERVICE_NAME = "web-backup-verification";
+    private static final String BACKUP_VERIFICATION_DATABASE_SERVICE_NAME = "postgres-backup-verification";
+    private static final String BACKUP_VERIFICATION_DATABASE_NAME = "calendar_backup_verification";
+    private static final String BACKUP_VERIFICATION_DATABASE_USER = "calendar_backup_verification";
+    private static final String BACKUP_VERIFICATION_PROFILE = "backup-verification";
     private static final String RESTORE_VERIFICATION_DATABASE_SERVICE_NAME = "postgres-restore-verification";
     private static final String RESTORE_VERIFICATION_DATABASE_NAME = "calendar_restore";
     private static final String RESTORE_VERIFICATION_DATABASE_USER = "calendar_restore";
@@ -50,68 +58,32 @@ final class CalendarToolPostgresql extends CalendarToolProcessRunner {
     }
 
     static Path backupPostgres(String configuredOutputPath) throws IOException, InterruptedException {
-        Path outputPath = configuredOutputPath == null
-                ? defaultBackupPath()
-                : projectRelativePath(configuredOutputPath);
-        Path parentDirectory = outputPath.getParent();
-        if (parentDirectory != null) {
-            Files.createDirectories(parentDirectory);
+        if (usesLocalComposeDatabase()) {
+            return writeBackup(
+                    configuredOutputPath,
+                    "Local PostgreSQL backup",
+                    Map.of(),
+                    composeBackupCommand(DATABASE_SERVICE_NAME, databaseUser(), databaseName()));
         }
-        Path temporaryOutputPath = Files.createTempFile(
-                parentDirectory,
-                outputPath.getFileName().toString() + ".",
-                ".partial");
 
-        try {
-            if (usesLocalComposeDatabase()) {
-                runCommandToFile(
-                        "Local PostgreSQL backup",
-                        temporaryOutputPath,
-                        Map.of(),
-                        "docker",
-                        "compose",
-                        "exec",
-                        "-T",
-                        DATABASE_SERVICE_NAME,
+        return writeBackup(
+                configuredOutputPath,
+                "Remote PostgreSQL backup",
+                remoteDatabaseEnvironment(),
+                remotePostgresqlClientCommand(
+                        false,
                         "pg_dump",
+                        "--host",
+                        databaseHost(),
+                        "--port",
+                        databasePort(),
                         "--username",
                         databaseUser(),
                         "--dbname",
                         databaseName(),
                         "--format=custom",
                         "--no-owner",
-                        "--no-privileges");
-            } else {
-                runCommandToFile(
-                        "Remote PostgreSQL backup",
-                        temporaryOutputPath,
-                        remoteDatabaseEnvironment(),
-                        remotePostgresqlClientCommand(
-                                false,
-                                "pg_dump",
-                                "--host",
-                                databaseHost(),
-                                "--port",
-                                databasePort(),
-                                "--username",
-                                databaseUser(),
-                                "--dbname",
-                                databaseName(),
-                                "--format=custom",
-                                "--no-owner",
-                                "--no-privileges"));
-            }
-
-            if (Files.size(temporaryOutputPath) == 0) {
-                throw new IllegalStateException("PostgreSQL backup did not produce a non-empty archive.");
-            }
-            replaceBackupAtomically(temporaryOutputPath, outputPath);
-        } finally {
-            Files.deleteIfExists(temporaryOutputPath);
-        }
-
-        System.out.println("Backup written to " + outputPath + ".");
-        return outputPath;
+                        "--no-privileges"));
     }
 
     static void restorePostgres(String configuredBackupPath, String confirmedDatabaseName)
@@ -162,28 +134,47 @@ final class CalendarToolPostgresql extends CalendarToolProcessRunner {
     }
 
     static void verifyBackupRestore() throws IOException, InterruptedException {
-        if (!usesLocalComposeDatabase()) {
-            throw new IllegalStateException("Backup/restore verification requires the local Docker Compose database.");
-        }
-
-        startDatabase();
-        String sourceFingerprint = databaseFingerprint(DATABASE_SERVICE_NAME, databaseUser(), databaseName());
-        Path backupPath = backupPostgres(".build/verification/restore-verification.dump");
+        BackupVerificationEndpoints endpoints = backupVerificationEndpoints(System.getenv());
+        Map<String, String> verificationEnvironment = Map.of(
+                BACKUP_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE,
+                endpoints.applicationPort());
+        Path backupPath = projectRelativePath(".build/verification/restore-verification.dump");
         boolean startupAttempted = false;
         Throwable primaryFailure = null;
 
         try {
             startupAttempted = true;
+            runCommandWithEnvironment(
+                    "Backup verification source application startup",
+                    verificationEnvironment,
+                    backupVerificationSourceStartupCommand());
+            CalendarToolVerification.waitForApplication(endpoints.healthUri());
+            checkComposeDatabaseSchema(
+                    BACKUP_VERIFICATION_DATABASE_SERVICE_NAME,
+                    BACKUP_VERIFICATION_DATABASE_USER,
+                    BACKUP_VERIFICATION_DATABASE_NAME);
+            verifyBackupVerificationApplicationLogs(verificationEnvironment);
+            runCommandWithEnvironment(
+                    "Backup verification application shutdown",
+                    verificationEnvironment,
+                    backupVerificationApplicationStopCommand());
+
+            String sourceFingerprint = databaseFingerprint(
+                    BACKUP_VERIFICATION_DATABASE_SERVICE_NAME,
+                    BACKUP_VERIFICATION_DATABASE_USER,
+                    BACKUP_VERIFICATION_DATABASE_NAME);
+            writeBackup(
+                    backupPath.toString(),
+                    "Backup verification PostgreSQL backup",
+                    verificationEnvironment,
+                    composeBackupCommand(
+                            BACKUP_VERIFICATION_DATABASE_SERVICE_NAME,
+                            BACKUP_VERIFICATION_DATABASE_USER,
+                            BACKUP_VERIFICATION_DATABASE_NAME));
+
             runCommand(
                     "Restore verification database startup",
-                    "docker",
-                    "compose",
-                    "--profile",
-                    RESTORE_VERIFICATION_PROFILE,
-                    "up",
-                    "-d",
-                    "--force-recreate",
-                    RESTORE_VERIFICATION_DATABASE_SERVICE_NAME);
+                    restoreVerificationDatabaseStartupCommand());
             waitForComposeDatabase(
                     RESTORE_VERIFICATION_DATABASE_SERVICE_NAME,
                     RESTORE_VERIFICATION_DATABASE_USER,
@@ -213,12 +204,113 @@ final class CalendarToolPostgresql extends CalendarToolProcessRunner {
         } finally {
             try {
                 if (startupAttempted) {
-                    cleanUpRestoreVerificationDatabase(primaryFailure);
+                    cleanUpBackupRestoreVerificationServices(primaryFailure, verificationEnvironment);
                 }
             } finally {
                 Files.deleteIfExists(backupPath);
             }
         }
+    }
+
+    static BackupVerificationEndpoints backupVerificationEndpoints(Map<String, String> environment) {
+        String applicationPort = CalendarToolVerification.environmentPortValue(
+                environment,
+                BACKUP_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE,
+                DEFAULT_BACKUP_VERIFICATION_APPLICATION_PORT);
+        return new BackupVerificationEndpoints(
+                applicationPort,
+                URI.create("http://localhost:" + applicationPort + "/health"));
+    }
+
+    record BackupVerificationEndpoints(String applicationPort, URI healthUri) {}
+
+    static String[] backupVerificationSourceStartupCommand() {
+        return new String[] {
+            "docker",
+            "compose",
+            "--profile",
+            BACKUP_VERIFICATION_PROFILE,
+            "up",
+            "-d",
+            "--force-recreate",
+            "--no-build",
+            BACKUP_VERIFICATION_DATABASE_SERVICE_NAME,
+            BACKUP_VERIFICATION_APPLICATION_SERVICE_NAME
+        };
+    }
+
+    static String[] backupVerificationApplicationStopCommand() {
+        return new String[] {
+            "docker",
+            "compose",
+            "--profile",
+            BACKUP_VERIFICATION_PROFILE,
+            "stop",
+            BACKUP_VERIFICATION_APPLICATION_SERVICE_NAME
+        };
+    }
+
+    static String[] backupVerificationApplicationLogsCommand() {
+        return new String[] {
+            "docker",
+            "compose",
+            "--profile",
+            BACKUP_VERIFICATION_PROFILE,
+            "logs",
+            "--no-color",
+            BACKUP_VERIFICATION_APPLICATION_SERVICE_NAME
+        };
+    }
+
+    static String[] restoreVerificationDatabaseStartupCommand() {
+        return new String[] {
+            "docker",
+            "compose",
+            "--profile",
+            RESTORE_VERIFICATION_PROFILE,
+            "up",
+            "-d",
+            "--force-recreate",
+            RESTORE_VERIFICATION_DATABASE_SERVICE_NAME
+        };
+    }
+
+    static String[] backupRestoreCleanupCommand() {
+        return new String[] {
+            "docker",
+            "compose",
+            "--profile",
+            BACKUP_VERIFICATION_PROFILE,
+            "--profile",
+            RESTORE_VERIFICATION_PROFILE,
+            "rm",
+            "--force",
+            "--stop",
+            BACKUP_VERIFICATION_APPLICATION_SERVICE_NAME,
+            BACKUP_VERIFICATION_DATABASE_SERVICE_NAME,
+            RESTORE_VERIFICATION_DATABASE_SERVICE_NAME
+        };
+    }
+
+    static String[] composeBackupCommand(
+            String databaseServiceName,
+            String databaseUser,
+            String databaseName) {
+        return new String[] {
+            "docker",
+            "compose",
+            "exec",
+            "-T",
+            databaseServiceName,
+            "pg_dump",
+            "--username",
+            databaseUser,
+            "--dbname",
+            databaseName,
+            "--format=custom",
+            "--no-owner",
+            "--no-privileges"
+        };
     }
 
     static void checkDatabaseSchema() throws IOException, InterruptedException {
@@ -333,6 +425,37 @@ final class CalendarToolPostgresql extends CalendarToolProcessRunner {
 
     static String databaseUser() {
         return environmentValueOrDefault(POSTGRESQL_USER_ENVIRONMENT_VARIABLE, DEFAULT_DATABASE_USER);
+    }
+
+    private static Path writeBackup(
+            String configuredOutputPath,
+            String description,
+            Map<String, String> environment,
+            String... command) throws IOException, InterruptedException {
+        Path outputPath = configuredOutputPath == null
+                ? defaultBackupPath()
+                : projectRelativePath(configuredOutputPath);
+        Path parentDirectory = outputPath.getParent();
+        if (parentDirectory != null) {
+            Files.createDirectories(parentDirectory);
+        }
+        Path temporaryOutputPath = Files.createTempFile(
+                parentDirectory,
+                outputPath.getFileName().toString() + ".",
+                ".partial");
+
+        try {
+            runCommandToFile(description, temporaryOutputPath, environment, command);
+            if (Files.size(temporaryOutputPath) == 0) {
+                throw new IllegalStateException("PostgreSQL backup did not produce a non-empty archive.");
+            }
+            replaceBackupAtomically(temporaryOutputPath, outputPath);
+        } finally {
+            Files.deleteIfExists(temporaryOutputPath);
+        }
+
+        System.out.println("Backup written to " + outputPath + ".");
+        return outputPath;
     }
 
     private static void replaceBackupAtomically(Path temporaryOutputPath, Path outputPath) throws IOException {
@@ -565,20 +688,27 @@ final class CalendarToolPostgresql extends CalendarToolProcessRunner {
         return Integer.toString(port);
     }
 
-    private static void cleanUpRestoreVerificationDatabase(Throwable primaryFailure)
+    private static void verifyBackupVerificationApplicationLogs(Map<String, String> verificationEnvironment)
             throws IOException, InterruptedException {
+        CapturedCommandOutput applicationLogOutput = runCommandAndCaptureCombinedOutput(
+                verificationEnvironment,
+                backupVerificationApplicationLogsCommand());
+        if (applicationLogOutput.exitCode() != 0) {
+            throw new IllegalStateException(
+                    "Backup verification application log check failed with exit code "
+                            + applicationLogOutput.exitCode() + ".");
+        }
+        CalendarToolVerification.validateApplicationRuntimeLogs(applicationLogOutput.output());
+    }
+
+    private static void cleanUpBackupRestoreVerificationServices(
+            Throwable primaryFailure,
+            Map<String, String> verificationEnvironment) throws IOException, InterruptedException {
         try {
             runCommandWithEnvironment(
-                    "Restore verification database cleanup",
-                    Map.of(),
-                    "docker",
-                    "compose",
-                    "--profile",
-                    RESTORE_VERIFICATION_PROFILE,
-                    "rm",
-                    "--force",
-                    "--stop",
-                    RESTORE_VERIFICATION_DATABASE_SERVICE_NAME);
+                    "Backup and restore verification service cleanup",
+                    verificationEnvironment,
+                    backupRestoreCleanupCommand());
         } catch (IOException | InterruptedException | RuntimeException cleanupFailure) {
             if (primaryFailure == null) {
                 throw cleanupFailure;

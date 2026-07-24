@@ -415,7 +415,7 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
         waitForApplication(applicationHealthUri());
     }
 
-    private static void waitForApplication(URI healthUri) throws InterruptedException {
+    static void waitForApplication(URI healthUri) throws InterruptedException {
         waitForApplication(
                 healthUri,
                 APPLICATION_READY_TIMEOUT,

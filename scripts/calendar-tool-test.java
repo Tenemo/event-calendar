@@ -26,6 +26,9 @@ final class CalendarToolTest {
         run("propagates readiness interruption", CalendarToolTest::propagatesReadinessInterruption);
         run("constructs portable quality commands", CalendarToolTest::constructsQualityCommands);
         run("uses the Compose PostgreSQL image as one source", CalendarToolTest::usesComposePostgresqlImage);
+        run(
+                "constructs isolated backup verification commands",
+                CalendarToolTest::constructsBackupVerificationCommands);
         run("constructs isolated verification commands", CalendarToolTest::constructsVerificationCommands);
         run("rejects application runtime failures", CalendarToolTest::rejectsApplicationRuntimeFailures);
 
@@ -534,6 +537,117 @@ final class CalendarToolTest {
                 IllegalStateException.class,
                 () -> CalendarToolPostgresql.postgresqlClientImageReference(
                         "services:\n  application:\n    image: shared-calendar:local\n"));
+    }
+
+    private static void constructsBackupVerificationCommands() {
+        CalendarToolPostgresql.BackupVerificationEndpoints defaultEndpoints =
+                CalendarToolPostgresql.backupVerificationEndpoints(Map.of());
+        assertEquals("9083", defaultEndpoints.applicationPort(), "Default backup verification port");
+        assertEquals(
+                URI.create("http://localhost:9083/health"),
+                defaultEndpoints.healthUri(),
+                "Default backup verification health URL");
+
+        CalendarToolPostgresql.BackupVerificationEndpoints configuredEndpoints =
+                CalendarToolPostgresql.backupVerificationEndpoints(
+                        Map.of("BACKUP_VERIFICATION_APPLICATION_PORT", "19083"));
+        assertEquals("19083", configuredEndpoints.applicationPort(), "Configured backup verification port");
+        assertEquals(
+                URI.create("http://localhost:19083/health"),
+                configuredEndpoints.healthUri(),
+                "Configured backup verification health URL");
+        expectThrows(
+                IllegalArgumentException.class,
+                () -> CalendarToolPostgresql.backupVerificationEndpoints(
+                        Map.of("BACKUP_VERIFICATION_APPLICATION_PORT", "0")));
+
+        assertArrayEquals(
+                new String[] {
+                    "docker",
+                    "compose",
+                    "--profile",
+                    "backup-verification",
+                    "up",
+                    "-d",
+                    "--force-recreate",
+                    "--no-build",
+                    "postgres-backup-verification",
+                    "web-backup-verification"
+                },
+                CalendarToolPostgresql.backupVerificationSourceStartupCommand(),
+                "Backup verification source startup command");
+        assertArrayEquals(
+                new String[] {
+                    "docker",
+                    "compose",
+                    "--profile",
+                    "backup-verification",
+                    "stop",
+                    "web-backup-verification"
+                },
+                CalendarToolPostgresql.backupVerificationApplicationStopCommand(),
+                "Backup verification application stop command");
+        assertArrayEquals(
+                new String[] {
+                    "docker",
+                    "compose",
+                    "--profile",
+                    "backup-verification",
+                    "logs",
+                    "--no-color",
+                    "web-backup-verification"
+                },
+                CalendarToolPostgresql.backupVerificationApplicationLogsCommand(),
+                "Backup verification application logs command");
+        assertArrayEquals(
+                new String[] {
+                    "docker",
+                    "compose",
+                    "--profile",
+                    "restore-verification",
+                    "up",
+                    "-d",
+                    "--force-recreate",
+                    "postgres-restore-verification"
+                },
+                CalendarToolPostgresql.restoreVerificationDatabaseStartupCommand(),
+                "Restore verification database startup command");
+        assertArrayEquals(
+                new String[] {
+                    "docker",
+                    "compose",
+                    "--profile",
+                    "backup-verification",
+                    "--profile",
+                    "restore-verification",
+                    "rm",
+                    "--force",
+                    "--stop",
+                    "web-backup-verification",
+                    "postgres-backup-verification",
+                    "postgres-restore-verification"
+                },
+                CalendarToolPostgresql.backupRestoreCleanupCommand(),
+                "Backup and restore verification cleanup command");
+        assertArrayEquals(
+                new String[] {
+                    "docker",
+                    "compose",
+                    "exec",
+                    "-T",
+                    "database-service",
+                    "pg_dump",
+                    "--username",
+                    "database-user",
+                    "--dbname",
+                    "database-name",
+                    "--format=custom",
+                    "--no-owner",
+                    "--no-privileges"
+                },
+                CalendarToolPostgresql.composeBackupCommand(
+                        "database-service", "database-user", "database-name"),
+                "Compose backup command");
     }
 
     private static void constructsVerificationCommands() {

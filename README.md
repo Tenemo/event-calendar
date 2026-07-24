@@ -291,7 +291,7 @@ Choose a specific output path:
 mise run backup-postgres -- target/backups/calendar-before-upgrade.dump
 ```
 
-Verify the complete backup/restore path against a fresh tmpfs PostgreSQL service. The verifier compares row counts for every application table and Flyway history, then stops the temporary database:
+Verify the complete backup/restore path with the already-built production image. The verifier starts that image against a fresh tmpfs source database, waits for application health and the current Flyway schema, stops the application before dumping, restores into a second fresh tmpfs database, and compares row counts for every application table and Flyway history. It removes both isolated databases and the verification application afterward:
 
 ```bash
 mise run verify-backup-restore

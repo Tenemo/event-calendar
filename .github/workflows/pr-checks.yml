@@ -553,7 +553,7 @@ jobs:
     name: PostgreSQL backup and restore
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    needs: build
+    needs: production-image
 
     steps:
       - name: Check out repository
@@ -568,7 +568,20 @@ jobs:
           install_args: java
           cache: true
 
-      - name: Verify backup and restore
+      - name: Download exact production image
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: production-image-${{ github.sha }}
+          path: .build/production-image
+
+      - name: Load and verify exact production image
+        run: |
+          expected_image_id="$(tr -d '\r\n' < .build/production-image/image-id.txt)"
+          docker image load --input .build/production-image/shared-calendar-image.tar.gz
+          actual_image_id="$(docker image inspect --format '{{.Id}}' "$PRODUCTION_IMAGE_NAME")"
+          test "$actual_image_id" = "$expected_image_id"
+
+      - name: Initialize clean source database and verify backup and restore
         run: |
           set -euo pipefail
           mkdir -p .build/ci-diagnostics
