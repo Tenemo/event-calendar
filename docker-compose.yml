@@ -4,7 +4,7 @@ x-application-health-command: &application-health-command
 
 services:
   postgres:
-    image: postgres:17.10@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
+    image: postgres:18.4@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a
     environment:
       POSTGRES_DB: ${PGDATABASE:-calendar}
       POSTGRES_USER: ${PGUSER:-calendar}
@@ -53,7 +53,7 @@ services:
 
   postgres-restore-verification:
     profiles: [restore-verification]
-    image: postgres:17.10@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
+    image: postgres:18.4@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a
     environment:
       POSTGRES_DB: calendar_restore
       POSTGRES_USER: calendar_restore
@@ -68,7 +68,7 @@ services:
 
   postgres-backup-verification:
     profiles: [backup-verification]
-    image: postgres:17.10@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
+    image: postgres:18.4@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a
     environment:
       POSTGRES_DB: calendar_backup_verification
       POSTGRES_USER: calendar_backup_verification
@@ -110,7 +110,7 @@ services:
 
   postgres-bootstrap-verification:
     profiles: [bootstrap-verification]
-    image: postgres:17.10@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
+    image: postgres:18.4@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a
     environment:
       POSTGRES_DB: calendar_bootstrap_verification
       POSTGRES_USER: calendar_bootstrap_verification
@@ -127,7 +127,7 @@ services:
 
   postgres-e2e-verification:
     profiles: [e2e-verification]
-    image: postgres:17.10@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
+    image: postgres:18.4@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a
     environment:
       POSTGRES_DB: calendar_e2e_verification
       POSTGRES_USER: calendar_e2e_verification
