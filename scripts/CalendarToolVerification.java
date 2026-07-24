@@ -53,6 +53,10 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
             "E2E_VERIFICATION_BASE_URL";
     private static final String E2E_VERIFICATION_HEALTH_URL_ENVIRONMENT_VARIABLE =
             "E2E_VERIFICATION_HEALTH_URL";
+    private static final String E2E_MANAGED_RECOVERY_SCENARIOS_ENVIRONMENT_VARIABLE =
+            "E2E_MANAGED_RECOVERY_SCENARIOS";
+    private static final String LIGHTHOUSE_BASE_URL_ENVIRONMENT_VARIABLE =
+            "LIGHTHOUSE_BASE_URL";
     private static final String DEFAULT_BOOTSTRAP_VERIFICATION_APPLICATION_PORT = "9081";
     private static final String DEFAULT_BOOTSTRAP_VERIFICATION_HTTPS_PORT = "9444";
     private static final String DEFAULT_BOOTSTRAP_VERIFICATION_DATABASE_PORT = "55432";
@@ -114,10 +118,66 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
                 "e2e-cross-browser-smoke-" + browserName);
     }
 
+    static void verifyPreviewDeployment() throws IOException, InterruptedException {
+        installPlaywrightBrowsers();
+        runCommand("Preview deployment authentication", previewDeploymentMavenCommand());
+    }
+
+    static String[] previewDeploymentMavenCommand() {
+        return new String[] {
+            MAVEN_WRAPPER_COMMAND,
+            "-Ppreview-deployment-e2e",
+            "test-compile",
+            "failsafe:integration-test",
+            "failsafe:verify"
+        };
+    }
+
     static void runIsolatedEndToEndTest(String selectedTest, String diagnosticDirectoryName)
             throws IOException, InterruptedException {
         installPlaywrightBrowsers();
         verifySharedCalendarEndToEnd(selectedTest, diagnosticDirectoryName);
+    }
+
+    static void runLighthouse(boolean buildImage) throws IOException, InterruptedException {
+        runCommand("Node dependency installation", "npm", "ci", "--ignore-scripts");
+        if (buildImage) {
+            buildDockerImage();
+        }
+
+        E2eVerificationEndpoints endpoints = e2eVerificationEndpoints(System.getenv());
+        Map<String, String> verificationEnvironment = new HashMap<>();
+        verificationEnvironment.put(
+                E2E_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE,
+                endpoints.healthControlPort());
+        verificationEnvironment.put(
+                E2E_VERIFICATION_HTTPS_PORT_ENVIRONMENT_VARIABLE,
+                endpoints.httpsPort());
+        verificationEnvironment.put(
+                E2E_VERIFICATION_DATABASE_PORT_ENVIRONMENT_VARIABLE,
+                endpoints.databasePort());
+        verificationEnvironment.put(
+                E2E_VERIFICATION_BASE_URL_ENVIRONMENT_VARIABLE,
+                endpoints.applicationBaseUri().toString());
+        verificationEnvironment.put(
+                E2E_VERIFICATION_HEALTH_URL_ENVIRONMENT_VARIABLE,
+                endpoints.healthControlUri().toString());
+        verificationEnvironment.put(
+                LIGHTHOUSE_BASE_URL_ENVIRONMENT_VARIABLE,
+                "http://localhost:" + endpoints.healthControlPort());
+
+        runComposeVerification(new ComposeVerification(
+                "lighthouse",
+                "Lighthouse verification",
+                "Mobile Lighthouse measurements",
+                E2E_VERIFICATION_PROFILE,
+                E2E_VERIFICATION_APPLICATION_SERVICE_NAME,
+                E2E_VERIFICATION_DATABASE_SERVICE_NAME,
+                endpoints.healthControlUri(),
+                verificationEnvironment,
+                E2E_VERIFICATION_DATABASE_USER,
+                E2E_VERIFICATION_DATABASE_NAME,
+                new String[] {"npm", "run", "lighthouse"}));
     }
 
     private static void runSharedEndToEndSelections() throws IOException, InterruptedException {
@@ -167,6 +227,7 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
                 CalendarToolPostgresql.POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE,
                 E2E_VERIFICATION_DATABASE_PASSWORD);
         verificationEnvironment.put(BROWSER_ENVIRONMENT_VARIABLE, configuredBrowserName());
+        verificationEnvironment.put(E2E_MANAGED_RECOVERY_SCENARIOS_ENVIRONMENT_VARIABLE, "true");
 
         runComposeVerification(new ComposeVerification(
                 diagnosticDirectoryName,

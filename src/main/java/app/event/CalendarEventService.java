@@ -27,6 +27,7 @@ import java.util.Objects;
 public class CalendarEventService {
     private static final int MAXIMUM_EVENT_TITLE_LENGTH = 200;
     private static final int MAXIMUM_EVENT_LOCATION_LENGTH = 200;
+    private static final int MAXIMUM_EVENT_PAGE_SIZE = 100;
 
     @PersistenceContext(unitName = "calendarPersistenceUnit")
     private EntityManager entityManager;
@@ -43,14 +44,21 @@ public class CalendarEventService {
     @Inject
     private AuditService auditService;
 
-    public List<CalendarEvent> findPublicEvents(String calendarLinkToken) {
+    public CalendarEventPage findPublicEvents(
+            String calendarLinkToken,
+            int firstResult,
+            int pageSize) {
         Calendar calendar = calendarAccessService.requirePublicReadableCalendar(calendarLinkToken);
-        return findEvents(calendar.getId());
+        return findEvents(calendar.getId(), firstResult, pageSize);
     }
 
-    public List<CalendarEvent> findEventsForMember(ApplicationUser user, Long calendarId) {
+    public CalendarEventPage findEventsForMember(
+            ApplicationUser user,
+            Long calendarId,
+            int firstResult,
+            int pageSize) {
         calendarAccessService.requireCanEdit(user, calendarId);
-        return findEvents(calendarId);
+        return findEvents(calendarId, firstResult, pageSize);
     }
 
     public CalendarEvent createEvent(
@@ -198,15 +206,30 @@ public class CalendarEventService {
         }
     }
 
-    private List<CalendarEvent> findEvents(Long calendarId) {
-        return entityManager
+    private CalendarEventPage findEvents(Long calendarId, int firstResult, int pageSize) {
+        if (firstResult < 0) {
+            throw new IllegalArgumentException("The first event result must not be negative.");
+        }
+        if (pageSize < 1 || pageSize > MAXIMUM_EVENT_PAGE_SIZE) {
+            throw new IllegalArgumentException(
+                    "The event page size must be between 1 and " + MAXIMUM_EVENT_PAGE_SIZE + ".");
+        }
+
+        List<CalendarEvent> loadedEvents = entityManager
                 .createQuery(
                         "select calendarEvent from CalendarEvent calendarEvent "
                                 + "where calendarEvent.calendar.id = :calendarId "
-                                + "order by calendarEvent.startTime",
+                                + "order by calendarEvent.startTime, calendarEvent.id",
                         CalendarEvent.class)
                 .setParameter("calendarId", calendarId)
+                .setFirstResult(firstResult)
+                .setMaxResults(pageSize + 1)
                 .getResultList();
+        boolean hasMore = loadedEvents.size() > pageSize;
+        List<CalendarEvent> pageEvents = hasMore
+                ? loadedEvents.subList(0, pageSize)
+                : loadedEvents;
+        return new CalendarEventPage(pageEvents, hasMore);
     }
 
     private CalendarEvent requireEvent(Long eventId) {

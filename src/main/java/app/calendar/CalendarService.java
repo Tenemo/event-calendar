@@ -208,7 +208,11 @@ public class CalendarService {
 
     private Calendar requireActiveCalendar(Long calendarId, LockModeType lockMode) {
         Calendar calendar = entityManager.find(Calendar.class, calendarId, lockMode);
-        if (calendar == null || !calendar.isActive()) {
+        if (calendar == null) {
+            throw new NotFoundException("Calendar was not found.");
+        }
+        entityManager.refresh(calendar);
+        if (!calendar.isActive()) {
             throw new NotFoundException("Calendar was not found.");
         }
         return calendar;

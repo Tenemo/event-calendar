@@ -47,6 +47,10 @@ run = [
     "mise exec -- shellcheck mvnw",
 ]
 
+[tasks.lighthouse]
+description = "Measure mobile Lighthouse scores against the production image"
+run = "mise exec -- java scripts/calendar-tool.java lighthouse"
+
 [tasks.verify-reproducible-build]
 description = "Verify that repeated WAR builds are identical"
 run = "mise exec -- java scripts/calendar-tool.java verify-reproducible-build"

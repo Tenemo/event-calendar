@@ -24,6 +24,7 @@ Shared calendar is a server-rendered web application for event calendars shared 
 - Calendars are public by default through compact, random bearer links.
 - Calendar links with public access are read-only and marked `noindex, nofollow`.
 - Events support titles, locations, descriptions, inclusive all-day date ranges, and timed date ranges. All-day dates are normalized in the calendar's IANA time zone instead of assuming every day is 24 hours.
+- Calendar pages load events in deterministic 50-event pages so a large calendar cannot create an unbounded database result or response; **Load more events** retrieves the next page.
 - Recurrence, notifications, email delivery, ICS import/export, and native mobile apps are outside the current scope.
 
 ## Local development
@@ -101,6 +102,14 @@ Run only the isolated bootstrap-registration verification with:
 mise run verify-bootstrap-registration
 ```
 
+Run the same mobile Lighthouse gate used by pull requests with:
+
+```bash
+mise run lighthouse
+```
+
+The gate measures the anonymous home and sign-in pages three times with Lighthouse's mobile defaults and requires every run to score at least 95 for performance, accessibility, best practices, and SEO. It applies the same threshold to first contentful paint, largest contentful paint, speed index, total blocking time, and cumulative layout shift. Reports are replaced on each run in `.build/lighthouse`; CI retains them as private build artifacts. The task uses the exact production container and a disposable database, so local development data is not touched.
+
 Production packaging, recovery, and deployment verification have separate checks:
 
 ```bash
@@ -111,7 +120,7 @@ java scripts/verify-production-deployment.java self-test
 
 The production deployment verifier has deterministic self-tests for argument validation, exact-revision matching, bounded polling, transient network failures, mid-pass deployment changes, direct authentication redirects, secure cookie attributes, and exact response-header contracts. Running the verifier against a service is read-only.
 
-Pull requests run Java static analysis, CSS linting, the Maven build and reproducibility check, the full PostgreSQL-backed Chromium suite, focused Firefox and WebKit smoke journeys, bootstrap-concurrency verification, the exact production image smoke test, image SBOM generation and vulnerability scan, backup/restore verification, Dependency Review, and CodeQL. A separate daily and manually dispatchable workflow rebuilds the current default-branch production image, regenerates its SBOM, and blocks on high or critical vulnerabilities so newly disclosed issues are detected between pull requests.
+Pull requests run Java static analysis, CSS linting, the Maven build and reproducibility check, the full PostgreSQL-backed Chromium suite, focused Firefox and WebKit smoke journeys, bootstrap-concurrency verification, the exact production image smoke test, the mobile Lighthouse 95 gate, image SBOM generation and vulnerability scan, backup/restore verification, Dependency Review, and CodeQL. A separate daily and manually dispatchable workflow rebuilds the current default-branch production image, regenerates its SBOM, and blocks on high or critical vulnerabilities so newly disclosed issues are detected between pull requests.
 
 In GitHub's repository ruleset, require the stable `Required PR checks` and `Code analysis` status checks before merging. Also enable GitHub's native automatic Maven dependency submission. Dependency updates are intentionally initiated and reviewed manually; do not enable automated dependency-update bots.
 
@@ -173,7 +182,7 @@ Use one Railway project with a PostgreSQL service named `Postgres` and a web ser
 7. Add `calendar.social` to the web service. In Namecheap Advanced DNS, create the ownership-verification `TXT` record exactly as Railway reports it and an `ALIAS` record with host `@` pointing to Railway's domain target. Remove conflicting `A`, `AAAA`, `CNAME`, `ALIAS`, or redirect records for `@` first.
 8. Wait for Railway to report the domain and certificate as active, then perform the production checks below.
 
-Connect the production web service to `Tenemo/event-calendar` with `master` as its deployment branch. Railway automatically deploys every new commit pushed or merged to `master`. Keep PR environments disabled until isolated preview deployments are intentionally introduced. The protected branch and its GitHub Actions checks gate merges; Railway's optional **Wait for CI** setting can additionally delay each post-merge deployment until the workflows triggered by that `master` push finish.
+Connect the production web service to `Tenemo/event-calendar` with `master` as its deployment branch. Railway automatically deploys every new commit pushed or merged to `master`. The protected branch and its GitHub Actions checks gate merges; Railway's optional **Wait for CI** setting can additionally delay each post-merge deployment until the workflows triggered by that `master` push finish.
 
 PostgreSQL service variables:
 
@@ -215,9 +224,32 @@ GitHub runs the same verifier for a successful Railway `production` deployment s
 
 The command accepts HTTPS origins without credentials, paths, query parameters, or fragments; plain HTTP is limited to literal loopback hosts for local verification. It waits only within the configured deadline for `/health` to prove both database availability and the exact deployment revision. It then verifies stable home and sign-in page markers, secure emitted cookies and exact session-cookie attributes without retaining cookie values, the exact origin-relative `/login` redirect for an anonymous protected request, the committed response-security headers and dynamic no-store policies, and the rejected legacy calendar route. Resolving that relative redirect at the required production HTTPS origin keeps authentication on HTTPS without trusting a proxy-supplied host or scheme. A final health and revision check prevents a deployment change during the smoke pass from being accepted. The verifier does not follow redirects, store cookies, mutate production data, or print response bodies, cookie values, redirect targets, or unvalidated option values.
 
+### PR preview environments
+
+Railway PR environments clone the configured `preview-base` environment. Keep focused PR environments and bot PR environments disabled unless their broader deployment scope is intentional. The committed `railway.json` applies to every clone; enabling and selecting the base environment remain Railway project settings rather than repository settings.
+
+Every non-production Railway environment emits `X-Robots-Tag: noindex, nofollow` on every application response. The preview verification workflow runs after Railway reports a successful `event-calendar-pr-<number>` deployment. It resolves the public service URL only from the authenticated Railway GitHub App's bot comment, verifies the exact deployed commit with the read-only production verifier, then registers or signs in as `preview-pr-<number>` and proves that the protected calendar page and Secure, HTTP-only, SameSite `Lax` cookies work through Railway's proxy. The workflow deliberately checks out verifier code from the default branch before making secrets available, so code from the pull request cannot read them.
+
+Create these GitHub Actions repository secrets before requiring the preview check:
+
+```text
+PREVIEW_BOOTSTRAP_INVITE_TOKEN=<the APP_BOOTSTRAP_INVITE_TOKEN value inherited from preview-base>
+PREVIEW_VERIFICATION_PASSWORD=<a saved high-entropy password that follows the application password policy>
+```
+
+Each cloned database can consume the inherited bootstrap token independently. The stable per-PR account survives ordinary redeployments because its database belongs to the PR environment. If someone consumed bootstrap registration in an existing preview before the verifier created its predictable account, recreate that PR environment once.
+
+For a quick sign-in reminder, use the authenticated GitHub CLI to resolve the current Railway URL and print the predictable username:
+
+```bash
+node scripts/preview-login.mjs 19
+```
+
+Use the saved `PREVIEW_VERIFICATION_PASSWORD`; the helper never reads or prints it. Closing the pull request lets Railway remove its environment and database.
+
 After the automated check passes, verify registration, login, password change, calendar links, invitations, role changes, and event persistence through the normal manual release checklist. Redeploy, confirm that accounts and calendar data persist, then sign in again because HTTP sessions are intentionally in memory. Inspect logs to confirm that passwords, database credentials, calendar link tokens, and invitation tokens are absent. Railway's deployment health check is not continuous monitoring, so configure an external HTTPS uptime check for `https://calendar.social/health` before relying on the service.
 
-Railway protects its network below the application layer, but it does not provide an application-layer WAF. The application rejects malformed calendar paths before database access, limits each client source to 300 valid-looking calendar-link requests per minute, permits at most 16 such requests to execute concurrently, and bounds source tracking to 10,000 entries. Both calendar-link and login throttles use Railway's documented `X-Real-IP` address only when Railway's automatically provided `RAILWAY_ENVIRONMENT_ID` marks the deployment and the immediate peer is in Railway's `100.0.0.0/8` proxy range; elsewhere they ignore that header and use the direct TCP peer. IPv4 clients are tracked by address, while IPv6 clients are grouped by their `/64` network prefix so rotating interface identifiers cannot bypass the limits. Missing, malformed, ambiguous, or untrusted client-address headers fall back to the peer-derived source. These controls make online token iteration impractical from one source and shed excess application work without disrupting a busy shared network; they cannot absorb a volumetric or large distributed attack before traffic reaches Railway. For stronger public-internet protection, proxy `calendar.social` through a service such as Cloudflare with application-layer rate limiting and bot/WAF rules, then remove Railway's generated public domain so it cannot bypass that edge. Netlify is not required.
+Railway protects its network below the application layer, but it does not provide an application-layer WAF. The application rejects malformed calendar paths before database access, limits each client source to 300 valid-looking calendar-link requests per minute, permits at most 16 such requests to execute concurrently, and bounds source tracking to 10,000 entries. Both calendar-link and login throttles use Railway's documented `X-Real-IP` address only when Railway's automatically provided `RAILWAY_ENVIRONMENT_ID` marks the deployment and the immediate peer is in Railway's shared `100.64.0.0/10` private range; elsewhere they ignore that header and use the direct TCP peer. Liberty likewise accepts the Railway-specific HTTPS indicator only through that private proxy boundary, which lets it issue its SSL-only authentication cookie while keeping the public proxy hop encrypted. IPv4 clients are tracked by address, while IPv6 clients are grouped by their `/64` network prefix so rotating interface identifiers cannot bypass the limits. Missing, malformed, ambiguous, or untrusted client-address headers fall back to the peer-derived source. These controls make online token iteration impractical from one source and shed excess application work without disrupting a busy shared network; they cannot absorb a volumetric or large distributed attack before traffic reaches Railway. For stronger public-internet protection, proxy `calendar.social` through a service such as Cloudflare with application-layer rate limiting and bot/WAF rules, then remove Railway's generated public domain so it cannot bypass that edge. Netlify is not required.
 
 ## Registration
 
@@ -233,7 +265,7 @@ Passwords must be between 8 and 512 characters, contain at least one uppercase l
 
 Five failed sign-in attempts for one normalized username from one client source within 15 minutes block that username/source pair for 15 minutes. Twenty-five failures from one source in the same window block further attempts from that source for 15 minutes, which limits username spraying without letting one remote client lock the account for other sources. Missing and existing usernames follow the same policy and return the same generic failure. Tracking is bounded; if every slot is occupied by an active block, authentication enters a 15-minute fail-closed saturation cooldown instead of allowing untracked attempts.
 
-Anonymous Faces views, including sign-in, receive browser-session cookies and expire on the server after 30 minutes of inactivity. Only successful authentication extends a server session to 30 days and allows the application to issue an unconditionally Secure, HTTP-only, SameSite `Lax` persistent cookie. Liberty also restricts its HTTP-only, SameSite `Lax` authentication cookie to secure requests and rejects SSO tokens after logout on the running instance. Authenticated application and calendar requests refresh both the cookie and the 30-day inactivity window. A server restart or redeploy clears in-memory sessions and requires reauthentication; submitting a sign-in form that was open before the restart returns the browser to a fresh sign-in form. The stable `APP_LTPA_KEYS_PASSWORD` lets Liberty reopen its generated signing-key file, while accounts and calendar data remain in PostgreSQL.
+Anonymous Faces views, including sign-in, receive browser-session cookies and expire on the server after 30 minutes of inactivity. An anonymous canonical calendar response invalidates any temporary server-side Faces session after rendering, preventing public bearer-link traffic from accumulating view state. Only successful authentication extends a server session to 30 days and allows the application to issue an unconditionally Secure, HTTP-only, SameSite `Lax` persistent cookie. Liberty also restricts its HTTP-only, SameSite `Lax` authentication cookie to secure requests and rejects SSO tokens after logout on the running instance. Authenticated application and calendar requests refresh both the cookie and the 30-day inactivity window. A server restart or redeploy clears in-memory sessions and requires reauthentication; submitting a sign-in form that was open before the restart returns the browser to a fresh sign-in form. The stable `APP_LTPA_KEYS_PASSWORD` lets Liberty reopen its generated signing-key file, while accounts and calendar data remain in PostgreSQL.
 
 ## Password changes
 

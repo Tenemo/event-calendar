@@ -7,6 +7,8 @@
 <h:head>
     <title><ui:insert name="title">Shared calendar</ui:insert></title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="description"
+          content="Create and share practical event calendars with friends, clubs, and groups."/>
     <link rel="icon" type="image/svg+xml" sizes="any" href="#{resource['images/favicon.svg']}"/>
     <ui:insert name="head"/>
     <h:outputStylesheet library="css" name="app.css"/>
@@ -31,7 +33,9 @@
     </header>
 
     <main id="main-content" class="app-main" tabindex="-1">
-        <p:messages id="messages" showDetail="true" closable="true"/>
+        <ui:insert name="messages">
+            <p:messages id="messages" showDetail="true" closable="true"/>
+        </ui:insert>
         <ui:insert name="content"/>
     </main>
     <script type="text/javascript">

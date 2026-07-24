@@ -48,10 +48,12 @@ final class CalendarToolTest {
                 "static-analysis",
                 "verify-reproducible-build",
                 "lint-css",
+                "lighthouse",
                 "e2e",
                 "e2e-shared",
                 "e2e-cross-browser-smoke",
                 "e2e-calendar-link-throttle",
+                "verify-preview-deployment",
                 "wait-for-app",
                 "verify-local",
                 "docker-build",
@@ -66,6 +68,10 @@ final class CalendarToolTest {
         CalendarTool.ToolInvocation bootstrap = CalendarTool.parseInvocation(
                 new String[] {"verify-bootstrap-registration", "--reuse-image"});
         assertEquals(List.of("--reuse-image"), bootstrap.arguments(), "Bootstrap reuse option");
+
+        CalendarTool.ToolInvocation lighthouse = CalendarTool.parseInvocation(
+                new String[] {"lighthouse", "--reuse-image"});
+        assertEquals(List.of("--reuse-image"), lighthouse.arguments(), "Lighthouse reuse option");
 
         CalendarTool.ToolInvocation backup = CalendarTool.parseInvocation(
                 new String[] {"backup-postgres", ".build/backups/with spaces.dump"});
@@ -101,6 +107,9 @@ final class CalendarToolTest {
                 CalendarTool.UsageException.class,
                 () -> CalendarTool.parseInvocation(
                         new String[] {"verify-bootstrap-registration", "--skip-build"}));
+        expectThrows(
+                CalendarTool.UsageException.class,
+                () -> CalendarTool.parseInvocation(new String[] {"lighthouse", "--skip-build"}));
         expectThrows(
                 CalendarTool.UsageException.class,
                 () -> CalendarTool.parseInvocation(new String[] {"restore-postgres", "backup.dump"}));
@@ -190,6 +199,15 @@ final class CalendarToolTest {
                 new String[] {"shellcheck", "--version"},
                 toolChecks.get(9).command(),
                 "ShellCheck check");
+
+        assertArrayEquals(
+                new String[] {"node", "scripts/railway-preview-url-test.mjs"},
+                CalendarTool.railwayPreviewUrlTestCommand(),
+                "Railway preview URL contract test command");
+        assertArrayEquals(
+                new String[] {"node", "scripts/lighthouse-browser-test.mjs"},
+                CalendarTool.lighthouseBrowserTestCommand(),
+                "Lighthouse browser lifecycle test command");
 
         String[] mutableCopy = toolChecks.get(7).command();
         mutableCopy[0] = "replaced";
@@ -693,6 +711,16 @@ final class CalendarToolTest {
                 },
                 CalendarToolVerification.endToEndMavenCommand("CalendarLinkRequestThrottleIT"),
                 "Isolated throttle command");
+        assertArrayEquals(
+                new String[] {
+                    "mvnw",
+                    "-Ppreview-deployment-e2e",
+                    "test-compile",
+                    "failsafe:integration-test",
+                    "failsafe:verify"
+                },
+                CalendarToolVerification.previewDeploymentMavenCommand(),
+                "Preview deployment authentication command");
         assertArrayEquals(
                 new String[] {
                     "docker",

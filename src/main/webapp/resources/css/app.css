@@ -138,6 +138,8 @@ a {
 a:focus-visible,
 .link-button:focus-visible,
 .button-link:focus-visible,
+body input.native-button:focus-visible,
+body input.native-input:focus-visible,
 body .ui-button:focus-visible,
 body .ui-button.ui-state-focus,
 body .ui-inputfield.ui-state-focus,
@@ -595,6 +597,56 @@ button,
 
 .form-panel {
     max-width: 100%;
+}
+
+.lightweight-panel {
+    padding: 1.25rem;
+}
+
+body input.native-input {
+    width: 100%;
+    min-width: 0;
+    min-height: 2.5rem;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--control-border);
+    border-radius: var(--control-radius);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+}
+
+body input.native-input:hover,
+body input.native-input:focus {
+    border-color: var(--primary);
+}
+
+body input.native-button {
+    min-height: 2.7rem;
+    padding: 0.7rem 1rem;
+    border: 1px solid var(--primary);
+    border-radius: var(--control-radius);
+    background: var(--primary);
+    color: #fff;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
+}
+
+body input.native-button:hover,
+body input.native-button:active {
+    border-color: var(--primary-strong);
+    background: var(--primary-strong);
+}
+
+.lightweight-messages {
+    margin: 0 0 1rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--danger);
+    border-radius: var(--control-radius);
+    background: #fef2f2;
+    color: var(--danger);
+    line-height: 1.5;
+    list-style: none;
 }
 
 .form-grid {

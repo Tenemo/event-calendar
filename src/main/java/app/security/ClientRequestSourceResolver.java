@@ -16,7 +16,9 @@ public class ClientRequestSourceResolver {
     private static final String RAILWAY_REAL_IP_HEADER = "X-Real-IP";
     private static final String UNKNOWN_SOURCE = "<unknown-source>";
     private static final int MAXIMUM_REAL_IP_HEADER_LENGTH = 64;
-    private static final String RAILWAY_INGRESS_ADDRESS_PREFIX = "100.";
+    private static final int RAILWAY_INGRESS_FIRST_ADDRESS_PART = 100;
+    private static final int RAILWAY_INGRESS_MINIMUM_SECOND_ADDRESS_PART = 64;
+    private static final int RAILWAY_INGRESS_MAXIMUM_SECOND_ADDRESS_PART = 127;
 
     private final boolean railwayEnvironment;
 
@@ -34,7 +36,7 @@ public class ClientRequestSourceResolver {
         }
 
         String connectedSource = normalizeAddress(request.getRemoteAddr()).orElse(UNKNOWN_SOURCE);
-        if (!railwayEnvironment || !connectedSource.startsWith(RAILWAY_INGRESS_ADDRESS_PREFIX)) {
+        if (!railwayEnvironment || !isRailwayIngressAddress(connectedSource)) {
             return connectedSource;
         }
 
@@ -50,6 +52,18 @@ public class ClientRequestSourceResolver {
         }
 
         return normalizeAddress(realIpHeader).orElse(connectedSource);
+    }
+
+    private boolean isRailwayIngressAddress(String address) {
+        String[] addressParts = address.split("\\.", -1);
+        if (addressParts.length != 4) {
+            return false;
+        }
+        int firstAddressPart = Integer.parseInt(addressParts[0]);
+        int secondAddressPart = Integer.parseInt(addressParts[1]);
+        return firstAddressPart == RAILWAY_INGRESS_FIRST_ADDRESS_PART
+                && secondAddressPart >= RAILWAY_INGRESS_MINIMUM_SECOND_ADDRESS_PART
+                && secondAddressPart <= RAILWAY_INGRESS_MAXIMUM_SECOND_ADDRESS_PART;
     }
 
     private Optional<String> normalizeAddress(String address) {

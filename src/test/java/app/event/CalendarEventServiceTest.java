@@ -245,19 +245,52 @@ final class CalendarEventServiceTest {
 
     @Test
     void memberQueriesStayCalendarScopedAndOrderedByStartTime() {
+        CalendarEvent firstEvent = new CalendarEvent();
+        CalendarEvent secondEvent = new CalendarEvent();
+        CalendarEvent extraEvent = new CalendarEvent();
         EntityManagerStub entityManagerStub = entityManagerStub().resultList(
                 "where calendarEvent.calendar.id = :calendarId "
-                        + "order by calendarEvent.startTime",
-                List.of());
+                        + "order by calendarEvent.startTime, calendarEvent.id",
+                List.of(firstEvent, secondEvent, extraEvent));
         CalendarEventService eventService = new CalendarEventService();
         setField(eventService, "entityManager", entityManagerStub.entityManager());
         setField(eventService, "calendarAccessService", new AllowingAccessService());
 
-        List<CalendarEvent> events = eventService.findEventsForMember(
+        CalendarEventPage eventPage = eventService.findEventsForMember(
                 activeUser(100L),
-                200L);
+                200L,
+                25,
+                2);
 
-        assertEquals(List.of(), events);
+        assertAll(
+                () -> assertEquals(List.of(firstEvent, secondEvent), eventPage.events()),
+                () -> assertEquals(true, eventPage.hasMore()),
+                () -> assertEquals(
+                        List.of(new app.testsupport.ServiceTestSupport.QueryPagination(
+                                "select calendarEvent from CalendarEvent calendarEvent "
+                                        + "where calendarEvent.calendar.id = :calendarId "
+                                        + "order by calendarEvent.startTime, calendarEvent.id",
+                                25,
+                                3)),
+                        entityManagerStub.queryPaginations()));
+    }
+
+    @Test
+    void rejectsUnboundedOrInvalidEventPageRequests() {
+        CalendarEventService eventService = new CalendarEventService();
+        setField(eventService, "entityManager", entityManagerStub().entityManager());
+        setField(eventService, "calendarAccessService", new AllowingAccessService());
+
+        assertAll(
+                () -> assertThrows(
+                        IllegalArgumentException.class,
+                        () -> eventService.findEventsForMember(activeUser(100L), 200L, -1, 50)),
+                () -> assertThrows(
+                        IllegalArgumentException.class,
+                        () -> eventService.findEventsForMember(activeUser(100L), 200L, 0, 0)),
+                () -> assertThrows(
+                        IllegalArgumentException.class,
+                        () -> eventService.findEventsForMember(activeUser(100L), 200L, 0, 101)));
     }
 
     @Test

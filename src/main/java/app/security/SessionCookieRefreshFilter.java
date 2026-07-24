@@ -14,6 +14,7 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpServletResponseWrapper;
+import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.security.Principal;
@@ -54,6 +55,7 @@ public class SessionCookieRefreshFilter implements Filter {
             if (clearStaleAuthenticatedSession(request, response)) {
                 if (isReadOnlyCanonicalCalendarRequest(request)) {
                     filterChain.doFilter(servletRequest, servletResponse);
+                    discardAnonymousCanonicalCalendarSession(request);
                 } else {
                     RelativeRedirect.send(
                             request,
@@ -66,12 +68,26 @@ public class SessionCookieRefreshFilter implements Filter {
             SessionCookieRefreshResponse responseWrapper =
                     new SessionCookieRefreshResponse(request, response);
             filterChain.doFilter(servletRequest, responseWrapper);
+            discardAnonymousCanonicalCalendarSession(request);
             if (!responseWrapper.isCommitted()) {
                 responseWrapper.refreshSessionCookie();
             }
             return;
         }
         filterChain.doFilter(servletRequest, servletResponse);
+    }
+
+    private void discardAnonymousCanonicalCalendarSession(HttpServletRequest request) {
+        if (!isReadOnlyCanonicalCalendarRequest(request)
+                || request.getUserPrincipal() != null
+                || currentUser.isSignedIn()) {
+            return;
+        }
+
+        HttpSession anonymousSession = request.getSession(false);
+        if (anonymousSession != null) {
+            anonymousSession.invalidate();
+        }
     }
 
     private boolean clearStaleAuthenticatedSession(

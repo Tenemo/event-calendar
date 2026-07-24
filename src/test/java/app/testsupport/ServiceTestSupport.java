@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 public final class ServiceTestSupport {
     private ServiceTestSupport() {
@@ -50,6 +51,7 @@ public final class ServiceTestSupport {
         private final EntityManager entityManager;
         private final Map<FindKey, Object> findResults = new HashMap<>();
         private final List<FindLock> findLocks = new ArrayList<>();
+        private final List<Object> refreshedObjects = new ArrayList<>();
         private final List<String> lockedQueryTexts = new ArrayList<>();
         private final List<String> maximumResultLimitedQueryTexts = new ArrayList<>();
         private final List<QueryPagination> queryPaginations = new ArrayList<>();
@@ -57,6 +59,7 @@ public final class ServiceTestSupport {
         private final List<Object> removedObjects = new ArrayList<>();
         private final Map<String, QueryBehavior> queryBehaviors = new LinkedHashMap<>();
         private RuntimeException flushException;
+        private Consumer<Object> refreshOperation = ignored -> { };
         private long nextGeneratedId = 1L;
         private int flushCount;
 
@@ -77,6 +80,10 @@ public final class ServiceTestSupport {
 
         public List<FindLock> findLocks() {
             return findLocks;
+        }
+
+        public List<Object> refreshedObjects() {
+            return refreshedObjects;
         }
 
         public List<String> lockedQueryTexts() {
@@ -124,6 +131,11 @@ public final class ServiceTestSupport {
             return this;
         }
 
+        public EntityManagerStub whenRefreshed(Consumer<Object> operation) {
+            refreshOperation = Objects.requireNonNull(operation);
+            return this;
+        }
+
         private Object invokeEntityManager(Object proxy, Method method, Object[] arguments) {
             String methodName = method.getName();
             if (method.getDeclaringClass() == Object.class) {
@@ -137,6 +149,11 @@ public final class ServiceTestSupport {
             }
             if (methodName.equals("persist")) {
                 persistedObjects.add(arguments[0]);
+                return null;
+            }
+            if (methodName.equals("refresh")) {
+                refreshedObjects.add(arguments[0]);
+                refreshOperation.accept(arguments[0]);
                 return null;
             }
             if (methodName.equals("remove")) {

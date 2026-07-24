@@ -129,7 +129,9 @@ final class CalendarServiceTest {
         ApplicationUser creator = activeUser(42L);
         Calendar calendar = activeCalendar(80L, creator);
         EntityManagerStub entityManagerStub = entityManagerStub()
-                .find(Calendar.class, calendar.getId(), calendar);
+                .find(Calendar.class, calendar.getId(), calendar)
+                .whenRefreshed(refreshedEntity ->
+                        ((Calendar) refreshedEntity).setTimeZone("Pacific/Honolulu"));
         CalendarService calendarService = new CalendarService();
         setField(calendarService, "entityManager", entityManagerStub.entityManager());
 
@@ -137,6 +139,8 @@ final class CalendarServiceTest {
 
         assertAll(
                 () -> assertEquals(calendar, loadedCalendar),
+                () -> assertEquals("Pacific/Honolulu", loadedCalendar.getTimeZone()),
+                () -> assertEquals(List.of(calendar), entityManagerStub.refreshedObjects()),
                 () -> assertEquals(
                         List.of(new FindLock(
                                 Calendar.class,

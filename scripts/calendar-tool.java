@@ -46,6 +46,11 @@ final class CalendarTool extends CalendarToolProcessRunner {
             case "static-analysis" -> runStaticAnalysis();
             case "verify-reproducible-build" -> verifyReproducibleBuild();
             case "lint-css" -> lintCss();
+            case "lighthouse" -> {
+                boolean reuseImage = invocation.arguments().contains("--reuse-image");
+                CalendarToolVerification.runLighthouse(!reuseImage);
+            }
+            case "verify-preview-deployment" -> CalendarToolVerification.verifyPreviewDeployment();
             case "e2e" -> CalendarToolVerification.runEndToEndTests();
             case "e2e-shared" -> CalendarToolVerification.runSharedEndToEndTests();
             case "e2e-cross-browser-smoke" -> CalendarToolVerification.runCrossBrowserSmokeEndToEndTests();
@@ -84,11 +89,16 @@ final class CalendarTool extends CalendarToolProcessRunner {
             case "help", "--help", "setup", "db", "dev", "package", "tooling-self-test", "format",
                     "static-analysis", "verify-reproducible-build", "lint-css", "e2e", "e2e-shared",
                     "e2e-cross-browser-smoke", "e2e-calendar-link-throttle", "wait-for-app", "verify-local",
-                    "docker-build", "image-scan", "docker-up", "verify-backup-restore" -> {
+                    "verify-preview-deployment", "docker-build", "image-scan", "docker-up",
+                    "verify-backup-restore" -> {
                 minimumArgumentCount = 0;
                 maximumArgumentCount = 0;
             }
             case "verify-bootstrap-registration" -> {
+                minimumArgumentCount = 0;
+                maximumArgumentCount = 1;
+            }
+            case "lighthouse" -> {
                 minimumArgumentCount = 0;
                 maximumArgumentCount = 1;
             }
@@ -108,6 +118,11 @@ final class CalendarTool extends CalendarToolProcessRunner {
             throw new UsageException("Invalid arguments for command '" + command + "'.");
         }
         if (command.equals("verify-bootstrap-registration")
+                && suppliedArgumentCount == 1
+                && !arguments[1].equals("--reuse-image")) {
+            throw new UsageException("Invalid arguments for command '" + command + "'.");
+        }
+        if (command.equals("lighthouse")
                 && suppliedArgumentCount == 1
                 && !arguments[1].equals("--reuse-image")) {
             throw new UsageException("Invalid arguments for command '" + command + "'.");
@@ -194,11 +209,21 @@ final class CalendarTool extends CalendarToolProcessRunner {
                 "CalendarToolTest");
         runCommand("Calendar tool exact source-launch test", sourceLauncherHelpCommand());
         runCommand("Railway configuration contract test", railwayConfigurationTestCommand());
+        runCommand("Railway preview URL contract test", railwayPreviewUrlTestCommand());
+        runCommand("Lighthouse browser lifecycle test", lighthouseBrowserTestCommand());
         runCommand("Build toolchain configuration contract test", buildToolchainConfigurationTestCommand());
     }
 
     static String[] railwayConfigurationTestCommand() {
         return new String[] {"node", "scripts/railway-config-test.mjs"};
+    }
+
+    static String[] railwayPreviewUrlTestCommand() {
+        return new String[] {"node", "scripts/railway-preview-url-test.mjs"};
+    }
+
+    static String[] lighthouseBrowserTestCommand() {
+        return new String[] {"node", "scripts/lighthouse-browser-test.mjs"};
     }
 
     static String[] sourceLauncherHelpCommand() {
@@ -338,6 +363,7 @@ final class CalendarTool extends CalendarToolProcessRunner {
                 "Commands: help, setup, db, dev, package, tooling-self-test, format, static-analysis, "
                         + "verify-reproducible-build, lint-css, e2e, e2e-shared, e2e-cross-browser-smoke, "
                         + "e2e-calendar-link-throttle, verify-bootstrap-registration [--reuse-image], "
+                        + "lighthouse [--reuse-image], verify-preview-deployment, "
                         + "wait-for-app, verify-local, docker-build, image-scan, docker-up, "
                         + "backup-postgres [output-file], "
                         + "restore-postgres <backup-file> <confirmed-database-name>, verify-backup-restore");

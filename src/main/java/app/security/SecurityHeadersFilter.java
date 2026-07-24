@@ -14,12 +14,34 @@ import java.io.IOException;
 
 public final class SecurityHeadersFilter implements Filter {
     private static final String FACES_RESOURCE_PATH_PREFIX = "/jakarta.faces.resource/";
+    private static final String RAILWAY_ENVIRONMENT_ID_ENVIRONMENT_VARIABLE =
+            "RAILWAY_ENVIRONMENT_ID";
+    private static final String RAILWAY_ENVIRONMENT_NAME_ENVIRONMENT_VARIABLE =
+            "RAILWAY_ENVIRONMENT_NAME";
+    private static final String PRODUCTION_ENVIRONMENT_NAME = "production";
 
     static final String CONTENT_SECURITY_POLICY =
             "frame-ancestors 'none'; base-uri 'self'; object-src 'none'";
     static final String PERMISSIONS_POLICY =
             "camera=(), geolocation=(), microphone=(), payment=(), usb=()";
     static final String STRICT_TRANSPORT_SECURITY = "max-age=31536000";
+    static final String PREVIEW_ROBOTS_POLICY = "noindex, nofollow";
+
+    private final boolean preventSearchEngineIndexing;
+
+    public SecurityHeadersFilter() {
+        this(
+                System.getenv(RAILWAY_ENVIRONMENT_ID_ENVIRONMENT_VARIABLE),
+                System.getenv(RAILWAY_ENVIRONMENT_NAME_ENVIRONMENT_VARIABLE));
+    }
+
+    SecurityHeadersFilter(String railwayEnvironmentId, String railwayEnvironmentName) {
+        preventSearchEngineIndexing = railwayEnvironmentId != null
+                && !railwayEnvironmentId.isBlank()
+                && (railwayEnvironmentName == null
+                        || !PRODUCTION_ENVIRONMENT_NAME.equalsIgnoreCase(
+                                railwayEnvironmentName.trim()));
+    }
 
     @Override
     public void doFilter(
@@ -30,7 +52,8 @@ public final class SecurityHeadersFilter implements Filter {
             SecurityHeadersResponse securityHeadersResponse =
                     new SecurityHeadersResponse(
                             httpResponse,
-                            shouldPreventCaching(request));
+                            shouldPreventCaching(request),
+                            preventSearchEngineIndexing);
             securityHeadersResponse.applySecurityHeaders();
             ServletRequest downstreamRequest = request instanceof HttpServletRequest httpRequest
                     ? new SecureApplicationRequest(httpRequest)
@@ -76,12 +99,15 @@ public final class SecurityHeadersFilter implements Filter {
 
     private static final class SecurityHeadersResponse extends HttpServletResponseWrapper {
         private final boolean preventCaching;
+        private final boolean preventSearchEngineIndexing;
 
         private SecurityHeadersResponse(
                 HttpServletResponse response,
-                boolean preventCaching) {
+                boolean preventCaching,
+                boolean preventSearchEngineIndexing) {
             super(response);
             this.preventCaching = preventCaching;
+            this.preventSearchEngineIndexing = preventSearchEngineIndexing;
         }
 
         @Override
@@ -99,6 +125,9 @@ public final class SecurityHeadersFilter implements Filter {
             setHeaderWhenAbsent("Strict-Transport-Security", STRICT_TRANSPORT_SECURITY);
             if (preventCaching) {
                 setHeaderWhenAbsent("Cache-Control", "no-store");
+            }
+            if (preventSearchEngineIndexing) {
+                setHeaderWhenAbsent("X-Robots-Tag", PREVIEW_ROBOTS_POLICY);
             }
         }
 

@@ -14,10 +14,12 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 
 final class CalendarLinkRequestThrottleIT {
@@ -29,6 +31,7 @@ final class CalendarLinkRequestThrottleIT {
     private static final String RATE_LIMIT_RESPONSE_BODY =
             "Too many calendar link requests. Try again later.";
     private static final int MAXIMUM_REQUESTS_PER_SOURCE = 300;
+    private static final int REQUEST_BATCH_SIZE = 8;
     private static final int MAXIMUM_RETRY_AFTER_SECONDS = 60;
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
@@ -42,13 +45,18 @@ final class CalendarLinkRequestThrottleIT {
                 .build();
         URI applicationBaseUri = resolveApplicationBaseUri();
 
-        for (int requestNumber = 0;
-                requestNumber < MAXIMUM_REQUESTS_PER_SOURCE;
-                requestNumber++) {
-            HttpResponse<String> acceptedResponse = sendCanonicalRequest(
-                    httpClient,
-                    applicationBaseUri,
-                    calendarRequestToken(requestNumber));
+        List<HttpResponse<String>> acceptedResponses = new ArrayList<>(MAXIMUM_REQUESTS_PER_SOURCE);
+        for (int batchStart = 0; batchStart < MAXIMUM_REQUESTS_PER_SOURCE; batchStart += REQUEST_BATCH_SIZE) {
+            int batchEnd = Math.min(batchStart + REQUEST_BATCH_SIZE, MAXIMUM_REQUESTS_PER_SOURCE);
+            acceptedResponses.addAll(IntStream.range(batchStart, batchEnd)
+                    .parallel()
+                    .mapToObj(requestNumber -> sendCanonicalRequest(
+                            httpClient,
+                            applicationBaseUri,
+                            calendarRequestToken(requestNumber)))
+                    .toList());
+        }
+        for (HttpResponse<String> acceptedResponse : acceptedResponses) {
             assertEquals(
                     404,
                     acceptedResponse.statusCode(),

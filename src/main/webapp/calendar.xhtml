@@ -127,6 +127,15 @@
                         </ui:repeat>
                     </h:panelGroup>
                     <h:panelGroup layout="block" styleClass="empty-state" rendered="#{empty calendarView.events}">No events yet.</h:panelGroup>
+                    <h:form rendered="#{calendarView.moreEventsAvailable}" styleClass="event-pagination">
+                        <p:commandButton value="Load more events"
+                                         action="#{calendarView.loadMoreEvents}"
+                                         ajax="true"
+                                         process="@this"
+                                         update=":messages :calendarContent"
+                                         oncomplete="focusElementByIdSuffix('events-heading');"
+                                         styleClass="ui-button-outlined"/>
+                    </h:form>
                 </section>
 
                 <p:panel styleClass="surface-panel event-editor"

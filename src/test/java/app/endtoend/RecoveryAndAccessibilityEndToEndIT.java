@@ -72,7 +72,7 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
     @Test
     void applicationRestartInvalidatesMemorySessionsWhilePreservingCalendarData() throws Exception {
         Assumptions.assumeTrue(
-                isDockerComposeManagedEndToEndEnvironment(),
+                managedRecoveryScenariosAreRequired(),
                 "Application restart scenario requires the repository's isolated end-to-end Docker Compose services.");
         String uniqueSuffix = uniqueSuffix();
         String username = "restart-owner-" + uniqueSuffix;
@@ -139,7 +139,8 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
 
             clickAndWaitForNavigation(
                     staleLoginPage,
-                    staleLoginPage.locator("button:has-text('Sign in')"),
+                    staleLoginPage.locator(
+                            "button:has-text('Sign in'), input[type='submit'][value='Sign in']"),
                     "expired sign-in form submission after restart");
             waitForUrlOrFail(
                     staleLoginPage,
@@ -164,7 +165,7 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
     void databaseOutageMakesHealthUnavailableAndTheApplicationRecoversAfterConnectivityReturns()
             throws Exception {
         Assumptions.assumeTrue(
-                isDockerComposeManagedEndToEndEnvironment(),
+                managedRecoveryScenariosAreRequired(),
                 "Database recovery scenario requires the repository's isolated end-to-end Docker Compose services.");
         String uniqueSuffix = uniqueSuffix();
         String username = "database-recovery-owner-" + uniqueSuffix;
@@ -296,7 +297,8 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
             navigateToBearerLink(page, route("/login"));
             Locator usernameInput = page.locator("input[id$='username']");
             Locator passwordInput = page.locator("input[id$='password']");
-            Locator signInButton = page.locator("button:has-text('Sign in')");
+            Locator signInButton = page.locator(
+                    "button:has-text('Sign in'), input[type='submit'][value='Sign in']");
             pressTabUntilFocused(page, usernameInput, 10);
             page.keyboard().press("Tab");
             assertEquals(true, passwordInput.evaluate("element => document.activeElement === element"));
@@ -372,6 +374,16 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
                 Page page = newPage(browserContext, browserMessages);
                 signIn(page, ownerUsername, TEST_PASSWORD);
                 navigateToBearerLink(page, calendarLink(calendarId));
+                page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)");
+                assertTrue(
+                        ((Number) page.evaluate("window.scrollY")).doubleValue() > 0,
+                        "The short calendar page must be scrollable for sticky-header verification.");
+                double headerViewportTop = ((Number) page.locator(".app-header")
+                                .evaluate("element => element.getBoundingClientRect().top"))
+                        .doubleValue();
+                assertTrue(
+                        Math.abs(headerViewportTop) <= 1,
+                        "The application header must remain pinned to the viewport after scrolling.");
                 assertControlCanBeBroughtIntoView(
                         page, page.locator("input[id$='eventTitle']"), viewportWidth, 600);
                 assertControlCanBeBroughtIntoView(

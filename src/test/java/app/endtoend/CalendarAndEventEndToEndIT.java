@@ -57,7 +57,7 @@ final class CalendarAndEventEndToEndIT extends SharedCalendarEndToEndSupport {
             Locator allDayCheckbox = page.getByLabel("All-day event");
             Locator timedEventStartInput = page.locator("input[id$='eventStart_input']");
             timedEventStartInput.fill("");
-            page.locator(".checkbox-field .ui-chkbox-box").click();
+            clickAllDayCheckboxAndWaitForUpdate(page);
             assertThat(allDayCheckbox).not().isChecked();
             assertThat(timedEventStartInput).isVisible();
             assertEquals(0, page.locator("input[id$='eventFirstDay_input']").count());
@@ -66,7 +66,7 @@ final class CalendarAndEventEndToEndIT extends SharedCalendarEndToEndSupport {
             page.locator("input[id$='eventTitle']").fill(allDayEventTitle);
             timedEventStartInput.fill("2026-07-22 13:30");
             page.locator("input[id$='eventEnd_input']").fill("2026-07-25 00:00");
-            page.locator(".checkbox-field .ui-chkbox-box").click();
+            clickAllDayCheckboxAndWaitForUpdate(page);
             assertThat(allDayCheckbox).isChecked();
             Locator firstDayInput = page.locator("input[id$='eventFirstDay_input']");
             Locator lastDayInput = page.locator("input[id$='eventLastDay_input']");
@@ -74,7 +74,7 @@ final class CalendarAndEventEndToEndIT extends SharedCalendarEndToEndSupport {
             assertThat(lastDayInput).hasValue("2026-07-24");
 
             firstDayInput.fill("");
-            page.locator(".checkbox-field .ui-chkbox-box").click();
+            clickAllDayCheckboxAndWaitForUpdate(page);
             assertThat(allDayCheckbox).isChecked();
             assertThat(firstDayInput).isVisible();
             assertEquals(0, timedEventStartInput.count());
@@ -82,11 +82,11 @@ final class CalendarAndEventEndToEndIT extends SharedCalendarEndToEndSupport {
 
             firstDayInput.fill("2026-07-23");
             lastDayInput.fill("2026-07-25");
-            page.locator(".checkbox-field .ui-chkbox-box").click();
+            clickAllDayCheckboxAndWaitForUpdate(page);
             assertThat(allDayCheckbox).not().isChecked();
             assertThat(page.locator("input[id$='eventStart_input']")).hasValue("2026-07-23 00:00");
             assertThat(page.locator("input[id$='eventEnd_input']")).hasValue("2026-07-26 00:00");
-            page.locator(".checkbox-field .ui-chkbox-box").click();
+            clickAllDayCheckboxAndWaitForUpdate(page);
             assertThat(allDayCheckbox).isChecked();
             page.locator("button:has-text('Create event')").click();
             assertThat(page.locator("article", new Page.LocatorOptions().setHasText(allDayEventTitle)))
@@ -417,7 +417,7 @@ final class CalendarAndEventEndToEndIT extends SharedCalendarEndToEndSupport {
             navigateToBearerLink(staleDeletePage, calendarLink(calendarId));
 
             firstPage.locator("input[id$='eventTitle']").fill(staleTimeZoneEventTitle);
-            firstPage.locator(".checkbox-field .ui-chkbox-box").click();
+            clickAllDayCheckboxAndWaitForUpdate(firstPage);
             assertThat(firstPage.getByLabel("All-day event")).isChecked();
             firstPage.locator("input[id$='eventFirstDay_input']").fill("2026-07-16");
             firstPage.locator("input[id$='eventLastDay_input']").fill("2026-07-16");

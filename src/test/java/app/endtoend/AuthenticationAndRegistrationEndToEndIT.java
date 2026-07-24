@@ -20,6 +20,33 @@ import org.junit.jupiter.api.TestInstance;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 final class AuthenticationAndRegistrationEndToEndIT extends SharedCalendarEndToEndSupport {
     @Test
+    void repeatedFailuresBlockAUsernameAndSourceBeforePasswordValidation() throws SQLException {
+        String username = "throttled-owner-" + uniqueSuffix();
+        seedUser(username);
+
+        try (BrowserContext browserContext = browser.newContext()) {
+            Page page = browserContext.newPage();
+            navigateToBearerLink(page, route("/login"));
+            for (int failedAttemptNumber = 1; failedAttemptNumber <= 5; failedAttemptNumber++) {
+                page.locator("input[id$='username']").fill(username);
+                page.locator("input[id$='password']").fill(TEST_PASSWORD + "-wrong-" + failedAttemptNumber);
+                page.locator(
+                                "button:has-text('Sign in'), input[type='submit'][value='Sign in']")
+                        .click();
+                assertEquals("/login", URI.create(page.url()).getPath());
+                assertBodyContains(page, "Sign-in failed.");
+            }
+
+            page.locator("input[id$='username']").fill(username);
+            page.locator("input[id$='password']").fill(TEST_PASSWORD);
+            page.locator("button:has-text('Sign in'), input[type='submit'][value='Sign in']")
+                    .click();
+            assertEquals("/login", URI.create(page.url()).getPath());
+            assertBodyContains(page, "Sign-in failed.");
+        }
+    }
+
+    @Test
     void reauthenticationNoticeRetainsAUsableStatefulSignInForm() throws SQLException {
         String username = "reauthentication-owner-" + uniqueSuffix();
         seedUser(username);
@@ -50,7 +77,8 @@ final class AuthenticationAndRegistrationEndToEndIT extends SharedCalendarEndToE
             assertEquals("Sign in", page.locator("h1").textContent().trim());
             page.locator("input[id$='username']").fill(ownerUsername);
             page.locator("input[id$='password']").fill(TEST_PASSWORD + "-wrong");
-            page.locator("button:has-text('Sign in')").click();
+            page.locator("button:has-text('Sign in'), input[type='submit'][value='Sign in']")
+                    .click();
             assertEquals("Sign in", page.locator("h1").textContent().trim());
             assertBodyContains(page, "Sign-in failed.");
             assertEquals(
@@ -187,7 +215,9 @@ final class AuthenticationAndRegistrationEndToEndIT extends SharedCalendarEndToE
 
             changingPage.locator("input[id$='username']").fill(username);
             changingPage.locator("input[id$='password']").fill(TEST_PASSWORD);
-            changingPage.locator("button:has-text('Sign in')").click();
+            changingPage
+                    .locator("button:has-text('Sign in'), input[type='submit'][value='Sign in']")
+                    .click();
             assertBodyContains(changingPage, "Sign-in failed.");
 
             signIn(changingPage, username, newPassword);
@@ -287,7 +317,9 @@ final class AuthenticationAndRegistrationEndToEndIT extends SharedCalendarEndToE
             navigateToBearerLink(inactivePage, route("/login"));
             inactivePage.locator("input[id$='username']").fill(inactiveUsername);
             inactivePage.locator("input[id$='password']").fill(TEST_PASSWORD);
-            inactivePage.locator("button:has-text('Sign in')").click();
+            inactivePage
+                    .locator("button:has-text('Sign in'), input[type='submit'][value='Sign in']")
+                    .click();
             assertBodyContains(inactivePage, "Sign-in failed.");
         }
 

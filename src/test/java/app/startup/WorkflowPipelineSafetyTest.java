@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Test;
 final class WorkflowPipelineSafetyTest {
     private static final Path PULL_REQUEST_WORKFLOW =
             Path.of(".github", "workflows", "pr-checks.yml");
+    private static final Path PREVIEW_VERIFICATION_WORKFLOW =
+            Path.of(".github", "workflows", "preview-verification.yml");
 
     @Test
     void everyRequiredShellPipelineEnablesPipeFailurePropagation() throws Exception {
@@ -24,6 +26,28 @@ final class WorkflowPipelineSafetyTest {
         assertPipelineEnablesPipeFailure(
                 workflowLines,
                 "mise run verify-backup-restore 2>&1 | tee");
+    }
+
+    @Test
+    void previewSecretsAreUsedOnlyByTrustedDefaultBranchVerifierCode() throws Exception {
+        String workflow = Files.readString(PREVIEW_VERIFICATION_WORKFLOW);
+
+        assertTrue(workflow.contains("ref: ${{ github.event.repository.default_branch }}"));
+        assertTrue(workflow.contains("github.event.deployment.creator.login == 'railway-app[bot]'"));
+        assertTrue(workflow.contains("github.event.deployment.creator.id == 68434857"));
+        assertTrue(workflow.contains("scripts/resolve-railway-preview-url.mjs"));
+        assertTrue(workflow.contains("scripts/verify-production-deployment.java"));
+        assertTrue(workflow.contains("verify-preview-deployment"));
+        assertTrue(workflow.contains("PREVIEW_BOOTSTRAP_INVITE_TOKEN"));
+        assertTrue(workflow.contains("PREVIEW_VERIFICATION_PASSWORD"));
+        assertTrue(!workflow.contains("pull_request_target"));
+
+        int trustedCheckoutIndex = workflow.indexOf("Check out trusted verifier code");
+        int firstRepositorySecretIndex = workflow.indexOf("${{ secrets.");
+        assertTrue(trustedCheckoutIndex >= 0);
+        assertTrue(
+                firstRepositorySecretIndex > trustedCheckoutIndex,
+                "Repository secrets must not be exposed before trusted default-branch code is checked out.");
     }
 
     private static void assertPipelineEnablesPipeFailure(

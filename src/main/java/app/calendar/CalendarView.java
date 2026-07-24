@@ -1,6 +1,7 @@
 package app.calendar;
 
 import app.event.CalendarEvent;
+import app.event.CalendarEventPage;
 import app.event.CalendarEventRow;
 import app.event.CalendarEventService;
 import app.event.EventTimeInput;
@@ -28,10 +29,13 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.ArrayList;
 
 @Named
 @ViewScoped
 public class CalendarView implements Serializable {
+    private static final int EVENT_PAGE_SIZE = 50;
+
     @Inject
     private CurrentUser currentUser;
 
@@ -57,6 +61,7 @@ public class CalendarView implements Serializable {
     private boolean publicAccessEnabled;
     private boolean available;
     private List<CalendarEventRow> events = List.of();
+    private boolean moreEventsAvailable;
 
     private Long selectedEventId;
     private Integer selectedEventVersion;
@@ -210,6 +215,19 @@ public class CalendarView implements Serializable {
         reloadEventsAfterCommittedChange(actingUser);
     }
 
+    public void loadMoreEvents() {
+        try {
+            ApplicationUser actingUser = currentUser.find().orElse(null);
+            CalendarEventPage eventPage = loadEventPage(actingUser, events.size());
+            List<CalendarEventRow> expandedEvents = new ArrayList<>(events);
+            expandedEvents.addAll(toEventRows(eventPage.events()));
+            events = List.copyOf(expandedEvents);
+            moreEventsAvailable = eventPage.hasMore();
+        } catch (AuthorizationException | NotFoundException exception) {
+            markNotFound();
+        }
+    }
+
     public void resetEventForm() {
         selectedEventId = null;
         selectedEventVersion = null;
@@ -278,10 +296,32 @@ public class CalendarView implements Serializable {
     }
 
     private void reloadEvents(ApplicationUser actingUser) {
-        List<CalendarEvent> loadedEvents = role == null
-                ? calendarEventService.findPublicEvents(calendarLinkToken)
-                : calendarEventService.findEventsForMember(actingUser, calendarId);
-        events = loadedEvents.stream()
+        int eventsToReload = Math.max(EVENT_PAGE_SIZE, events.size());
+        List<CalendarEventRow> reloadedEvents = new ArrayList<>();
+        CalendarEventPage eventPage;
+        do {
+            eventPage = loadEventPage(actingUser, reloadedEvents.size());
+            reloadedEvents.addAll(toEventRows(eventPage.events()));
+        } while (eventPage.hasMore() && reloadedEvents.size() < eventsToReload);
+        events = List.copyOf(reloadedEvents);
+        moreEventsAvailable = eventPage.hasMore();
+    }
+
+    private CalendarEventPage loadEventPage(ApplicationUser actingUser, int firstResult) {
+        return role == null
+                ? calendarEventService.findPublicEvents(
+                        calendarLinkToken,
+                        firstResult,
+                        EVENT_PAGE_SIZE)
+                : calendarEventService.findEventsForMember(
+                        actingUser,
+                        calendarId,
+                        firstResult,
+                        EVENT_PAGE_SIZE);
+    }
+
+    private List<CalendarEventRow> toEventRows(List<CalendarEvent> loadedEvents) {
+        return loadedEvents.stream()
                 .map(event -> CalendarEventRow.from(event, timeZone, calendarTimeService))
                 .toList();
     }
@@ -318,6 +358,7 @@ public class CalendarView implements Serializable {
     public boolean isEditable() { return role != null; }
     public boolean isAdmin() { return role == CalendarRole.ADMIN; }
     public List<CalendarEventRow> getEvents() { return events; }
+    public boolean isMoreEventsAvailable() { return moreEventsAvailable; }
     public boolean isEditingEvent() { return selectedEventId != null; }
     public String getEventTitle() { return eventTitle; }
     public void setEventTitle(String eventTitle) { this.eventTitle = eventTitle; }

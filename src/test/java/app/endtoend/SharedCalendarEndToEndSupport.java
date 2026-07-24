@@ -16,6 +16,7 @@ import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.Response;
 import com.microsoft.playwright.assertions.LocatorAssertions;
+import com.microsoft.playwright.options.LoadState;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLDecoder;
@@ -60,6 +61,8 @@ abstract class SharedCalendarEndToEndSupport {
     static final String POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE = "PGPASSWORD";
     static final String PLAYWRIGHT_HEADED_ENVIRONMENT_VARIABLE = "PLAYWRIGHT_HEADED";
     static final String PLAYWRIGHT_HEADLESS_ENVIRONMENT_VARIABLE = "PLAYWRIGHT_HEADLESS";
+    static final String MANAGED_RECOVERY_SCENARIOS_ENVIRONMENT_VARIABLE =
+            "E2E_MANAGED_RECOVERY_SCENARIOS";
     static final String SEEDED_PASSWORD_HASH_FOR_TEST_PASSWORD =
             "PBKDF2WithHmacSHA256:600000:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=:"
                     + "YTpMNBE5TiT//mxRmUMHckVy5XS82Y6oz0V8ZImb+/4=";
@@ -207,7 +210,8 @@ abstract class SharedCalendarEndToEndSupport {
             String expectedUrlPattern) {
         page.locator("input[id$='username']").fill(username);
         page.locator("input[id$='password']").fill(password);
-        page.locator("button:has-text('Sign in')").click();
+        page.locator("button:has-text('Sign in'), input[type='submit'][value='Sign in']")
+                .click();
         waitForUrlOrFail(page, expectedUrlPattern, "sign-in completion");
         waitForPageResources(page);
     }
@@ -259,6 +263,7 @@ abstract class SharedCalendarEndToEndSupport {
         }
         page.locator("a", new Page.LocatorOptions().setHasText(calendarName)).first().click();
         waitForCanonicalCalendarRoute(page);
+        waitForPageResources(page);
     }
 
     void createEvent(
@@ -285,7 +290,7 @@ abstract class SharedCalendarEndToEndSupport {
         }
         if (allDay) {
             Locator allDayCheckbox = page.getByLabel("All-day event");
-            page.locator(".checkbox-field .ui-chkbox-box").click();
+            clickAllDayCheckboxAndWaitForUpdate(page);
             assertThat(allDayCheckbox).isChecked();
             Locator firstDayInput = page.locator("input[id$='eventFirstDay_input']");
             Locator lastDayInput = page.locator("input[id$='eventLastDay_input']");
@@ -335,6 +340,11 @@ abstract class SharedCalendarEndToEndSupport {
         }
         page.locator("button:has-text('Save settings')").click();
         assertBodyContains(page, enabled ? "Public access enabled" : "Public access disabled");
+    }
+
+    void clickAllDayCheckboxAndWaitForUpdate(Page page) {
+        page.locator(".checkbox-field .ui-chkbox-box").click();
+        waitForPageResources(page);
     }
 
     void setRawInputValue(Locator input, String value) {
@@ -602,6 +612,21 @@ abstract class SharedCalendarEndToEndSupport {
                 && !managedApplicationBaseUrl.isBlank()
                 && removeTrailingSlashes(managedApplicationBaseUrl.trim())
                         .equals(removeTrailingSlashes(applicationBaseUri.toString()));
+    }
+
+    boolean managedRecoveryScenariosAreRequired() {
+        String configuredValue = System.getenv(MANAGED_RECOVERY_SCENARIOS_ENVIRONMENT_VARIABLE);
+        if (configuredValue == null || configuredValue.isBlank()) {
+            return false;
+        }
+        assertEquals(
+                "true",
+                configuredValue.trim().toLowerCase(Locale.ROOT),
+                "E2E_MANAGED_RECOVERY_SCENARIOS must be either absent or true.");
+        assertTrue(
+                isDockerComposeManagedEndToEndEnvironment(),
+                "Managed recovery scenarios must target the repository's isolated Docker Compose application.");
+        return true;
     }
 
     void waitForApplicationToBecomeUnavailable() throws InterruptedException {
@@ -1023,6 +1048,9 @@ abstract class SharedCalendarEndToEndSupport {
     }
 
     void waitForPageResources(Page page) {
+        page.waitForLoadState(
+                LoadState.NETWORKIDLE,
+                new Page.WaitForLoadStateOptions().setTimeout(5_000));
         page.waitForFunction(
                 "() => (typeof PrimeFaces === 'undefined' || !PrimeFaces.ajax "
                         + "|| (PrimeFaces.ajax.Queue.isEmpty() && PrimeFaces.ajax.Queue.xhrs.length === 0)) "
