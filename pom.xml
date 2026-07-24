@@ -21,7 +21,7 @@
         <primefaces.version>15.0.16</primefaces.version>
         <postgresql.version>42.7.13</postgresql.version>
         <flyway.version>12.10.0</flyway.version>
-        <junit.version>5.11.4</junit.version>
+        <junit.version>6.1.2</junit.version>
         <playwright.version>1.61.0</playwright.version>
         <liberty.maven.plugin.version>3.12.0</liberty.maven.plugin.version>
         <maven.artifact.plugin.version>3.6.1</maven.artifact.plugin.version>
