@@ -34,7 +34,7 @@ public class SignInView {
     private boolean passwordChanged;
     private boolean reauthenticationRequired;
 
-    public void login() throws IOException, ServletException {
+    public void signIn() throws IOException, ServletException {
         if (isBlank(username) || isBlank(password)) {
             addFailureMessage("Username and password are required.");
             return;
@@ -63,7 +63,7 @@ public class SignInView {
             AuthenticatedSessionSecurity.establishAuthenticatedSession(
                     request,
                     validatedPasswordVersion.getAsLong());
-            RelativeRedirect.send(facesContext, successfulLoginRoute(invitationToken));
+            RelativeRedirect.send(facesContext, successfulSignInRoute(invitationToken));
         } else if (status == AuthenticationStatus.SEND_CONTINUE) {
             facesContext.responseComplete();
         } else {
@@ -128,7 +128,7 @@ public class SignInView {
         reauthenticationRequired = "true".equals(reauthenticationRequiredParameter);
     }
 
-    static String successfulLoginRoute(String invitationToken) {
+    static String successfulSignInRoute(String invitationToken) {
         String normalizedInvitationToken = InvitationToken.normalize(invitationToken);
         return InvitationToken.isValidCandidate(normalizedInvitationToken)
                 ? "/register?token="

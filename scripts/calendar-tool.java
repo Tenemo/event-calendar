@@ -38,7 +38,7 @@ final class CalendarTool extends CalendarToolProcessRunner {
         switch (invocation.command()) {
             case "help", "--help" -> printUsage();
             case "setup" -> setup();
-            case "db" -> CalendarToolPostgresql.startDatabase();
+            case "db" -> CalendarToolPostgreSql.startDatabase();
             case "dev" -> startDevelopmentServer();
             case "package" -> packageApplication();
             case "tooling-self-test" -> runToolingSelfTests();
@@ -66,13 +66,13 @@ final class CalendarTool extends CalendarToolProcessRunner {
             case "docker-build" -> buildDockerImage();
             case "image-scan" -> scanDockerImage();
             case "docker-up" -> startDockerApplication();
-            case "backup-postgres" -> CalendarToolPostgresql.backupPostgres(invocation.arguments().isEmpty()
+            case "backup-postgres" -> CalendarToolPostgreSql.backupPostgres(invocation.arguments().isEmpty()
                     ? null
                     : invocation.arguments().getFirst());
-            case "restore-postgres" -> CalendarToolPostgresql.restorePostgres(
+            case "restore-postgres" -> CalendarToolPostgreSql.restorePostgres(
                     invocation.arguments().get(0),
                     invocation.arguments().get(1));
-            case "verify-backup-restore" -> CalendarToolPostgresql.verifyBackupRestore();
+            case "verify-backup-restore" -> CalendarToolPostgreSql.verifyBackupRestore();
             default -> throw new IllegalStateException("Unhandled command: " + invocation.command());
         }
     }

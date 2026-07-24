@@ -101,23 +101,27 @@
                     <h:outputText value="#{invitation.createdAt}"/>
                 </p:column>
                 <p:column headerText="Action">
-                    <h:form rendered="#{invitation.revocable}">
-                        <input type="hidden" name="invitationId" value="#{invitation.id}"/>
-                        <p:commandButton value="Revoke"
-                                         action="#{invitationView.revokeInvitation}"
-                                         ajax="false"
-                                         styleClass="ui-button-danger ui-button-outlined"
-                                         pt:aria-label="Revoke invitation for #{invitation.scope}, created #{invitation.createdAt}">
-                            <p:confirm header="Revoke invitation"
-                                       message="Revoke #{invitation.scope}, created #{invitation.createdAt}, permanently?"
-                                       yesButtonLabel="Revoke invitation"
-                                       yesButtonClass="ui-button-danger"
-                                       noButtonLabel="Cancel"
-                                       noButtonClass="ui-button-secondary ui-button-outlined"
-                                       beforeShow="focusConfirmationCancelButton();"/>
-                        </p:commandButton>
-                    </h:form>
-                    <h:outputText value="-" rendered="#{not invitation.revocable}"/>
+                    <div class="row-actions table-row-actions">
+                        <h:form rendered="#{invitation.revocable}">
+                            <input type="hidden" name="invitationId" value="#{invitation.id}"/>
+                            <p:commandButton value="Revoke"
+                                             action="#{invitationView.revokeInvitation}"
+                                             ajax="false"
+                                             styleClass="ui-button-danger ui-button-outlined"
+                                             pt:aria-label="Revoke invitation for #{invitation.scope}, created #{invitation.createdAt}">
+                                <p:confirm header="Revoke invitation"
+                                           message="Revoke #{invitation.scope}, created #{invitation.createdAt}, permanently?"
+                                           yesButtonLabel="Revoke invitation"
+                                           yesButtonClass="ui-button-danger"
+                                           noButtonLabel="Cancel"
+                                           noButtonClass="ui-button-secondary ui-button-outlined"
+                                           beforeShow="focusConfirmationCancelButton();"/>
+                            </p:commandButton>
+                        </h:form>
+                        <h:outputText value="Not available"
+                                      styleClass="secondary-line"
+                                      rendered="#{not invitation.revocable}"/>
+                    </div>
                 </p:column>
             </p:dataTable>
             </div>

@@ -55,15 +55,15 @@ public class CalendarLinkRequestThrottle {
         this.concurrentRequestPermits = new Semaphore(maximumConcurrentRequests, true);
     }
 
-    public Admission tryAcquire(String sourceIdentifier) {
+    public RequestPermit tryAcquire(String sourceIdentifier) {
         int retryAfterSeconds = recordAndCheckSourceRequest(sourceIdentifier);
         if (retryAfterSeconds > 0) {
-            return Admission.rejected(retryAfterSeconds);
+            return RequestPermit.rejected(retryAfterSeconds);
         }
         if (!concurrentRequestPermits.tryAcquire()) {
-            return Admission.rejected(1);
+            return RequestPermit.rejected(1);
         }
-        return Admission.accepted(concurrentRequestPermits);
+        return RequestPermit.accepted(concurrentRequestPermits);
     }
 
     synchronized int trackedSourceCount() {
@@ -155,23 +155,23 @@ public class CalendarLinkRequestThrottle {
         }
     }
 
-    public static final class Admission implements AutoCloseable {
+    public static final class RequestPermit implements AutoCloseable {
         private final Semaphore concurrentRequestPermits;
         private final int retryAfterSeconds;
         private final Object releaseLock = new Object();
         private boolean released;
 
-        private Admission(Semaphore concurrentRequestPermits, int retryAfterSeconds) {
+        private RequestPermit(Semaphore concurrentRequestPermits, int retryAfterSeconds) {
             this.concurrentRequestPermits = concurrentRequestPermits;
             this.retryAfterSeconds = retryAfterSeconds;
         }
 
-        private static Admission accepted(Semaphore concurrentRequestPermits) {
-            return new Admission(concurrentRequestPermits, 0);
+        private static RequestPermit accepted(Semaphore concurrentRequestPermits) {
+            return new RequestPermit(concurrentRequestPermits, 0);
         }
 
-        private static Admission rejected(int retryAfterSeconds) {
-            return new Admission(null, retryAfterSeconds);
+        private static RequestPermit rejected(int retryAfterSeconds) {
+            return new RequestPermit(null, retryAfterSeconds);
         }
 
         public boolean isAccepted() {

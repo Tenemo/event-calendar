@@ -21,7 +21,7 @@ public class InvitationPolicy {
         throw new ValidationException("Invitations must support registration only or grant editor access to a calendar.");
     }
 
-    public void requireOpen(OffsetDateTime revokedAt, OffsetDateTime acceptedAt, OffsetDateTime expiresAt, OffsetDateTime now) {
+    public void requireAvailable(OffsetDateTime revokedAt, OffsetDateTime acceptedAt, OffsetDateTime expiresAt, OffsetDateTime now) {
         switch (status(revokedAt, acceptedAt, expiresAt, now)) {
             case ACCEPTED -> throw new ValidationException("Invitation is already accepted.");
             case REVOKED -> throw new ValidationException("Invitation is revoked.");

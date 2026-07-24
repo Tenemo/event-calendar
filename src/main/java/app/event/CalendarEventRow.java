@@ -102,7 +102,7 @@ public final class CalendarEventRow implements Serializable {
         return startTime.format(DATE_LABEL_FORMAT);
     }
 
-    public String getTimeLabel() {
+    public String getScheduleLabel() {
         if (allDay) {
             LocalDate firstDay = startTime.toLocalDate();
             LocalDate lastDay = getInclusiveEndDate();
@@ -117,10 +117,10 @@ public final class CalendarEventRow implements Serializable {
         return startTime.format(DATE_TIME_FORMAT) + " to " + endTime.format(DATE_TIME_FORMAT);
     }
 
-    public String getDetailLabel() {
+    public String getScheduleAndLocationLabel() {
         if (location == null || location.isBlank()) {
-            return getTimeLabel();
+            return getScheduleLabel();
         }
-        return getTimeLabel() + " at " + location;
+        return getScheduleLabel() + " at " + location;
     }
 }

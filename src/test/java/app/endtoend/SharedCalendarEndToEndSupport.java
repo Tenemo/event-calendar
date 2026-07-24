@@ -531,6 +531,34 @@ abstract class SharedCalendarEndToEndSupport {
                 "The control should be fully visible and unobscured after scrolling it into view.");
     }
 
+    void assertMinimumControlTargetSize(Locator controls, double minimumSize) {
+        @SuppressWarnings("unchecked")
+        List<Object> undersizedControls = (List<Object>) controls.evaluateAll(
+                "(elements, requiredSize) => elements"
+                        + ".filter(element => {"
+                        + "const bounds = element.getBoundingClientRect();"
+                        + "const style = getComputedStyle(element);"
+                        + "return style.visibility !== 'hidden' && bounds.width > 0 && bounds.height > 0 "
+                        + "&& (bounds.width < requiredSize || bounds.height < requiredSize);"
+                        + "})"
+                        + ".map(element => {"
+                        + "const bounds = element.getBoundingClientRect();"
+                        + "return {"
+                        + "tag: element.tagName.toLowerCase(),"
+                        + "className: element.className,"
+                        + "label: element.getAttribute('aria-label') || element.textContent.trim(),"
+                        + "width: bounds.width,"
+                        + "height: bounds.height"
+                        + "};"
+                        + "})",
+                minimumSize);
+        assertTrue(
+                undersizedControls.isEmpty(),
+                () -> "Expected every visible control target to be at least "
+                        + minimumSize + " by " + minimumSize + " CSS pixels, but found "
+                        + undersizedControls + ".");
+    }
+
     void assertResponsiveTableRegion(Page page, String accessibleLabel, int viewportWidth) {
         Locator tableRegion = page.locator(".table-scroll-region[aria-label='" + accessibleLabel + "']");
         tableRegion.focus();

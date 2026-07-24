@@ -9,6 +9,7 @@ import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
+import com.microsoft.playwright.options.ForcedColors;
 import com.microsoft.playwright.options.ReducedMotion;
 import java.sql.SQLException;
 import java.time.Duration;
@@ -321,6 +322,12 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
             assertEquals(1, page.locator("h1").count());
             assertEquals("Sign-in error", page.locator("h1").textContent().trim());
             assertRegionsHaveAccessibleNames(page);
+            navigateToBearerLink(page, route("/error.html"));
+            assertEquals(1, page.locator("h1").count());
+            assertEquals("Something went wrong", page.locator("h1").textContent().trim());
+            assertThat(page.locator("a:has-text('Return to the home page')")).isVisible();
+            assertFalse(hasHorizontalOverflow(page), "The static error page should not overflow.");
+            assertNoAutomaticAccessibilityViolations(page, "static error page");
             assertNoBrowserMessages(browserMessages);
         }
 
@@ -354,10 +361,13 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
                 assertFalse(hasHorizontalOverflow(page), "Calendar page overflowed at " + viewportWidth + " pixels.");
                 assertControlCanBeBroughtIntoView(
                         page, page.locator("button:has-text('Create event')"), viewportWidth, 900);
+                assertMinimumControlTargetSize(page.locator(".ui-button:visible"), 24);
 
                 navigateToBearerLink(page, route("/app/invitations"));
                 assertResponsiveTableRegion(page, "Invitations table", viewportWidth);
                 assertFalse(hasHorizontalOverflow(page), "Invitations page overflowed at " + viewportWidth + " pixels.");
+                assertMinimumControlTargetSize(
+                        page.locator(".ui-button:visible, .button-link:visible"), 24);
 
                 navigateToBearerLink(page, route("/app/calendar-members?id=" + calendarId));
                 assertBodyContains(page, longDisplayName);
@@ -412,6 +422,47 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
                                     + "&& getComputedStyle(element).transitionDuration === '0s'"));
             reducedMotionPage.keyboard().press("Escape");
             assertNoBrowserMessages(reducedMotionBrowserMessages);
+        }
+
+        List<String> resizedTextBrowserMessages = new ArrayList<>();
+        try (BrowserContext resizedTextContext = browser.newContext(
+                new Browser.NewContextOptions().setViewportSize(1440, 900))) {
+            Page resizedTextPage = newPage(resizedTextContext, resizedTextBrowserMessages);
+            signIn(resizedTextPage, ownerUsername, TEST_PASSWORD);
+            navigateToBearerLink(resizedTextPage, calendarLink(calendarId));
+            resizedTextPage.evaluate("document.documentElement.style.fontSize = '200%'");
+            assertBodyContains(resizedTextPage, longEventTitle);
+            assertFalse(
+                    hasHorizontalOverflow(resizedTextPage),
+                    "The calendar page should not overflow when text is resized to 200 percent.");
+            assertControlCanBeBroughtIntoView(
+                    resizedTextPage,
+                    resizedTextPage.locator("button:has-text('Create event')"),
+                    1440,
+                    900);
+            assertMinimumControlTargetSize(resizedTextPage.locator(".ui-button:visible"), 24);
+            assertNoBrowserMessages(resizedTextBrowserMessages);
+        }
+
+        List<String> forcedColorsBrowserMessages = new ArrayList<>();
+        try (BrowserContext forcedColorsContext = browser.newContext(
+                new Browser.NewContextOptions().setForcedColors(ForcedColors.ACTIVE))) {
+            Page forcedColorsPage = newPage(forcedColorsContext, forcedColorsBrowserMessages);
+            signIn(forcedColorsPage, ownerUsername, TEST_PASSWORD);
+            navigateToBearerLink(forcedColorsPage, calendarLink(calendarId));
+            assertEquals(
+                    true,
+                    forcedColorsPage.evaluate("matchMedia('(forced-colors: active)').matches"));
+            assertEquals(
+                    "solid",
+                    forcedColorsPage.locator(".role-chip")
+                            .evaluate("element => getComputedStyle(element).borderStyle"));
+            Locator createEventButton =
+                    forcedColorsPage.locator("button:has-text('Create event')");
+            createEventButton.focus();
+            assertVisibleOutline(createEventButton);
+            assertMinimumControlTargetSize(forcedColorsPage.locator(".ui-button:visible"), 24);
+            assertNoBrowserMessages(forcedColorsBrowserMessages);
         }
     }
 

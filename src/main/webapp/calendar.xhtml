@@ -88,7 +88,7 @@
                                 <span class="event-date">#{event.dateLabel}</span>
                                 <div class="event-copy">
                                     <h3>#{event.title}</h3>
-                                    <p>#{event.detailLabel}</p>
+                                    <p>#{event.scheduleAndLocationLabel}</p>
                                     <h:panelGroup layout="block"
                                                   styleClass="event-description"
                                                   rendered="#{not empty event.description}">#{event.description}</h:panelGroup>
@@ -160,7 +160,7 @@
                                 <p:ajax listener="#{calendarView.changeEventAllDayMode}"
                                         process="eventScheduleFields @this"
                                         update=":messages @this eventScheduleFields"
-                                        oncomplete="if (args.validationFailed) { var checkbox = PF('eventAllDayCheckbox'); checkbox.isChecked() ? checkbox.uncheck(true) : checkbox.check(true); }"/>
+                                        oncomplete="if (args.validationFailed) { var checkbox = PF('eventAllDayCheckbox'); var shouldBeChecked = #{calendarView.eventAllDay}; shouldBeChecked ? checkbox.check(true) : checkbox.uncheck(true); }"/>
                             </p:selectBooleanCheckbox>
                             <p:outputLabel for="allDay" value="All-day event"/>
                         </div>

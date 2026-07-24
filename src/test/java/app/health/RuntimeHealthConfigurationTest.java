@@ -1,5 +1,6 @@
 package app.health;
 
+import static app.testsupport.XmlTestDocuments.parseXml;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -9,7 +10,6 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import javax.xml.parsers.DocumentBuilderFactory;
 import org.junit.jupiter.api.Test;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -49,9 +49,7 @@ final class RuntimeHealthConfigurationTest {
     }
 
     private static Document readServerConfiguration() throws Exception {
-        DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
-        documentBuilderFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-        return documentBuilderFactory.newDocumentBuilder().parse(SERVER_CONFIGURATION_PATH.toFile());
+        return parseXml(SERVER_CONFIGURATION_PATH);
     }
 
     private static Element elementWithId(Document document, String elementName, String expectedId) {

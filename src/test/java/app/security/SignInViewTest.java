@@ -11,59 +11,59 @@ import org.junit.jupiter.api.Test;
 
 final class SignInViewTest {
     @Test
-    void successfulLoginUsesTheFixedDefaultForMissingOrUnsafeInvitationTokens() {
+    void successfulSignInUsesTheFixedDefaultForMissingOrUnsafeInvitationTokens() {
         String defaultRoute = AuthenticatedApplicationFilter.DEFAULT_AUTHENTICATED_ROUTE;
 
         assertAll(
-                () -> assertEquals(defaultRoute, LoginView.successfulLoginRoute(null)),
-                () -> assertEquals(defaultRoute, LoginView.successfulLoginRoute("   ")),
+                () -> assertEquals(defaultRoute, SignInView.successfulSignInRoute(null)),
+                () -> assertEquals(defaultRoute, SignInView.successfulSignInRoute("   ")),
                 () -> assertEquals(
                         defaultRoute,
-                        LoginView.successfulLoginRoute(
+                        SignInView.successfulSignInRoute(
                                 "a".repeat(InvitationToken.MAXIMUM_LENGTH + 1))),
                 () -> assertEquals(
                         defaultRoute,
-                        LoginView.successfulLoginRoute("token\\suffix")),
+                        SignInView.successfulSignInRoute("token\\suffix")),
                 () -> assertEquals(
                         defaultRoute,
-                        LoginView.successfulLoginRoute("token\r\nsuffix")));
+                        SignInView.successfulSignInRoute("token\r\nsuffix")));
     }
 
     @Test
-    void successfulLoginNormalizesAndEncodesAValidBoundedInvitationToken() {
+    void successfulSignInNormalizesAndEncodesAValidBoundedInvitationToken() {
         String maximumLengthToken = "a".repeat(InvitationToken.MAXIMUM_LENGTH);
 
         assertAll(
                 () -> assertEquals(
                         "/register?token=alpha+beta%26gamma",
-                        LoginView.successfulLoginRoute("  alpha beta&gamma  ")),
+                        SignInView.successfulSignInRoute("  alpha beta&gamma  ")),
                 () -> assertEquals(
                         "/register?token=" + maximumLengthToken,
-                        LoginView.successfulLoginRoute(maximumLengthToken)),
+                        SignInView.successfulSignInRoute(maximumLengthToken)),
                 () -> assertTrue(RelativeRedirect.isSafeApplicationPath(
-                        LoginView.successfulLoginRoute("alpha beta&gamma"))));
+                        SignInView.successfulSignInRoute("alpha beta&gamma"))));
     }
 
     @Test
     void statusViewParametersAcceptOnlyTheLiteralTrueValue() {
-        LoginView loginView = new LoginView();
+        SignInView signInView = new SignInView();
 
-        loginView.setPasswordChangedParameter("TRUE");
-        loginView.setReauthenticationRequiredParameter(" true ");
+        signInView.setPasswordChangedParameter("TRUE");
+        signInView.setReauthenticationRequiredParameter(" true ");
         assertAll(
-                () -> assertFalse(loginView.isPasswordChanged()),
-                () -> assertFalse(loginView.isReauthenticationRequired()));
+                () -> assertFalse(signInView.isPasswordChanged()),
+                () -> assertFalse(signInView.isReauthenticationRequired()));
 
-        loginView.setPasswordChangedParameter("true");
-        loginView.setReauthenticationRequiredParameter("true");
+        signInView.setPasswordChangedParameter("true");
+        signInView.setReauthenticationRequiredParameter("true");
         assertAll(
-                () -> assertTrue(loginView.isPasswordChanged()),
-                () -> assertTrue(loginView.isReauthenticationRequired()));
+                () -> assertTrue(signInView.isPasswordChanged()),
+                () -> assertTrue(signInView.isReauthenticationRequired()));
 
-        loginView.setPasswordChangedParameter(null);
-        loginView.setReauthenticationRequiredParameter("not-a-boolean");
+        signInView.setPasswordChangedParameter(null);
+        signInView.setReauthenticationRequiredParameter("not-a-boolean");
         assertAll(
-                () -> assertFalse(loginView.isPasswordChanged()),
-                () -> assertFalse(loginView.isReauthenticationRequired()));
+                () -> assertFalse(signInView.isPasswordChanged()),
+                () -> assertFalse(signInView.isReauthenticationRequired()));
     }
 }

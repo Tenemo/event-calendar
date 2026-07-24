@@ -1,5 +1,6 @@
 package app.security;
 
+import static app.testsupport.XmlTestDocuments.parseXml;
 import app.config.ApplicationEnvironmentVariables;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -10,7 +11,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import javax.xml.parsers.DocumentBuilderFactory;
 import org.junit.jupiter.api.Test;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
@@ -59,16 +59,10 @@ final class RuntimeSessionConfigurationTest {
 
     @Test
     void anonymousSessionsAreShortLivedAndDoNotReceivePersistentCookies() throws Exception {
-        DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
-        documentBuilderFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-        Element httpSession = (Element) documentBuilderFactory
-                .newDocumentBuilder()
-                .parse(SERVER_CONFIGURATION_PATH.toFile())
+        Element httpSession = (Element) parseXml(SERVER_CONFIGURATION_PATH)
                 .getElementsByTagName("httpSession")
                 .item(0);
-        Element webSession = (Element) documentBuilderFactory
-                .newDocumentBuilder()
-                .parse(WEB_CONFIGURATION_PATH.toFile())
+        Element webSession = (Element) parseXml(WEB_CONFIGURATION_PATH)
                 .getElementsByTagName("session-config")
                 .item(0);
         Element cookieConfiguration = (Element) webSession
@@ -125,12 +119,7 @@ final class RuntimeSessionConfigurationTest {
     }
 
     private static Element readXmlRoot(Path configurationPath) throws Exception {
-        DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
-        documentBuilderFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-        return documentBuilderFactory
-                .newDocumentBuilder()
-                .parse(configurationPath.toFile())
-                .getDocumentElement();
+        return parseXml(configurationPath).getDocumentElement();
     }
 
     private static Element firstElement(Element parent, String tagName) {
@@ -160,11 +149,7 @@ final class RuntimeSessionConfigurationTest {
     @Test
     void containerGeneratedResponsesReceiveTheSameFallbackSecurityHeaders()
             throws Exception {
-        DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
-        documentBuilderFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-        Element headers = (Element) documentBuilderFactory
-                .newDocumentBuilder()
-                .parse(SERVER_CONFIGURATION_PATH.toFile())
+        Element headers = (Element) parseXml(SERVER_CONFIGURATION_PATH)
                 .getElementsByTagName("headers")
                 .item(0);
         NodeList setIfMissingElements = headers.getElementsByTagName("setIfMissing");
@@ -190,11 +175,7 @@ final class RuntimeSessionConfigurationTest {
 
     @Test
     void securityHeadersAndCalendarAdmissionRunBeforeRollingSessionRefreshAndForwardedRendering() throws Exception {
-        DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
-        documentBuilderFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-        NodeList filterMappingElements = documentBuilderFactory
-                .newDocumentBuilder()
-                .parse(WEB_CONFIGURATION_PATH.toFile())
+        NodeList filterMappingElements = parseXml(WEB_CONFIGURATION_PATH)
                 .getElementsByTagName("filter-mapping");
         List<String> filterNames = new ArrayList<>();
         List<String> urlPatterns = new ArrayList<>();

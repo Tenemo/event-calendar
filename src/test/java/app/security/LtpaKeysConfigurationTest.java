@@ -18,11 +18,11 @@ final class LtpaKeysConfigurationTest {
     void validatesAuthenticationConfigurationDuringApplicationStartup()
             throws NoSuchMethodException {
         assertAll(
-                () -> assertTrue(ApplicationAuthenticationConfiguration.class
+                () -> assertTrue(LtpaKeysConfiguration.class
                         .isAnnotationPresent(Singleton.class)),
-                () -> assertTrue(ApplicationAuthenticationConfiguration.class
+                () -> assertTrue(LtpaKeysConfiguration.class
                         .isAnnotationPresent(Startup.class)),
-                () -> assertTrue(ApplicationAuthenticationConfiguration.class
+                () -> assertTrue(LtpaKeysConfiguration.class
                         .getDeclaredMethod("validate")
                         .isAnnotationPresent(PostConstruct.class)));
     }
@@ -55,7 +55,7 @@ final class LtpaKeysConfigurationTest {
         for (String rejectedPassword : List.of(
                 sensitiveShortPassword,
                 "x".repeat(
-                        ApplicationAuthenticationConfiguration
+                        LtpaKeysConfiguration
                                         .MINIMUM_LTPA_KEYS_PASSWORD_LENGTH
                                 - 1))) {
             IllegalStateException exception = assertThrows(
@@ -84,10 +84,10 @@ final class LtpaKeysConfigurationTest {
                 .validate());
     }
 
-    private static ApplicationAuthenticationConfiguration configuration(
+    private static LtpaKeysConfiguration configuration(
             String configuredPassword,
             String railwayEnvironmentId) {
-        return new ApplicationAuthenticationConfiguration(
+        return new LtpaKeysConfiguration(
                 configuredPassword,
                 railwayEnvironmentId);
     }

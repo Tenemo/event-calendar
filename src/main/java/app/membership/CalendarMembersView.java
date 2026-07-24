@@ -107,7 +107,7 @@ public class CalendarMembersView implements Serializable {
         ApplicationUser actingUser;
         try {
             actingUser = currentUser.require();
-            calendarMembershipService.disableMembership(actingUser, calendarId, userId);
+            calendarMembershipService.deactivateMembership(actingUser, calendarId, userId);
         } catch (ValidationException exception) {
             reloadMembersAfterRejectedChange();
             addMessage(FacesMessage.SEVERITY_ERROR, "Member access could not be removed.", exception.getMessage());

@@ -32,8 +32,8 @@ public class SignInAttemptThrottle {
     private final Duration blockDuration;
     private final int maximumTrackedUsernameAndSourceCombinations;
     private final int maximumTrackedSources;
-    private final Map<UsernameAndSourceKey, FailedLoginState> usernameAndSourceFailures;
-    private final Map<String, FailedLoginState> sourceFailures;
+    private final Map<UsernameAndSourceKey, FailedSignInState> usernameAndSourceFailures;
+    private final Map<String, FailedSignInState> sourceFailures;
     private final Object[] validationLocks;
     private Instant saturationBlockedUntil;
 
@@ -147,47 +147,47 @@ public class SignInAttemptThrottle {
     }
 
     private <KeyType> boolean isAuthenticationAllowed(
-            Map<KeyType, FailedLoginState> failedLogins,
-            KeyType loginKey,
+            Map<KeyType, FailedSignInState> failedSignIns,
+            KeyType signInKey,
             Instant now) {
-        FailedLoginState failedLoginState = failedLogins.get(loginKey);
-        if (failedLoginState == null) {
+        FailedSignInState failedSignInState = failedSignIns.get(signInKey);
+        if (failedSignInState == null) {
             return true;
         }
-        if (failedLoginState.isActivelyBlocked(now)) {
+        if (failedSignInState.isActivelyBlocked(now)) {
             return false;
         }
-        if (failedLoginState.hasExpired(now, failureWindow)) {
-            failedLogins.remove(loginKey);
+        if (failedSignInState.hasExpired(now, failureWindow)) {
+            failedSignIns.remove(signInKey);
         }
         return true;
     }
 
     private <KeyType> boolean recordFailedAuthentication(
-            Map<KeyType, FailedLoginState> failedLogins,
-            KeyType loginKey,
+            Map<KeyType, FailedSignInState> failedSignIns,
+            KeyType signInKey,
             int maximumFailedAttempts,
             int maximumTrackedKeys,
             Instant now) {
-        FailedLoginState failedLoginState = failedLogins.get(loginKey);
-        if (failedLoginState != null && failedLoginState.hasExpired(now, failureWindow)) {
-            failedLogins.remove(loginKey);
-            failedLoginState = null;
+        FailedSignInState failedSignInState = failedSignIns.get(signInKey);
+        if (failedSignInState != null && failedSignInState.hasExpired(now, failureWindow)) {
+            failedSignIns.remove(signInKey);
+            failedSignInState = null;
         }
-        if (failedLoginState == null) {
-            if (!makeRoomForNewState(failedLogins, maximumTrackedKeys, now)) {
+        if (failedSignInState == null) {
+            if (!makeRoomForNewState(failedSignIns, maximumTrackedKeys, now)) {
                 return false;
             }
-            failedLoginState = new FailedLoginState(now);
-            failedLogins.put(loginKey, failedLoginState);
+            failedSignInState = new FailedSignInState(now);
+            failedSignIns.put(signInKey, failedSignInState);
         }
-        if (failedLoginState.isActivelyBlocked(now)) {
+        if (failedSignInState.isActivelyBlocked(now)) {
             return true;
         }
 
-        failedLoginState.failedAttemptCount++;
-        if (failedLoginState.failedAttemptCount >= maximumFailedAttempts) {
-            failedLoginState.blockedUntil = now.plus(blockDuration);
+        failedSignInState.failedAttemptCount++;
+        if (failedSignInState.failedAttemptCount >= maximumFailedAttempts) {
+            failedSignInState.blockedUntil = now.plus(blockDuration);
         }
         return true;
     }
@@ -204,42 +204,42 @@ public class SignInAttemptThrottle {
     }
 
     private <KeyType> boolean cannotTrackNewState(
-            Map<KeyType, FailedLoginState> failedLogins,
-            KeyType loginKey,
+            Map<KeyType, FailedSignInState> failedSignIns,
+            KeyType signInKey,
             int maximumTrackedKeys,
             Instant now) {
-        removeExpiredStates(failedLogins, now);
-        if (failedLogins.containsKey(loginKey) || failedLogins.size() < maximumTrackedKeys) {
+        removeExpiredStates(failedSignIns, now);
+        if (failedSignIns.containsKey(signInKey) || failedSignIns.size() < maximumTrackedKeys) {
             return false;
         }
-        return failedLogins.values().stream().allMatch(failedLoginState -> failedLoginState.isActivelyBlocked(now));
+        return failedSignIns.values().stream().allMatch(failedSignInState -> failedSignInState.isActivelyBlocked(now));
     }
 
     private <KeyType> boolean makeRoomForNewState(
-            Map<KeyType, FailedLoginState> failedLogins,
+            Map<KeyType, FailedSignInState> failedSignIns,
             int maximumTrackedKeys,
             Instant now) {
-        removeExpiredStates(failedLogins, now);
-        if (failedLogins.size() < maximumTrackedKeys) {
+        removeExpiredStates(failedSignIns, now);
+        if (failedSignIns.size() < maximumTrackedKeys) {
             return true;
         }
 
-        Iterator<Map.Entry<KeyType, FailedLoginState>> failedLoginEntries = failedLogins.entrySet().iterator();
-        while (failedLoginEntries.hasNext()) {
-            Map.Entry<KeyType, FailedLoginState> failedLoginEntry = failedLoginEntries.next();
-            if (!failedLoginEntry.getValue().isActivelyBlocked(now)) {
-                failedLoginEntries.remove();
+        Iterator<Map.Entry<KeyType, FailedSignInState>> failedSignInEntries = failedSignIns.entrySet().iterator();
+        while (failedSignInEntries.hasNext()) {
+            Map.Entry<KeyType, FailedSignInState> failedSignInEntry = failedSignInEntries.next();
+            if (!failedSignInEntry.getValue().isActivelyBlocked(now)) {
+                failedSignInEntries.remove();
                 return true;
             }
         }
         return false;
     }
 
-    private <KeyType> void removeExpiredStates(Map<KeyType, FailedLoginState> failedLogins, Instant now) {
-        Iterator<Map.Entry<KeyType, FailedLoginState>> failedLoginEntries = failedLogins.entrySet().iterator();
-        while (failedLoginEntries.hasNext()) {
-            if (failedLoginEntries.next().getValue().hasExpired(now, failureWindow)) {
-                failedLoginEntries.remove();
+    private <KeyType> void removeExpiredStates(Map<KeyType, FailedSignInState> failedSignIns, Instant now) {
+        Iterator<Map.Entry<KeyType, FailedSignInState>> failedSignInEntries = failedSignIns.entrySet().iterator();
+        while (failedSignInEntries.hasNext()) {
+            if (failedSignInEntries.next().getValue().hasExpired(now, failureWindow)) {
+                failedSignInEntries.remove();
             }
         }
     }
@@ -280,12 +280,12 @@ public class SignInAttemptThrottle {
     private record UsernameAndSourceKey(String username, String sourceIdentifier) {
     }
 
-    private static final class FailedLoginState {
+    private static final class FailedSignInState {
         private final Instant windowStartedAt;
         private int failedAttemptCount;
         private Instant blockedUntil;
 
-        private FailedLoginState(Instant windowStartedAt) {
+        private FailedSignInState(Instant windowStartedAt) {
             this.windowStartedAt = windowStartedAt;
         }
 

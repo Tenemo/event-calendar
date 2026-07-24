@@ -27,7 +27,7 @@ final class SignInAttemptThrottleConcurrencyTest {
 
     @Test
     void concurrentFailuresForOneIdentityCannotLoseUpdatesOrCreateDuplicateState() throws Exception {
-        LoginAttemptThrottle throttle = throttle(5, 100, 100, 100);
+        SignInAttemptThrottle throttle = throttle(5, 100, 100, 100);
 
         runConcurrently(32, taskIndex ->
                 throttle.recordFailedAuthentication("piotr", TEST_SOURCE));
@@ -41,7 +41,7 @@ final class SignInAttemptThrottleConcurrencyTest {
 
     @Test
     void concurrentFailuresFromIndependentSourcesRemainSourceAware() throws Exception {
-        LoginAttemptThrottle throttle = throttle(2, 2, 100, 100);
+        SignInAttemptThrottle throttle = throttle(2, 2, 100, 100);
         int sourceCount = 24;
 
         runConcurrently(sourceCount, sourceIndex -> throttle.recordFailedAuthentication(
@@ -61,7 +61,7 @@ final class SignInAttemptThrottleConcurrencyTest {
 
     @Test
     void concurrentIdentifierSprayingCannotExceedBoundsOrEvictAnActiveBlock() throws Exception {
-        LoginAttemptThrottle throttle = throttle(1, 1, 8, 8);
+        SignInAttemptThrottle throttle = throttle(1, 1, 8, 8);
         throttle.recordFailedAuthentication("protected-user", TEST_SOURCE);
 
         runConcurrently(128, sprayIndex -> throttle.recordFailedAuthentication(
@@ -77,7 +77,7 @@ final class SignInAttemptThrottleConcurrencyTest {
 
     @Test
     void validationLocksUseTheSameBoundedSourceIdentityAsFailureTracking() {
-        LoginAttemptThrottle throttle = throttle(5, 25, 100, 100);
+        SignInAttemptThrottle throttle = throttle(5, 25, 100, 100);
 
         assertAll(
                 () -> assertSame(
@@ -91,12 +91,12 @@ final class SignInAttemptThrottleConcurrencyTest {
                         throttle.validationLock("   ")));
     }
 
-    private static LoginAttemptThrottle throttle(
+    private static SignInAttemptThrottle throttle(
             int maximumFailedAttemptsPerUsernameAndSource,
             int maximumFailedAttemptsPerSource,
             int maximumTrackedUsernameAndSourceCombinations,
             int maximumTrackedSources) {
-        return new LoginAttemptThrottle(
+        return new SignInAttemptThrottle(
                 FIXED_CLOCK,
                 maximumFailedAttemptsPerUsernameAndSource,
                 maximumFailedAttemptsPerSource,

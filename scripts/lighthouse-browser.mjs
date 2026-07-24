@@ -1,4 +1,4 @@
-import chromeLauncher from "chrome-launcher";
+import { Launcher } from "chrome-launcher";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -10,7 +10,7 @@ export function resolveChromePath(environment = process.env) {
         }
         return configuredChromePath;
     }
-    const detectedChromePath = chromeLauncher.Launcher.getFirstInstallation();
+    const detectedChromePath = Launcher.getFirstInstallation();
     if (!detectedChromePath) {
         throw new Error("Chrome or Chromium is required for Lighthouse measurement.");
     }
@@ -20,7 +20,7 @@ export function resolveChromePath(environment = process.env) {
 export function browserArguments(userDataDirectory, platform = process.platform) {
     const normalizedUserDataDirectory = path.resolve(userDataDirectory);
     const argumentsForBrowser = [
-        ...chromeLauncher.Launcher.defaultFlags(),
+        ...Launcher.defaultFlags(),
         "--headless=new",
         "--remote-debugging-address=127.0.0.1",
         "--remote-debugging-port=0",

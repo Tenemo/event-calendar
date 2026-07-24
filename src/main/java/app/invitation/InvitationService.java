@@ -93,15 +93,20 @@ public class InvitationService {
                 .getSingleResult();
     }
 
-    public List<Invitation> listInvitations(
+    public List<InvitationSummary> listInvitations(
             ApplicationUser actingUser,
             int firstResult,
-            int maximumResults) {
+            int maximumResults,
+            OffsetDateTime currentTime) {
         requireActiveUser(actingUser);
         requireValidInvitationPage(firstResult, maximumResults);
+        if (currentTime == null) {
+            throw new IllegalArgumentException("Current time is required.");
+        }
         List<Object[]> invitationRows = bindInvitationVisibility(
                         entityManager.createQuery(
-                                "select invitation, case when invitation.acceptedAt is null "
+                                "select invitation, "
+                                        + "case when invitation.acceptedAt is null "
                                         + "and invitation.revokedAt is null "
                                         + "and invitation.expiresAt > :currentTime "
                                         + "then 0 else 1 end as availabilityOrder "
@@ -112,24 +117,26 @@ public class InvitationService {
                                         + "invitation.createdAt desc, invitation.id desc",
                                 Object[].class),
                         actingUser)
-                .setParameter("currentTime", OffsetDateTime.now(ZoneOffset.UTC))
+                .setParameter("currentTime", currentTime)
                 .setFirstResult(firstResult)
                 .setMaxResults(maximumResults)
                 .getResultList();
         return invitationRows.stream()
-                .map(invitationRow -> {
-                    if (invitationRow.length < 2
-                            || !(invitationRow[0] instanceof Invitation invitation)) {
-                        throw new IllegalStateException("Invitation query returned an invalid row.");
-                    }
-                    Calendar invitationCalendar = invitation.getCalendar();
-                    if (invitationCalendar != null && invitationCalendar.getName() == null) {
-                        throw new IllegalStateException(
-                                "Invitation query returned a calendar without a name.");
-                    }
-                    return invitation;
-                })
+                .map(invitationRow -> toInvitationSummary((Invitation) invitationRow[0]))
                 .toList();
+    }
+
+    private InvitationSummary toInvitationSummary(Invitation invitation) {
+        return new InvitationSummary(
+                invitation.getId(),
+                invitation.getInvitationToken(),
+                invitation.getCalendar() == null
+                        ? null
+                        : invitation.getCalendar().getName(),
+                invitation.getRevokedAt(),
+                invitation.getAcceptedAt(),
+                invitation.getExpiresAt(),
+                invitation.getCreatedAt());
     }
 
     public void revokeInvitation(ApplicationUser actingUser, Long invitationId) {
@@ -228,7 +235,7 @@ public class InvitationService {
 
     private RegistrationAdmission admissionForInvitation(Invitation invitation) {
         try {
-            invitationPolicy.requireOpen(
+            invitationPolicy.requireAvailable(
                     invitation.getRevokedAt(),
                     invitation.getAcceptedAt(),
                     invitation.getExpiresAt(),

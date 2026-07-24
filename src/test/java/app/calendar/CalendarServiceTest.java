@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.audit.AuditService;
-import app.config.CalendarConfiguration;
+import app.config.NewCalendarDefaults;
 import app.event.CalendarEvent;
 import app.membership.CalendarAccessService;
 import app.membership.CalendarMembership;
@@ -43,7 +43,7 @@ final class CalendarServiceTest {
         setField(calendarService, "tokenService", new FixedTokenService("Abc_123-xY0"));
         setField(calendarService, "auditService", new NoOperationAuditService());
         setField(calendarService, "calendarTimeService", new CalendarTimeService());
-        setField(calendarService, "calendarConfiguration", calendarConfiguration("Europe/Warsaw"));
+        setField(calendarService, "newCalendarDefaults", newCalendarDefaults("Europe/Warsaw"));
 
         Calendar calendar = calendarService.createCalendar(creator, " Kayaking ");
 
@@ -368,10 +368,10 @@ final class CalendarServiceTest {
         return calendarService;
     }
 
-    private static CalendarConfiguration calendarConfiguration(String defaultTimeZone) {
-        CalendarConfiguration calendarConfiguration = new CalendarConfiguration();
-        setField(calendarConfiguration, "defaultTimeZone", defaultTimeZone);
-        return calendarConfiguration;
+    private static NewCalendarDefaults newCalendarDefaults(String defaultTimeZone) {
+        NewCalendarDefaults newCalendarDefaults = new NewCalendarDefaults();
+        setField(newCalendarDefaults, "defaultTimeZone", defaultTimeZone);
+        return newCalendarDefaults;
     }
 
     private static ApplicationUser activeUser(Long id) {

@@ -1,5 +1,6 @@
 package app.security;
 
+import static app.testsupport.ProxyReturnValues.defaultValue;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -206,7 +207,7 @@ final class SessionCookieRefreshFilterTest {
     }
 
     @Test
-    void invalidatesStaleApplicationAndCalendarPostbackSessionsWithTheFixedLoginRedirect()
+    void invalidatesStaleApplicationAndCalendarPostbackSessionsWithTheFixedSignInRedirect()
             throws Exception {
         for (String requestUri : List.of("/app/calendars", "/calendar.xhtml")) {
             StaleSessionCleanup sessionCleanup = new StaleSessionCleanup();
@@ -600,19 +601,6 @@ final class SessionCookieRefreshFilterTest {
 
     private FilterChain filterChain(AtomicInteger calls) {
         return (request, response) -> calls.incrementAndGet();
-    }
-
-    private Object defaultValue(Class<?> returnType) {
-        if (!returnType.isPrimitive()) {
-            return null;
-        }
-        if (returnType == boolean.class) {
-            return false;
-        }
-        if (returnType == char.class) {
-            return '\0';
-        }
-        return 0;
     }
 
     private record TestCase(CurrentUser currentUser, HttpServletRequest request) {

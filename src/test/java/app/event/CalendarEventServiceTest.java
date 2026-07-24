@@ -240,7 +240,7 @@ final class CalendarEventServiceTest {
         assertAll(
                 () -> assertEquals(originalStartTime, updatedEvent.getStartTime()),
                 () -> assertEquals(originalEndTime, updatedEvent.getEndTime()),
-                () -> assertEquals("All day from Wed, Jul 22, 2026 to Fri, Jul 24, 2026", displayedEvent.getTimeLabel()));
+                () -> assertEquals("All day from Wed, Jul 22, 2026 to Fri, Jul 24, 2026", displayedEvent.getScheduleLabel()));
     }
 
     @Test

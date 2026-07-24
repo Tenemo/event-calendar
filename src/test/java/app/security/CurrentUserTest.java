@@ -1,5 +1,6 @@
 package app.security;
 
+import static app.testsupport.ProxyReturnValues.defaultValue;
 import static app.testsupport.ServiceTestSupport.setField;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -131,19 +132,6 @@ final class CurrentUserTest {
         user.setDisplayName("Piotr");
         user.setActive(true);
         return user;
-    }
-
-    private static Object defaultValue(Class<?> returnType) {
-        if (!returnType.isPrimitive()) {
-            return null;
-        }
-        if (returnType == boolean.class) {
-            return false;
-        }
-        if (returnType == char.class) {
-            return '\0';
-        }
-        return 0;
     }
 
     private static final class RecordingUserService extends UserService {

@@ -20,7 +20,7 @@ Use these decisions unless the repository owner explicitly changes them later.
 | Persistence                  | Jakarta Persistence / JPA, provider-neutral code, Liberty default EclipseLink provider                       |
 | Database                     | Dockerized PostgreSQL for local development, Railway PostgreSQL for production                               |
 | Migrations                   | Flyway                                                                                                       |
-| Auth                         | Username/password with invitation-only registration, signed-in password change, source-aware login throttling, no OAuth/SSO |
+| Auth                         | Username/password with invitation-only registration, signed-in password change, source-aware sign-in throttling, no OAuth/SSO |
 | Calendar access              | Root `/{calendarLinkToken}` read-only bearer links plus authenticated editor/admin roles                     |
 | Calendar roles               | `EDITOR`, `ADMIN`, scoped to one calendar                                                                    |
 | Deployment                   | Dockerfile to Railway first                                                                                  |
@@ -99,7 +99,7 @@ The first deployed version must include:
 19. Audit log for account password, calendar, invitation, member, and event changes.
 20. Flyway-managed schema.
 21. Database-aware health endpoint.
-22. Login throttling.
+22. Sign-in throttling.
 23. Dockerized production build.
 24. Railway deployment with custom domain and HTTPS.
 25. Basic backup/restore procedure documented.
@@ -307,7 +307,7 @@ Before first real use:
 16. Do not log passwords, calendar-link tokens, invitation tokens, or full database URLs with credentials.
 17. Do not log app invitation tokens.
 18. Keep one app instance unless session handling is reviewed.
-19. Throttle repeated login failures by normalized username and client source without revealing whether an account exists or allowing one source to lock out other sources.
+19. Throttle repeated sign-in failures by normalized username and client source without revealing whether an account exists or allowing one source to lock out other sources.
 20. Keep anonymous sessions non-persistent with a 30-minute inactivity timeout. Refresh authenticated cookies on app and canonical calendar activity, use a 30-day authenticated inactivity timeout, and require reauthentication after application restart or redeploy while sessions remain in memory.
 21. Make `/health` fail when the database is unavailable and bound connection acquisition within the probe timeout.
 22. Make bootstrap consumption permanent after successful registration and transactional so a failed attempt releases the claim.
@@ -316,7 +316,7 @@ Before first real use:
 25. Serialize password replacement for one account and increment its password version atomically with the new hash.
 26. Invalidate the changing session immediately and reject every older session before protected request processing.
 27. Keep passwords, password hashes, password versions, and session identifiers out of URLs, audit details, and logs.
-28. Reject malformed root paths without calendar database access; source-rate-limit valid-looking paths through the same Railway-aware, spoof-resistant client-source resolver used by login, cap concurrent calendar rendering, and keep throttle memory bounded.
+28. Reject malformed root paths without calendar database access; source-rate-limit valid-looking paths through the same Railway-aware, spoof-resistant client-source resolver used by sign-in, cap concurrent calendar rendering, and keep throttle memory bounded.
 29. Use generic `404` and `429` responses that do not reveal whether a guessed token exists or echo the candidate token.
 30. Do not describe in-process throttling as complete DDoS protection. Railway supplies network-layer protection but no application-layer WAF; use an upstream application-layer edge and prevent direct-origin bypass when the threat requires it.
 
@@ -386,10 +386,10 @@ Minimum automated tests:
 11. Inclusive all-day dates and exclusive stored ends across short, long, skipped, and repeated civil days.
 12. Exact seven-day invitation expiry in the service and database, migration capping of older invitations, creator permission revalidation, administrator visibility/revocation, and concurrent single-use acceptance.
 13. Permanent atomic bootstrap consumption, including rollback and a real PostgreSQL race.
-14. Source-aware login throttling with generic missing-user behavior.
+14. Source-aware sign-in throttling with generic missing-user behavior.
 15. Non-persistent 30-minute anonymous sessions, rolling authenticated cookies, 30-day authenticated inactivity, restart reauthentication, and database-aware health.
 16. Password-change validation for wrong current password, mismatched confirmation, policy failures, password reuse, successful hash replacement, password-version increment, audit safety, and database locking.
-17. Browser-level password change from two authenticated sessions, including immediate logout, old-password rejection, new-password acceptance, and stale-session invalidation.
+17. Browser-level password change from two authenticated sessions, including immediate sign-out, old-password rejection, new-password acceptance, and stale-session invalidation.
 18. Exact root-route recognition, legacy `/calendar/` rejection, and malformed-path rejection before calendar lookup.
 19. Railway direct/CDN/internal forwarded chains, spoof-resistant local fallback, per-source calendar-link throttling, bounded source state, global concurrency admission, generic overload responses, and permit release on every success and exception path.
 

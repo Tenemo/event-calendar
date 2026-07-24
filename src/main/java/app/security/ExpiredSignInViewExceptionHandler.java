@@ -31,7 +31,7 @@ final class ExpiredSignInViewExceptionHandler extends ExceptionHandlerWrapper {
             Throwable exception = event.getContext().getException();
             if (!(requestObject instanceof HttpServletRequest request)
                     || !(responseObject instanceof HttpServletResponse response)
-                    || !isRecoverableExpiredLoginPostback(request, response, exception)) {
+                    || !isRecoverableExpiredSignInPostback(request, response, exception)) {
                 continue;
             }
 
@@ -44,7 +44,7 @@ final class ExpiredSignInViewExceptionHandler extends ExceptionHandlerWrapper {
         getWrapped().handle();
     }
 
-    static boolean isRecoverableExpiredLoginPostback(
+    static boolean isRecoverableExpiredSignInPostback(
             HttpServletRequest request,
             HttpServletResponse response,
             Throwable exception) {

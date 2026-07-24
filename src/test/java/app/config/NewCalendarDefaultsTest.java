@@ -12,28 +12,28 @@ import org.junit.jupiter.api.Test;
 final class NewCalendarDefaultsTest {
     @Test
     void normalizesTheConfiguredDefaultTimeZoneAtStartup() {
-        CalendarConfiguration calendarConfiguration = configurationWithTimeZone(" Europe/London ");
+        NewCalendarDefaults newCalendarDefaults = configurationWithTimeZone(" Europe/London ");
 
-        calendarConfiguration.initialize();
+        newCalendarDefaults.initialize();
 
-        assertEquals("Europe/London", calendarConfiguration.getDefaultTimeZone());
+        assertEquals("Europe/London", newCalendarDefaults.getDefaultTimeZone());
     }
 
     @Test
     void rejectsAnInvalidDefaultTimeZoneAtStartupWithAnOperationalError() {
-        CalendarConfiguration calendarConfiguration = configurationWithTimeZone("Unknown/TimeZone");
+        NewCalendarDefaults newCalendarDefaults = configurationWithTimeZone("Unknown/TimeZone");
 
-        IllegalStateException exception = assertThrows(IllegalStateException.class, calendarConfiguration::initialize);
+        IllegalStateException exception = assertThrows(IllegalStateException.class, newCalendarDefaults::initialize);
 
         assertEquals(
                 "APP_TIMEZONE must be a valid IANA time zone such as Europe/Warsaw.", exception.getMessage());
         assertInstanceOf(ValidationException.class, exception.getCause());
     }
 
-    private static CalendarConfiguration configurationWithTimeZone(String timeZone) {
-        CalendarConfiguration calendarConfiguration = new CalendarConfiguration();
-        setField(calendarConfiguration, "calendarTimeService", new CalendarTimeService());
-        setField(calendarConfiguration, "configuredDefaultTimeZone", timeZone);
-        return calendarConfiguration;
+    private static NewCalendarDefaults configurationWithTimeZone(String timeZone) {
+        NewCalendarDefaults newCalendarDefaults = new NewCalendarDefaults();
+        setField(newCalendarDefaults, "calendarTimeService", new CalendarTimeService());
+        setField(newCalendarDefaults, "configuredDefaultTimeZone", timeZone);
+        return newCalendarDefaults;
     }
 }

@@ -27,7 +27,7 @@
             <h:outputLink value="#{request.contextPath}/app/account-settings" rendered="#{currentUser.signedIn}">Account settings</h:outputLink>
             <h:outputLink value="#{request.contextPath}/login" rendered="#{not currentUser.signedIn}">Sign in</h:outputLink>
             <h:form styleClass="nav-form" rendered="#{currentUser.signedIn}">
-                <h:commandButton value="Sign out" action="#{logoutView.logout}" styleClass="nav-action link-button"/>
+                <h:commandButton value="Sign out" action="#{signOutView.signOut}" styleClass="nav-action link-button"/>
             </h:form>
         </nav>
     </header>

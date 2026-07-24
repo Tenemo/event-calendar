@@ -20,8 +20,14 @@
     --subtle-surface: #fbfcfe;
     --control-radius: 0.45rem;
     --panel-radius: 0.5rem;
+    --compact-text-size: 0.82rem;
+    --small-text-size: 0.86rem;
+    --interactive-control-size: 2.7rem;
     --danger: #b91c1c;
     --danger-strong: #991b1b;
+    --danger-soft: #fef2f2;
+    --inactive-background: #f3f4f6;
+    --inactive-text: #4b5563;
     --focus-ring: #0f3d9e;
     --shadow: 0 1px 3px rgb(17 24 39 / 8%);
 }
@@ -85,7 +91,7 @@ a {
 .app-subtitle {
     margin: 0.2rem 0 0;
     color: var(--muted-text);
-    font-size: 0.86rem;
+    font-size: var(--small-text-size);
 }
 
 .app-nav {
@@ -320,13 +326,13 @@ button,
     gap: 0.75rem;
     margin-bottom: 0.75rem;
     color: var(--muted-text);
-    font-size: 0.88rem;
+    font-size: var(--small-text-size);
 }
 
 .eyebrow {
     margin: 0 0 0.5rem;
     color: var(--muted-text);
-    font-size: 0.82rem;
+    font-size: var(--compact-text-size);
     font-weight: 700;
 }
 
@@ -334,7 +340,7 @@ button,
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 2.7rem;
+    min-height: var(--interactive-control-size);
     padding: 0 1rem;
 }
 
@@ -394,7 +400,7 @@ button,
     border-radius: 999px;
     background: var(--green-soft);
     color: var(--green-strong);
-    font-size: 0.82rem;
+    font-size: var(--compact-text-size);
     font-weight: 700;
     line-height: 1.2;
     padding: 0.45rem 0.7rem;
@@ -474,7 +480,17 @@ button,
     margin: 0;
 }
 
+.table-row-actions {
+    align-items: center;
+}
+
+.event-pagination {
+    margin-top: 0.75rem;
+}
+
 .event-editor {
+    max-height: calc(100vh - 7.5rem);
+    overflow-y: auto;
     position: sticky;
     top: 6.5rem;
 }
@@ -533,7 +549,7 @@ button,
 .secondary-line {
     display: block;
     margin-top: 0.25rem;
-    font-size: 0.86rem;
+    font-size: var(--small-text-size);
 }
 
 .inline-role-form {
@@ -547,7 +563,7 @@ button,
     display: inline-flex;
     border-radius: 999px;
     padding: 0.4rem 0.65rem;
-    font-size: 0.82rem;
+    font-size: var(--compact-text-size);
     font-weight: 700;
 }
 
@@ -557,8 +573,8 @@ button,
 }
 
 .status-label.inactive {
-    background: #f3f4f6;
-    color: #4b5563;
+    background: var(--inactive-background);
+    color: var(--inactive-text);
 }
 
 .not-found-state {
@@ -621,7 +637,7 @@ body input.native-input:focus {
 }
 
 body input.native-button {
-    min-height: 2.7rem;
+    min-height: var(--interactive-control-size);
     padding: 0.7rem 1rem;
     border: 1px solid var(--primary);
     border-radius: var(--control-radius);
@@ -643,7 +659,7 @@ body input.native-button:active {
     padding: 0.9rem 1rem;
     border: 1px solid var(--danger);
     border-radius: var(--control-radius);
-    background: #fef2f2;
+    background: var(--danger-soft);
     color: var(--danger);
     line-height: 1.5;
     list-style: none;
@@ -667,6 +683,14 @@ body input.native-button:active {
     max-width: 100%;
 }
 
+.stacked-form .ui-datepicker,
+.stacked-form .ui-inputfield,
+.stacked-form .ui-inputtextarea {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+}
+
 .generated-invitation {
     display: grid;
     gap: 0.5rem;
@@ -684,7 +708,7 @@ body input.native-button:active {
     min-height: 1.25rem;
     margin: 0;
     color: var(--muted-text);
-    font-size: 0.86rem;
+    font-size: var(--small-text-size);
     line-height: 1.45;
 }
 
@@ -701,7 +725,7 @@ body input.native-button:active {
 .field-help {
     margin-top: -0.35rem;
     color: var(--muted-text);
-    font-size: 0.86rem;
+    font-size: var(--small-text-size);
     line-height: 1.45;
 }
 
@@ -750,6 +774,10 @@ body select,
 body .ui-inputfield,
 body .ui-chkbox .ui-chkbox-box {
     border-color: var(--control-border);
+}
+
+body .ui-inputfield {
+    min-height: 2.5rem;
 }
 
 body select {
@@ -808,6 +836,7 @@ body .ui-paginator .ui-paginator-pages .ui-paginator-page.ui-state-active {
 }
 
 body .ui-button {
+    min-height: var(--interactive-control-size);
     border-color: var(--primary);
     background: var(--primary);
     color: #fff;
@@ -885,7 +914,7 @@ body .ui-button.ui-button-danger.ui-button-outlined {
 
 body .ui-button.ui-button-danger.ui-button-outlined:not(.ui-state-disabled):hover {
     border-color: var(--danger-strong);
-    background: #fef2f2;
+    background: var(--danger-soft);
     color: var(--danger-strong);
 }
 
@@ -893,7 +922,7 @@ body .ui-button.ui-button-danger.ui-button-outlined.ui-state-active,
 body .ui-button.ui-button-danger.ui-button-outlined.ui-state-down,
 body .ui-button.ui-button-danger.ui-button-outlined:active {
     border-color: var(--danger-strong);
-    background: #fef2f2;
+    background: var(--danger-soft);
     color: var(--danger-strong);
 }
 
@@ -983,6 +1012,8 @@ body .ui-button.ui-button-danger.ui-state-focus {
     }
 
     .event-editor {
+        max-height: none;
+        overflow: visible;
         position: static;
     }
 
@@ -1009,6 +1040,8 @@ body .ui-button.ui-button-danger.ui-state-focus {
 
 @media (height <= 48rem) {
     .event-editor {
+        max-height: none;
+        overflow: visible;
         position: static;
     }
 }
@@ -1020,5 +1053,22 @@ body .ui-button.ui-button-danger.ui-state-focus {
         scroll-behavior: auto !important;
         animation: none !important;
         transition: none !important;
+    }
+}
+
+@media (forced-colors: active) {
+    .role-chip,
+    .status-label,
+    .status-dot {
+        border: 1px solid currentcolor;
+    }
+
+    .status-dot {
+        background: CanvasText;
+    }
+
+    .month-grid .has-event {
+        outline: 2px solid Highlight;
+        outline-offset: -2px;
     }
 }

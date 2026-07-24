@@ -1,5 +1,7 @@
 package app.security;
 
+import static app.testsupport.ProxyReturnValues.defaultValue;
+import static app.testsupport.XmlTestDocuments.parseXml;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -26,7 +28,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import javax.xml.parsers.DocumentBuilderFactory;
 import org.junit.jupiter.api.Test;
 import org.w3c.dom.NodeList;
 
@@ -55,7 +56,7 @@ final class ExpiredSignInViewExceptionHandlerTest {
         RecordingExceptionHandler wrappedHandler = new RecordingExceptionHandler(
                 firstRecoverableEvent, nonrecoverableEvent, secondRecoverableEvent);
 
-        new ExpiredLoginViewExceptionHandler(wrappedHandler).handle();
+        new ExpiredSignInViewExceptionHandler(wrappedHandler).handle();
 
         List<ExceptionQueuedEvent> expectedDelegatedEvents = List.of(nonrecoverableEvent);
         assertAll(
@@ -106,7 +107,7 @@ final class ExpiredSignInViewExceptionHandlerTest {
         RecordingExceptionHandler wrappedHandler =
                 new RecordingExceptionHandler(nonrecoverableEvents.toArray(ExceptionQueuedEvent[]::new));
 
-        new ExpiredLoginViewExceptionHandler(wrappedHandler).handle();
+        new ExpiredSignInViewExceptionHandler(wrappedHandler).handle();
 
         assertAll(
                 () -> assertIterableEquals(
@@ -125,36 +126,36 @@ final class ExpiredSignInViewExceptionHandlerTest {
 
     @Test
     void recoversOnlyUncommittedExpiredSignInPostbacks() {
-        Throwable wrappedExpiredLoginView = new ServletException(
+        Throwable wrappedExpiredSignInView = new ServletException(
                 "Faces postback failed.",
                 new ViewExpiredException("The view expired.", "/login"));
 
         assertAll(
-                () -> assertTrue(ExpiredLoginViewExceptionHandler.isRecoverableExpiredLoginPostback(
+                () -> assertTrue(ExpiredSignInViewExceptionHandler.isRecoverableExpiredSignInPostback(
                         request("POST", "", "/login"),
                         response(false),
-                        wrappedExpiredLoginView)),
-                () -> assertTrue(ExpiredLoginViewExceptionHandler.isRecoverableExpiredLoginPostback(
+                        wrappedExpiredSignInView)),
+                () -> assertTrue(ExpiredSignInViewExceptionHandler.isRecoverableExpiredSignInPostback(
                         request("POST", "/calendar", "/calendar/login.xhtml"),
                         response(false),
                         new ViewExpiredException("The view expired.", "/login.xhtml"))),
-                () -> assertFalse(ExpiredLoginViewExceptionHandler.isRecoverableExpiredLoginPostback(
+                () -> assertFalse(ExpiredSignInViewExceptionHandler.isRecoverableExpiredSignInPostback(
                         request("GET", "", "/login"),
                         response(false),
-                        wrappedExpiredLoginView)),
-                () -> assertFalse(ExpiredLoginViewExceptionHandler.isRecoverableExpiredLoginPostback(
+                        wrappedExpiredSignInView)),
+                () -> assertFalse(ExpiredSignInViewExceptionHandler.isRecoverableExpiredSignInPostback(
                         request("POST", "", "/register"),
                         response(false),
-                        wrappedExpiredLoginView)),
-                () -> assertFalse(ExpiredLoginViewExceptionHandler.isRecoverableExpiredLoginPostback(
+                        wrappedExpiredSignInView)),
+                () -> assertFalse(ExpiredSignInViewExceptionHandler.isRecoverableExpiredSignInPostback(
                         request("POST", "", "/login"),
                         response(true),
-                        wrappedExpiredLoginView)),
-                () -> assertFalse(ExpiredLoginViewExceptionHandler.isRecoverableExpiredLoginPostback(
+                        wrappedExpiredSignInView)),
+                () -> assertFalse(ExpiredSignInViewExceptionHandler.isRecoverableExpiredSignInPostback(
                         request("POST", "", "/login"),
                         response(false),
                         new ViewExpiredException("Another view expired.", "/register"))),
-                () -> assertFalse(ExpiredLoginViewExceptionHandler.isRecoverableExpiredLoginPostback(
+                () -> assertFalse(ExpiredSignInViewExceptionHandler.isRecoverableExpiredSignInPostback(
                         request("POST", "", "/login"),
                         response(false),
                         new IllegalStateException("Database failed."))));
@@ -162,17 +163,13 @@ final class ExpiredSignInViewExceptionHandlerTest {
 
     @Test
     void facesConfigurationRegistersTheRecoveryFactory() throws Exception {
-        DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
-        documentBuilderFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-        NodeList factoryElements = documentBuilderFactory
-                .newDocumentBuilder()
-                .parse(FACES_CONFIGURATION_PATH.toFile())
+        NodeList factoryElements = parseXml(FACES_CONFIGURATION_PATH)
                 .getElementsByTagName("exception-handler-factory");
 
         assertAll(
                 () -> assertEquals(1, factoryElements.getLength()),
                 () -> assertEquals(
-                        ExpiredLoginViewExceptionHandlerFactory.class.getName(),
+                        ExpiredSignInViewExceptionHandlerFactory.class.getName(),
                         factoryElements.item(0).getTextContent().trim()));
     }
 
@@ -211,37 +208,6 @@ final class ExpiredSignInViewExceptionHandlerTest {
 
     private static ExceptionQueuedEvent event(FacesContext facesContext, Throwable exception) {
         return new ExceptionQueuedEvent(new ExceptionQueuedEventContext(facesContext, exception));
-    }
-
-    private static Object defaultValue(Class<?> returnType) {
-        if (!returnType.isPrimitive()) {
-            return null;
-        }
-        if (returnType == boolean.class) {
-            return false;
-        }
-        if (returnType == char.class) {
-            return '\0';
-        }
-        if (returnType == byte.class) {
-            return (byte) 0;
-        }
-        if (returnType == short.class) {
-            return (short) 0;
-        }
-        if (returnType == int.class) {
-            return 0;
-        }
-        if (returnType == long.class) {
-            return 0L;
-        }
-        if (returnType == float.class) {
-            return 0.0F;
-        }
-        if (returnType == double.class) {
-            return 0.0D;
-        }
-        throw new IllegalArgumentException("Unsupported primitive return type: " + returnType);
     }
 
     private static final class RecordingExceptionHandler extends ExceptionHandler {

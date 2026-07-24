@@ -19,7 +19,7 @@ final class SignInAttemptThrottleTest {
     @Test
     void usernameAndSourceBlockExpiresAtTheConfiguredTimeWithoutSleeping() {
         MutableClock clock = new MutableClock(TEST_START);
-        LoginAttemptThrottle throttle = throttle(clock, 2, 20, 10, 10);
+        SignInAttemptThrottle throttle = throttle(clock, 2, 20, 10, 10);
 
         throttle.recordFailedAuthentication("piotr", TEST_SOURCE);
         throttle.recordFailedAuthentication("piotr", TEST_SOURCE);
@@ -37,7 +37,7 @@ final class SignInAttemptThrottleTest {
     @Test
     void failuresOutsideTheWindowStartANewWindow() {
         MutableClock clock = new MutableClock(TEST_START);
-        LoginAttemptThrottle throttle = throttle(clock, 2, 20, 10, 10);
+        SignInAttemptThrottle throttle = throttle(clock, 2, 20, 10, 10);
 
         throttle.recordFailedAuthentication("piotr", TEST_SOURCE);
         clock.advance(Duration.ofMinutes(10));
@@ -48,7 +48,7 @@ final class SignInAttemptThrottleTest {
 
     @Test
     void hostileSourceDoesNotBlockTheSameUsernameForAnotherSource() {
-        LoginAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 2, 20, 10, 10);
+        SignInAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 2, 20, 10, 10);
 
         throttle.recordFailedAuthentication("piotr", "198.51.100.10");
         throttle.recordFailedAuthentication("piotr", "198.51.100.10");
@@ -60,7 +60,7 @@ final class SignInAttemptThrottleTest {
 
     @Test
     void sourceFailureLimitStopsUsernameSpraying() {
-        LoginAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 5, 3, 20, 10);
+        SignInAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 5, 3, 20, 10);
 
         throttle.recordFailedAuthentication("person-one", TEST_SOURCE);
         throttle.recordFailedAuthentication("person-two", TEST_SOURCE);
@@ -73,7 +73,7 @@ final class SignInAttemptThrottleTest {
 
     @Test
     void successfulUsernameDoesNotEraseCrossUsernameSourceFailures() {
-        LoginAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 5, 3, 20, 10);
+        SignInAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 5, 3, 20, 10);
 
         throttle.recordFailedAuthentication("person-one", TEST_SOURCE);
         throttle.recordFailedAuthentication("person-two", TEST_SOURCE);
@@ -87,7 +87,7 @@ final class SignInAttemptThrottleTest {
 
     @Test
     void usernameAndSourceStateCannotExceedItsConfiguredLimit() {
-        LoginAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 5, 200, 3, 10);
+        SignInAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 5, 200, 3, 10);
 
         for (int usernameIndex = 0; usernameIndex < 100; usernameIndex++) {
             throttle.recordFailedAuthentication("person-" + usernameIndex, TEST_SOURCE);
@@ -98,7 +98,7 @@ final class SignInAttemptThrottleTest {
 
     @Test
     void sourceStateCannotExceedItsConfiguredLimit() {
-        LoginAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 5, 5, 200, 3);
+        SignInAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 5, 5, 200, 3);
 
         for (int sourceIndex = 0; sourceIndex < 100; sourceIndex++) {
             throttle.recordFailedAuthentication("person-" + sourceIndex, "192.0.2." + sourceIndex);
@@ -109,7 +109,7 @@ final class SignInAttemptThrottleTest {
 
     @Test
     void usernameAndSourceSprayingDoesNotEvictAnActiveBlock() {
-        LoginAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 2, 1_000, 3, 10);
+        SignInAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 2, 1_000, 3, 10);
 
         throttle.recordFailedAuthentication("target", TEST_SOURCE);
         throttle.recordFailedAuthentication("target", TEST_SOURCE);
@@ -124,7 +124,7 @@ final class SignInAttemptThrottleTest {
 
     @Test
     void sourceSprayingDoesNotEvictAnActiveSourceBlock() {
-        LoginAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 5, 2, 200, 3);
+        SignInAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 5, 2, 200, 3);
         String blockedSource = "198.51.100.10";
 
         throttle.recordFailedAuthentication("person-one", blockedSource);
@@ -141,7 +141,7 @@ final class SignInAttemptThrottleTest {
     @Test
     void saturationFailsClosedWhenEveryTrackedStateIsActivelyBlocked() {
         MutableClock clock = new MutableClock(TEST_START);
-        LoginAttemptThrottle throttle = throttle(clock, 1, 1, 1, 1);
+        SignInAttemptThrottle throttle = throttle(clock, 1, 1, 1, 1);
 
         throttle.recordFailedAuthentication("first-person", "198.51.100.10");
 
@@ -156,7 +156,7 @@ final class SignInAttemptThrottleTest {
 
     @Test
     void oversizedIdentifiersUseBoundedTrackingKeys() {
-        LoginAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 5, 20, 10, 10);
+        SignInAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 5, 20, 10, 10);
 
         throttle.recordFailedAuthentication("a".repeat(81), "x".repeat(129));
         throttle.recordFailedAuthentication("b".repeat(160), "y".repeat(256));
@@ -166,13 +166,13 @@ final class SignInAttemptThrottleTest {
                 () -> assertEquals(1, throttle.trackedSourceCount()));
     }
 
-    private static LoginAttemptThrottle throttle(
+    private static SignInAttemptThrottle throttle(
             Clock clock,
             int maximumFailedAttemptsPerUsernameAndSource,
             int maximumFailedAttemptsPerSource,
             int maximumTrackedUsernameAndSourceCombinations,
             int maximumTrackedSources) {
-        return new LoginAttemptThrottle(
+        return new SignInAttemptThrottle(
                 clock,
                 maximumFailedAttemptsPerUsernameAndSource,
                 maximumFailedAttemptsPerSource,

@@ -1,7 +1,7 @@
 package app.calendar;
 
 import app.audit.AuditService;
-import app.config.CalendarConfiguration;
+import app.config.NewCalendarDefaults;
 import app.event.CalendarEvent;
 import app.membership.CalendarAccessService;
 import app.membership.CalendarMembership;
@@ -45,7 +45,7 @@ public class CalendarService {
     private CalendarTimeService calendarTimeService;
 
     @Inject
-    private CalendarConfiguration calendarConfiguration;
+    private NewCalendarDefaults newCalendarDefaults;
 
     public Calendar createCalendar(ApplicationUser creator, String name) {
         if (creator == null || creator.getId() == null || !creator.isActive()) {
@@ -67,7 +67,7 @@ public class CalendarService {
         calendar.setName(normalizedName);
         calendar.setDescription(null);
         calendar.setCalendarLinkToken(generateUniqueCalendarLinkToken());
-        calendar.setTimeZone(calendarConfiguration.getDefaultTimeZone());
+        calendar.setTimeZone(newCalendarDefaults.getDefaultTimeZone());
         calendar.setPublicAccessEnabled(true);
         calendar.setActive(true);
         calendar.setCreatedByUser(managedCreator);

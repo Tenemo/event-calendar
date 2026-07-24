@@ -20,7 +20,7 @@ public class DatabaseIdentityStore implements IdentityStore {
     private PasswordService passwordService;
 
     @Inject
-    private LoginAttemptThrottle loginAttemptThrottle;
+    private SignInAttemptThrottle signInAttemptThrottle;
 
     @Inject
     private HttpServletRequest request;
@@ -41,8 +41,8 @@ public class DatabaseIdentityStore implements IdentityStore {
         String username = userService.normalizeUsername(usernamePasswordCredential.getCaller());
         String password = usernamePasswordCredential.getPasswordAsString();
         String sourceIdentifier = sourceIdentifier();
-        synchronized (loginAttemptThrottle.validationLock(sourceIdentifier)) {
-            if (!loginAttemptThrottle.isAuthenticationAllowed(username, sourceIdentifier)) {
+        synchronized (signInAttemptThrottle.validationLock(sourceIdentifier)) {
+            if (!signInAttemptThrottle.isAuthenticationAllowed(username, sourceIdentifier)) {
                 return CredentialValidationResult.INVALID_RESULT;
             }
 
@@ -50,9 +50,9 @@ public class DatabaseIdentityStore implements IdentityStore {
                     .map(user -> validatePassword(user, password))
                     .orElseGet(() -> validateMissingUserPassword(password));
             if (validationResult.getStatus() == CredentialValidationResult.Status.VALID) {
-                loginAttemptThrottle.clearUsernameAndSourceFailures(username, sourceIdentifier);
+                signInAttemptThrottle.clearUsernameAndSourceFailures(username, sourceIdentifier);
             } else {
-                loginAttemptThrottle.recordFailedAuthentication(username, sourceIdentifier);
+                signInAttemptThrottle.recordFailedAuthentication(username, sourceIdentifier);
             }
             return validationResult;
         }

@@ -145,7 +145,7 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
             buildDockerImage();
         }
 
-        E2eVerificationEndpoints endpoints = e2eVerificationEndpoints(System.getenv());
+        VerificationEndpoints endpoints = endToEndVerificationEndpoints(System.getenv());
         Map<String, String> verificationEnvironment = new HashMap<>();
         verificationEnvironment.put(
                 E2E_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE,
@@ -197,7 +197,7 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
     private static void verifySharedCalendarEndToEnd(
             String selectedTest,
             String diagnosticDirectoryName) throws IOException, InterruptedException {
-        E2eVerificationEndpoints endpoints = e2eVerificationEndpoints(System.getenv());
+        VerificationEndpoints endpoints = endToEndVerificationEndpoints(System.getenv());
         Map<String, String> verificationEnvironment = new HashMap<>();
         verificationEnvironment.put(
                 E2E_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE,
@@ -213,18 +213,18 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
         verificationEnvironment.put(
                 APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE,
                 endpoints.applicationBaseUri().toString());
-        verificationEnvironment.put(CalendarToolPostgresql.POSTGRESQL_HOST_ENVIRONMENT_VARIABLE, "localhost");
+        verificationEnvironment.put(CalendarToolPostgreSql.POSTGRESQL_HOST_ENVIRONMENT_VARIABLE, "localhost");
         verificationEnvironment.put(
-                CalendarToolPostgresql.POSTGRESQL_PORT_ENVIRONMENT_VARIABLE,
+                CalendarToolPostgreSql.POSTGRESQL_PORT_ENVIRONMENT_VARIABLE,
                 endpoints.databasePort());
         verificationEnvironment.put(
-                CalendarToolPostgresql.POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE,
+                CalendarToolPostgreSql.POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE,
                 E2E_VERIFICATION_DATABASE_NAME);
         verificationEnvironment.put(
-                CalendarToolPostgresql.POSTGRESQL_USER_ENVIRONMENT_VARIABLE,
+                CalendarToolPostgreSql.POSTGRESQL_USER_ENVIRONMENT_VARIABLE,
                 E2E_VERIFICATION_DATABASE_USER);
         verificationEnvironment.put(
-                CalendarToolPostgresql.POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE,
+                CalendarToolPostgreSql.POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE,
                 E2E_VERIFICATION_DATABASE_PASSWORD);
         verificationEnvironment.put(BROWSER_ENVIRONMENT_VARIABLE, configuredBrowserName());
         verificationEnvironment.put(E2E_MANAGED_RECOVERY_SCENARIOS_ENVIRONMENT_VARIABLE, "true");
@@ -243,40 +243,18 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
                 endToEndMavenCommand(selectedTest)));
     }
 
-    static E2eVerificationEndpoints e2eVerificationEndpoints(Map<String, String> environment) {
-        String healthControlPort = environmentPortValue(
+    static VerificationEndpoints endToEndVerificationEndpoints(
+            Map<String, String> environment) {
+        return verificationEndpoints(
                 environment,
                 E2E_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE,
-                DEFAULT_E2E_VERIFICATION_APPLICATION_PORT);
-        String httpsPort = environmentPortValue(
-                environment,
+                DEFAULT_E2E_VERIFICATION_APPLICATION_PORT,
                 E2E_VERIFICATION_HTTPS_PORT_ENVIRONMENT_VARIABLE,
-                DEFAULT_E2E_VERIFICATION_HTTPS_PORT);
-        String databasePort = environmentPortValue(
-                environment,
+                DEFAULT_E2E_VERIFICATION_HTTPS_PORT,
                 E2E_VERIFICATION_DATABASE_PORT_ENVIRONMENT_VARIABLE,
-                DEFAULT_E2E_VERIFICATION_DATABASE_PORT);
-        if (healthControlPort.equals(httpsPort)
-                || healthControlPort.equals(databasePort)
-                || httpsPort.equals(databasePort)) {
-            throw new IllegalArgumentException(
-                    "E2E verification HTTP, HTTPS, and PostgreSQL ports must be distinct.");
-        }
-
-        return new E2eVerificationEndpoints(
-                healthControlPort,
-                httpsPort,
-                databasePort,
-                URI.create("https://localhost:" + httpsPort),
-                URI.create("http://localhost:" + healthControlPort + "/health"));
+                DEFAULT_E2E_VERIFICATION_DATABASE_PORT,
+                "E2E verification");
     }
-
-    record E2eVerificationEndpoints(
-            String healthControlPort,
-            String httpsPort,
-            String databasePort,
-            URI applicationBaseUri,
-            URI healthControlUri) {}
 
     static String[] endToEndMavenCommand(String selectedTest) {
         List<String> command = new ArrayList<>(List.of(MAVEN_WRAPPER_COMMAND, "-Pe2e"));
@@ -296,7 +274,7 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
             buildDockerImage();
         }
 
-        BootstrapVerificationEndpoints endpoints =
+        VerificationEndpoints endpoints =
                 bootstrapVerificationEndpoints(System.getenv());
         Map<String, String> verificationEnvironment = new HashMap<>();
         verificationEnvironment.put(
@@ -344,28 +322,49 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
                 }));
     }
 
-    static BootstrapVerificationEndpoints bootstrapVerificationEndpoints(
+    static VerificationEndpoints bootstrapVerificationEndpoints(
             Map<String, String> environment) {
-        String healthControlPort = environmentPortValue(
+        return verificationEndpoints(
                 environment,
                 BOOTSTRAP_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE,
-                DEFAULT_BOOTSTRAP_VERIFICATION_APPLICATION_PORT);
+                DEFAULT_BOOTSTRAP_VERIFICATION_APPLICATION_PORT,
+                BOOTSTRAP_VERIFICATION_HTTPS_PORT_ENVIRONMENT_VARIABLE,
+                DEFAULT_BOOTSTRAP_VERIFICATION_HTTPS_PORT,
+                BOOTSTRAP_VERIFICATION_DATABASE_PORT_ENVIRONMENT_VARIABLE,
+                DEFAULT_BOOTSTRAP_VERIFICATION_DATABASE_PORT,
+                "Bootstrap verification");
+    }
+
+    private static VerificationEndpoints verificationEndpoints(
+            Map<String, String> environment,
+            String healthControlPortEnvironmentVariable,
+            String defaultHealthControlPort,
+            String httpsPortEnvironmentVariable,
+            String defaultHttpsPort,
+            String databasePortEnvironmentVariable,
+            String defaultDatabasePort,
+            String verificationName) {
+        String healthControlPort = environmentPortValue(
+                environment,
+                healthControlPortEnvironmentVariable,
+                defaultHealthControlPort);
         String httpsPort = environmentPortValue(
                 environment,
-                BOOTSTRAP_VERIFICATION_HTTPS_PORT_ENVIRONMENT_VARIABLE,
-                DEFAULT_BOOTSTRAP_VERIFICATION_HTTPS_PORT);
+                httpsPortEnvironmentVariable,
+                defaultHttpsPort);
         String databasePort = environmentPortValue(
                 environment,
-                BOOTSTRAP_VERIFICATION_DATABASE_PORT_ENVIRONMENT_VARIABLE,
-                DEFAULT_BOOTSTRAP_VERIFICATION_DATABASE_PORT);
+                databasePortEnvironmentVariable,
+                defaultDatabasePort);
         if (healthControlPort.equals(httpsPort)
                 || healthControlPort.equals(databasePort)
                 || httpsPort.equals(databasePort)) {
             throw new IllegalArgumentException(
-                    "Bootstrap verification HTTP, HTTPS, and PostgreSQL ports must be distinct.");
+                    verificationName
+                            + " HTTP, HTTPS, and PostgreSQL ports must be distinct.");
         }
 
-        return new BootstrapVerificationEndpoints(
+        return new VerificationEndpoints(
                 healthControlPort,
                 httpsPort,
                 databasePort,
@@ -373,7 +372,7 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
                 URI.create("http://localhost:" + healthControlPort + "/health"));
     }
 
-    record BootstrapVerificationEndpoints(
+    record VerificationEndpoints(
             String healthControlPort,
             String httpsPort,
             String databasePort,
@@ -395,7 +394,7 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
                             verification.databaseServiceName(),
                             verification.applicationServiceName()));
             waitForApplication(verification.healthUri());
-            CalendarToolPostgresql.checkComposeDatabaseSchema(
+            CalendarToolPostgreSql.checkComposeDatabaseSchema(
                     verification.databaseServiceName(),
                     verification.databaseUser(),
                     verification.databaseName());
@@ -531,7 +530,7 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
 
     static void verifyLocal() throws IOException, InterruptedException {
         checkApplicationHealth();
-        CalendarToolPostgresql.checkDatabaseSchema();
+        CalendarToolPostgreSql.checkDatabaseSchema();
     }
 
     private static void checkApplicationHealth() throws IOException, InterruptedException {

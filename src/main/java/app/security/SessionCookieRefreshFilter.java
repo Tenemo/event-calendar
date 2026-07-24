@@ -61,7 +61,7 @@ public class SessionCookieRefreshFilter implements Filter {
                             request,
                             response,
                             request.getContextPath(),
-                            ExpiredLoginViewExceptionHandler.RECOVERY_ROUTE);
+                            ExpiredSignInViewExceptionHandler.RECOVERY_ROUTE);
                 }
                 return;
             }

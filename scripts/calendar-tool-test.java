@@ -18,14 +18,14 @@ final class CalendarToolTest {
         run("resolves pinned subprocess tools through mise", CalendarToolTest::resolvesPinnedSubprocessTools);
         run("validates browser and port environment values", CalendarToolTest::validatesEnvironmentValues);
         run("constructs canonical health URLs", CalendarToolTest::constructsHealthUrls);
-        run("separates HTTPS browser and HTTP health endpoints", CalendarToolTest::separatesE2eEndpoints);
+        run("separates HTTPS browser and HTTP health endpoints", CalendarToolTest::separatesEndToEndEndpoints);
         run("keeps verification diagnostics free of secrets", CalendarToolTest::keepsDiagnosticsSecretFree);
         run("validates health responses precisely", CalendarToolTest::validatesHealthResponses);
         run("polls until the application becomes healthy", CalendarToolTest::pollsUntilHealthy);
         run("reports the last readiness failure on timeout", CalendarToolTest::reportsReadinessTimeoutCause);
         run("propagates readiness interruption", CalendarToolTest::propagatesReadinessInterruption);
         run("constructs portable quality commands", CalendarToolTest::constructsQualityCommands);
-        run("uses the Compose PostgreSQL image as one source", CalendarToolTest::usesComposePostgresqlImage);
+        run("uses the Compose PostgreSQL image as one source", CalendarToolTest::usesComposePostgreSqlImage);
         run(
                 "constructs isolated backup verification commands",
                 CalendarToolTest::constructsBackupVerificationCommands);
@@ -259,9 +259,9 @@ final class CalendarToolTest {
                 () -> CalendarToolVerification.validateHealthResponse(healthUri, 200, null));
     }
 
-    private static void separatesE2eEndpoints() {
-        CalendarToolVerification.E2eVerificationEndpoints defaults =
-                CalendarToolVerification.e2eVerificationEndpoints(Map.of());
+    private static void separatesEndToEndEndpoints() {
+        CalendarToolVerification.VerificationEndpoints defaults =
+                CalendarToolVerification.endToEndVerificationEndpoints(Map.of());
         assertEquals("9082", defaults.healthControlPort(), "Default HTTP health port");
         assertEquals("9445", defaults.httpsPort(), "Default HTTPS browser port");
         assertEquals("55433", defaults.databasePort(), "Default PostgreSQL port");
@@ -274,8 +274,8 @@ final class CalendarToolTest {
                 defaults.healthControlUri(),
                 "Default HTTP health-control URL");
 
-        CalendarToolVerification.E2eVerificationEndpoints configured =
-                CalendarToolVerification.e2eVerificationEndpoints(Map.of(
+        CalendarToolVerification.VerificationEndpoints configured =
+                CalendarToolVerification.endToEndVerificationEndpoints(Map.of(
                 "E2E_VERIFICATION_APPLICATION_PORT", "19082",
                 "E2E_VERIFICATION_HTTPS_PORT", "19445",
                 "E2E_VERIFICATION_DATABASE_PORT", "15433"));
@@ -290,16 +290,16 @@ final class CalendarToolTest {
 
         expectThrows(
                 IllegalArgumentException.class,
-                () -> CalendarToolVerification.e2eVerificationEndpoints(Map.of(
+                () -> CalendarToolVerification.endToEndVerificationEndpoints(Map.of(
                         "E2E_VERIFICATION_APPLICATION_PORT", "19445",
                         "E2E_VERIFICATION_HTTPS_PORT", "19445")));
         expectThrows(
                 IllegalArgumentException.class,
-                () -> CalendarToolVerification.e2eVerificationEndpoints(Map.of(
+                () -> CalendarToolVerification.endToEndVerificationEndpoints(Map.of(
                         "E2E_VERIFICATION_HTTPS_PORT", "15433",
                         "E2E_VERIFICATION_DATABASE_PORT", "15433")));
 
-        CalendarToolVerification.BootstrapVerificationEndpoints bootstrapDefaults =
+        CalendarToolVerification.VerificationEndpoints bootstrapDefaults =
                 CalendarToolVerification.bootstrapVerificationEndpoints(Map.of());
         assertEquals("9081", bootstrapDefaults.healthControlPort(), "Default bootstrap HTTP health port");
         assertEquals("9444", bootstrapDefaults.httpsPort(), "Default bootstrap HTTPS browser port");
@@ -313,7 +313,7 @@ final class CalendarToolTest {
                 bootstrapDefaults.healthControlUri(),
                 "Default bootstrap HTTP health-control URL");
 
-        CalendarToolVerification.BootstrapVerificationEndpoints bootstrapConfigured =
+        CalendarToolVerification.VerificationEndpoints bootstrapConfigured =
                 CalendarToolVerification.bootstrapVerificationEndpoints(Map.of(
                         "BOOTSTRAP_VERIFICATION_APPLICATION_PORT", "19081",
                         "BOOTSTRAP_VERIFICATION_HTTPS_PORT", "19444",
@@ -527,14 +527,14 @@ final class CalendarToolTest {
                 "Image scan command");
     }
 
-    private static void usesComposePostgresqlImage() throws Exception {
+    private static void usesComposePostgreSqlImage() throws Exception {
         String composeFileContents = Files.readString(Path.of("docker-compose.yml"));
-        String imageReference = CalendarToolPostgresql.postgresqlClientImageReference(composeFileContents);
+        String imageReference = CalendarToolPostgreSql.postgreSqlClientImageReference(composeFileContents);
         assertContains(imageReference, "postgres:17.10@sha256:", "Canonical PostgreSQL image");
 
         assertEquals(
                 "postgres:17.10@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                CalendarToolPostgresql.postgresqlClientImageReference(
+                CalendarToolPostgreSql.postgreSqlClientImageReference(
                         "services:\n  database:\n    image: "
                                 + "postgres:17.10@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
                                 + "  restore:\n    image: '"
@@ -542,32 +542,32 @@ final class CalendarToolTest {
                 "Quoted canonical PostgreSQL image");
         expectThrows(
                 IllegalStateException.class,
-                () -> CalendarToolPostgresql.postgresqlClientImageReference(
+                () -> CalendarToolPostgreSql.postgreSqlClientImageReference(
                         "services:\n  database:\n    image: postgres:17\n"));
         expectThrows(
                 IllegalStateException.class,
-                () -> CalendarToolPostgresql.postgresqlClientImageReference(
+                () -> CalendarToolPostgreSql.postgreSqlClientImageReference(
                         "services:\n  database:\n    image: "
                                 + "postgres:17.10@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
                                 + "  restore:\n    image: "
                                 + "postgres:17.10@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"));
         expectThrows(
                 IllegalStateException.class,
-                () -> CalendarToolPostgresql.postgresqlClientImageReference(
+                () -> CalendarToolPostgreSql.postgreSqlClientImageReference(
                         "services:\n  application:\n    image: shared-calendar:local\n"));
     }
 
     private static void constructsBackupVerificationCommands() {
-        CalendarToolPostgresql.BackupVerificationEndpoints defaultEndpoints =
-                CalendarToolPostgresql.backupVerificationEndpoints(Map.of());
+        CalendarToolPostgreSql.BackupVerificationEndpoints defaultEndpoints =
+                CalendarToolPostgreSql.backupVerificationEndpoints(Map.of());
         assertEquals("9083", defaultEndpoints.applicationPort(), "Default backup verification port");
         assertEquals(
                 URI.create("http://localhost:9083/health"),
                 defaultEndpoints.healthUri(),
                 "Default backup verification health URL");
 
-        CalendarToolPostgresql.BackupVerificationEndpoints configuredEndpoints =
-                CalendarToolPostgresql.backupVerificationEndpoints(
+        CalendarToolPostgreSql.BackupVerificationEndpoints configuredEndpoints =
+                CalendarToolPostgreSql.backupVerificationEndpoints(
                         Map.of("BACKUP_VERIFICATION_APPLICATION_PORT", "19083"));
         assertEquals("19083", configuredEndpoints.applicationPort(), "Configured backup verification port");
         assertEquals(
@@ -576,7 +576,7 @@ final class CalendarToolTest {
                 "Configured backup verification health URL");
         expectThrows(
                 IllegalArgumentException.class,
-                () -> CalendarToolPostgresql.backupVerificationEndpoints(
+                () -> CalendarToolPostgreSql.backupVerificationEndpoints(
                         Map.of("BACKUP_VERIFICATION_APPLICATION_PORT", "0")));
 
         assertArrayEquals(
@@ -592,7 +592,7 @@ final class CalendarToolTest {
                     "postgres-backup-verification",
                     "web-backup-verification"
                 },
-                CalendarToolPostgresql.backupVerificationSourceStartupCommand(),
+                CalendarToolPostgreSql.backupVerificationSourceStartupCommand(),
                 "Backup verification source startup command");
         assertArrayEquals(
                 new String[] {
@@ -603,7 +603,7 @@ final class CalendarToolTest {
                     "stop",
                     "web-backup-verification"
                 },
-                CalendarToolPostgresql.backupVerificationApplicationStopCommand(),
+                CalendarToolPostgreSql.backupVerificationApplicationStopCommand(),
                 "Backup verification application stop command");
         assertArrayEquals(
                 new String[] {
@@ -615,7 +615,7 @@ final class CalendarToolTest {
                     "--no-color",
                     "web-backup-verification"
                 },
-                CalendarToolPostgresql.backupVerificationApplicationLogsCommand(),
+                CalendarToolPostgreSql.backupVerificationApplicationLogsCommand(),
                 "Backup verification application logs command");
         assertArrayEquals(
                 new String[] {
@@ -628,7 +628,7 @@ final class CalendarToolTest {
                     "--force-recreate",
                     "postgres-restore-verification"
                 },
-                CalendarToolPostgresql.restoreVerificationDatabaseStartupCommand(),
+                CalendarToolPostgreSql.restoreVerificationDatabaseStartupCommand(),
                 "Restore verification database startup command");
         assertArrayEquals(
                 new String[] {
@@ -645,7 +645,7 @@ final class CalendarToolTest {
                     "postgres-backup-verification",
                     "postgres-restore-verification"
                 },
-                CalendarToolPostgresql.backupRestoreCleanupCommand(),
+                CalendarToolPostgreSql.backupRestoreCleanupCommand(),
                 "Backup and restore verification cleanup command");
         assertArrayEquals(
                 new String[] {
@@ -663,7 +663,7 @@ final class CalendarToolTest {
                     "--no-owner",
                     "--no-privileges"
                 },
-                CalendarToolPostgresql.composeBackupCommand(
+                CalendarToolPostgreSql.composeBackupCommand(
                         "database-service", "database-user", "database-name"),
                 "Compose backup command");
     }

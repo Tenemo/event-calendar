@@ -1,5 +1,6 @@
 package app.web;
 
+import static app.testsupport.ProxyReturnValues.defaultValue;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -175,19 +176,6 @@ final class RelativeRedirectTest {
                         contextPath,
                         applicationPath));
         assertEquals(0, response.resetBufferCalls.get());
-    }
-
-    private static Object defaultValue(Class<?> returnType) {
-        if (!returnType.isPrimitive()) {
-            return null;
-        }
-        if (returnType == boolean.class) {
-            return false;
-        }
-        if (returnType == char.class) {
-            return '\0';
-        }
-        return 0;
     }
 
     private static HttpServletRequest request(String facesRequestHeader) {

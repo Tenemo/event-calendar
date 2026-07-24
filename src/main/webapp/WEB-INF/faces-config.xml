@@ -4,7 +4,7 @@
               xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee https://jakarta.ee/xml/ns/jakartaee/web-facesconfig_4_0.xsd"
               version="4.0">
     <factory>
-        <exception-handler-factory>app.security.ExpiredLoginViewExceptionHandlerFactory</exception-handler-factory>
+        <exception-handler-factory>app.security.ExpiredSignInViewExceptionHandlerFactory</exception-handler-factory>
     </factory>
     <render-kit>
         <renderer>

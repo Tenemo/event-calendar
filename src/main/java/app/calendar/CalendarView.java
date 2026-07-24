@@ -4,7 +4,7 @@ import app.event.CalendarEvent;
 import app.event.CalendarEventPage;
 import app.event.CalendarEventRow;
 import app.event.CalendarEventService;
-import app.event.EventTimeInput;
+import app.event.EventFormState;
 import app.membership.CalendarAccessService;
 import app.membership.CalendarRole;
 import app.security.CurrentUser;
@@ -26,9 +26,6 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.ZoneId;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.ArrayList;
 
@@ -64,23 +61,13 @@ public class CalendarView implements Serializable {
     private List<CalendarEventRow> events = List.of();
     private boolean moreEventsAvailable;
 
-    private Long selectedEventId;
-    private Integer selectedEventVersion;
-    private String eventTitle;
-    private String eventDescription;
-    private String eventLocation;
-    private LocalDateTime eventStartTime;
-    private LocalDateTime eventEndTime;
-    private LocalDate eventFirstDay;
-    private LocalDate eventLastDay;
-    private boolean eventAllDay;
-    private boolean eventAllDaySelection;
+    private final EventFormState eventForm = new EventFormState();
 
     public void load() {
         try {
             FacesContext facesContext = FacesContext.getCurrentInstance();
             HttpServletRequest request = (HttpServletRequest) facesContext.getExternalContext().getRequest();
-            if (Boolean.TRUE.equals(request.getAttribute(CalendarRouteFilter.NOT_FOUND_REQUEST_ATTRIBUTE))) {
+            if (Boolean.TRUE.equals(request.getAttribute(CalendarRouteFilter.CALENDAR_NOT_FOUND_REQUEST_ATTRIBUTE))) {
                 throw new NotFoundException("Calendar was not found.");
             }
 
@@ -126,15 +113,15 @@ public class CalendarView implements Serializable {
     public void createEvent() {
         ApplicationUser actingUser;
         try {
-            applyEventAllDaySelection();
+            eventForm.applyAllDaySelection();
             actingUser = currentUser.require();
             calendarEventService.createEvent(
                     actingUser,
                     calendarId,
-                    eventTitle,
-                    eventDescription,
-                    eventLocation,
-                    eventTimeInput(),
+                    eventForm.getTitle(),
+                    eventForm.getDescription(),
+                    eventForm.getLocation(),
+                    eventForm.toTimeInput(),
                     calendarVersion,
                     timeZone);
         } catch (AuthorizationException | ConflictException | NotFoundException | ValidationException exception) {
@@ -159,34 +146,26 @@ public class CalendarView implements Serializable {
                     "The event is no longer available. Reload the page and try again.");
             return;
         }
-        selectedEventId = event.getId();
-        selectedEventVersion = event.getVersion();
-        eventTitle = event.getTitle();
-        eventDescription = event.getDescription();
-        eventLocation = event.getLocation();
-        eventStartTime = event.getStartTime();
-        eventEndTime = event.getEndTime();
-        eventFirstDay = event.getStartTime().toLocalDate();
-        eventLastDay = event.getInclusiveEndDate();
-        setEventAllDay(event.isAllDay());
+        eventForm.select(event);
     }
 
     public void updateEvent() {
         ApplicationUser actingUser;
         try {
-            if (selectedEventId == null || selectedEventVersion == null) {
+            if (eventForm.getSelectedEventId() == null
+                    || eventForm.getSelectedEventVersion() == null) {
                 throw new ValidationException("Select an event to edit.");
             }
-            applyEventAllDaySelection();
+            eventForm.applyAllDaySelection();
             actingUser = currentUser.require();
             calendarEventService.updateEvent(
                     actingUser,
-                    selectedEventId,
-                    selectedEventVersion,
-                    eventTitle,
-                    eventDescription,
-                    eventLocation,
-                    eventTimeInput(),
+                    eventForm.getSelectedEventId(),
+                    eventForm.getSelectedEventVersion(),
+                    eventForm.getTitle(),
+                    eventForm.getDescription(),
+                    eventForm.getLocation(),
+                    eventForm.toTimeInput(),
                     calendarVersion,
                     timeZone);
         } catch (AuthorizationException | ConflictException | NotFoundException | ValidationException exception) {
@@ -209,7 +188,7 @@ public class CalendarView implements Serializable {
             return;
         }
 
-        if (eventId != null && eventId.equals(selectedEventId)) {
+        if (eventId != null && eventId.equals(eventForm.getSelectedEventId())) {
             resetEventForm();
         }
         addMessage(FacesMessage.SEVERITY_INFO, "Event deleted.", "The event was removed.");
@@ -230,70 +209,11 @@ public class CalendarView implements Serializable {
     }
 
     public void resetEventForm() {
-        selectedEventId = null;
-        selectedEventVersion = null;
-        eventTitle = null;
-        eventDescription = null;
-        eventLocation = null;
-        LocalDateTime nextHour = LocalDateTime.now(ZoneId.of(timeZone == null ? "UTC" : timeZone))
-                .plusHours(1)
-                .truncatedTo(ChronoUnit.HOURS);
-        eventStartTime = nextHour;
-        eventEndTime = nextHour.plusHours(1);
-        eventFirstDay = nextHour.toLocalDate();
-        eventLastDay = nextHour.toLocalDate();
-        setEventAllDay(false);
+        eventForm.reset(timeZone);
     }
 
     public void changeEventAllDayMode() {
-        eventAllDay = eventAllDaySelection;
-        if (eventAllDay) {
-            LocalDate firstDay = eventStartTime == null ? null : eventStartTime.toLocalDate();
-            LocalDate lastDay = inclusiveEndDateForTimedRange(firstDay);
-            if (firstDay != null) {
-                eventFirstDay = firstDay;
-            }
-            if (lastDay != null) {
-                eventLastDay = lastDay;
-            }
-            return;
-        }
-
-        if (eventFirstDay != null) {
-            eventStartTime = eventFirstDay.atStartOfDay();
-        }
-        if (eventLastDay != null) {
-            eventEndTime = eventLastDay.plusDays(1).atStartOfDay();
-        }
-    }
-
-    private void applyEventAllDaySelection() {
-        if (eventAllDay != eventAllDaySelection) {
-            changeEventAllDayMode();
-        }
-    }
-
-    private LocalDate inclusiveEndDateForTimedRange(LocalDate firstDay) {
-        if (eventEndTime == null) {
-            return null;
-        }
-
-        LocalDate inclusiveEndDate = eventEndTime.toLocalDate();
-        if (eventEndTime.toLocalTime().equals(LocalTime.MIDNIGHT)
-                && eventStartTime != null
-                && eventEndTime.isAfter(eventStartTime)) {
-            LocalDate previousDay = inclusiveEndDate.minusDays(1);
-            if (firstDay == null || !previousDay.isBefore(firstDay)) {
-                return previousDay;
-            }
-        }
-        return inclusiveEndDate;
-    }
-
-    private EventTimeInput eventTimeInput() {
-        return eventAllDay
-                ? new EventTimeInput.AllDay(eventFirstDay, eventLastDay)
-                : new EventTimeInput.Timed(eventStartTime, eventEndTime);
+        eventForm.changeAllDayMode();
     }
 
     private void reloadEvents(ApplicationUser actingUser) {
@@ -360,28 +280,24 @@ public class CalendarView implements Serializable {
     public boolean isAdmin() { return role == CalendarRole.ADMIN; }
     public List<CalendarEventRow> getEvents() { return events; }
     public boolean isMoreEventsAvailable() { return moreEventsAvailable; }
-    public boolean isEditingEvent() { return selectedEventId != null; }
-    public String getEventTitle() { return eventTitle; }
-    public void setEventTitle(String eventTitle) { this.eventTitle = eventTitle; }
-    public String getEventDescription() { return eventDescription; }
-    public void setEventDescription(String eventDescription) { this.eventDescription = eventDescription; }
-    public String getEventLocation() { return eventLocation; }
-    public void setEventLocation(String eventLocation) { this.eventLocation = eventLocation; }
-    public LocalDateTime getEventStartTime() { return eventStartTime; }
-    public void setEventStartTime(LocalDateTime eventStartTime) { this.eventStartTime = eventStartTime; }
-    public LocalDateTime getEventEndTime() { return eventEndTime; }
-    public void setEventEndTime(LocalDateTime eventEndTime) { this.eventEndTime = eventEndTime; }
-    public LocalDate getEventFirstDay() { return eventFirstDay; }
-    public void setEventFirstDay(LocalDate eventFirstDay) { this.eventFirstDay = eventFirstDay; }
-    public LocalDate getEventLastDay() { return eventLastDay; }
-    public void setEventLastDay(LocalDate eventLastDay) { this.eventLastDay = eventLastDay; }
-    public boolean isEventAllDay() { return eventAllDay; }
-    public void setEventAllDay(boolean eventAllDay) {
-        this.eventAllDay = eventAllDay;
-        this.eventAllDaySelection = eventAllDay;
-    }
-    public boolean isEventAllDaySelection() { return eventAllDaySelection; }
+    public boolean isEditingEvent() { return eventForm.isEditing(); }
+    public String getEventTitle() { return eventForm.getTitle(); }
+    public void setEventTitle(String eventTitle) { eventForm.setTitle(eventTitle); }
+    public String getEventDescription() { return eventForm.getDescription(); }
+    public void setEventDescription(String eventDescription) { eventForm.setDescription(eventDescription); }
+    public String getEventLocation() { return eventForm.getLocation(); }
+    public void setEventLocation(String eventLocation) { eventForm.setLocation(eventLocation); }
+    public LocalDateTime getEventStartTime() { return eventForm.getStartTime(); }
+    public void setEventStartTime(LocalDateTime eventStartTime) { eventForm.setStartTime(eventStartTime); }
+    public LocalDateTime getEventEndTime() { return eventForm.getEndTime(); }
+    public void setEventEndTime(LocalDateTime eventEndTime) { eventForm.setEndTime(eventEndTime); }
+    public LocalDate getEventFirstDay() { return eventForm.getFirstDay(); }
+    public void setEventFirstDay(LocalDate eventFirstDay) { eventForm.setFirstDay(eventFirstDay); }
+    public LocalDate getEventLastDay() { return eventForm.getLastDay(); }
+    public void setEventLastDay(LocalDate eventLastDay) { eventForm.setLastDay(eventLastDay); }
+    public boolean isEventAllDay() { return eventForm.isAllDay(); }
+    public boolean isEventAllDaySelection() { return eventForm.isAllDaySelection(); }
     public void setEventAllDaySelection(boolean eventAllDaySelection) {
-        this.eventAllDaySelection = eventAllDaySelection;
+        eventForm.setAllDaySelection(eventAllDaySelection);
     }
 }

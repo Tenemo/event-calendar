@@ -6,10 +6,10 @@
                 template="/WEB-INF/templates/main.xhtml">
     <f:metadata>
         <!-- Keep the previous continuation parameter readable while new links use token. -->
-        <f:viewParam name="invite" value="#{loginView.invitationToken}"/>
-        <f:viewParam name="token" value="#{loginView.invitationToken}"/>
-        <f:viewParam name="passwordChanged" value="#{loginView.passwordChangedParameter}"/>
-        <f:viewParam name="reauthenticationRequired" value="#{loginView.reauthenticationRequiredParameter}"/>
+        <f:viewParam name="invite" value="#{signInView.invitationToken}"/>
+        <f:viewParam name="token" value="#{signInView.invitationToken}"/>
+        <f:viewParam name="passwordChanged" value="#{signInView.passwordChangedParameter}"/>
+        <f:viewParam name="reauthenticationRequired" value="#{signInView.reauthenticationRequiredParameter}"/>
     </f:metadata>
     <ui:define name="title">Sign in - Shared calendar</ui:define>
     <ui:define name="messages">
@@ -24,22 +24,22 @@
             <h1 id="signInHeading">Sign in</h1>
             <h:panelGroup layout="block"
                           styleClass="notice-message"
-                          rendered="#{loginView.passwordChanged}">
+                          rendered="#{signInView.passwordChanged}">
                 Your password was changed. Sign in with the new password.
             </h:panelGroup>
             <h:panelGroup layout="block"
                           styleClass="notice-message"
-                          rendered="#{loginView.reauthenticationRequired}">
+                          rendered="#{signInView.reauthenticationRequired}">
                 Your session is no longer valid. Sign in again.
             </h:panelGroup>
             <h:panelGroup layout="block"
                           styleClass="surface-panel form-panel lightweight-panel"
                           pt:aria-labelledby="signInHeading">
                 <h:form styleClass="stacked-form">
-                    <h:inputHidden value="#{loginView.invitationToken}"/>
+                    <h:inputHidden value="#{signInView.invitationToken}"/>
                     <h:outputLabel for="username" value="Username"/>
                     <h:inputText id="username"
-                                 value="#{loginView.username}"
+                                 value="#{signInView.username}"
                                  styleClass="native-input"
                                  pt:autocomplete="username"
                                  maxlength="80"
@@ -48,7 +48,7 @@
 
                     <h:outputLabel for="password" value="Password"/>
                     <h:inputSecret id="password"
-                                   value="#{loginView.password}"
+                                   value="#{signInView.password}"
                                    styleClass="native-input"
                                    pt:autocomplete="current-password"
                                    maxlength="#{passwordService.maximumPasswordLength}"
@@ -56,7 +56,7 @@
                                    requiredMessage="Password is required."/>
 
                     <h:commandButton value="Sign in"
-                                     action="#{loginView.login}"
+                                     action="#{signInView.signIn}"
                                      styleClass="native-button"/>
                 </h:form>
                 <p class="form-footer">
