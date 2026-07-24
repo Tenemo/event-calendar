@@ -11,8 +11,9 @@
 - Build a real shared-calendar web app for events such as kayaking, birthdays, trips, and friend-group plans.
 - Support multiple calendars in v1. Registered users can create their own calendars.
 - The creator of a calendar is that calendar's `ADMIN`.
-- Calendar admins can invite `EDITOR` and `VIEWER` members.
-- Calendars are public by default through long, random, unguessable links. Public links are read-only and should be marked `noindex`.
+- Calendar editors and admins can create invitations that grant `EDITOR` membership. There is no read-only membership role; share read-only access through the calendar's bearer link.
+- Every calendar has one compact, random canonical root URL used by members and anonymous readers. Its path is one 11-character unpadded Base64URL token encoding 64 cryptographically random bits, with no `/calendar/` prefix. Public access is enabled by default, can be disabled without changing the URL, and can be regenerated to invalidate the previous URL. Anonymous access is read-only and should be marked `noindex`.
+- Treat all-day form dates as inclusive. Store them as a start-inclusive, end-exclusive range normalized to calendar-local day boundaries so daylight-saving transitions and time-zone changes preserve the intended civil dates.
 - Keep the app as one server-rendered Jakarta EE application: browser, Open Liberty, Jakarta Faces / JSF, PrimeFaces, CDI / EJB Lite services, JPA, PostgreSQL, and Flyway.
 - Use Java 25 as the runtime target, Maven as the build tool, WAR packaging, Docker for production packaging, and Railway as the first deployment target.
 - Keep the app CLI-first and reproducible. Required workflows must be available through committed scripts, Maven Wrapper, Docker Compose, or `mise` tasks; IntelliJ must not be required.
@@ -31,12 +32,19 @@
 - Never store or log plaintext passwords.
 - Do not log public calendar tokens or invite tokens. Treat them as bearer secrets.
 - UI controls may hide unavailable actions, but service methods must still enforce roles.
-- Preserve the calendar role model: `VIEWER`, `EDITOR`, and `ADMIN`.
-- Treat `VIEWER`, `EDITOR`, and `ADMIN` as calendar-scoped roles, not global application roles.
+- Preserve the calendar role model: `EDITOR` and `ADMIN`.
+- Treat `EDITOR` and `ADMIN` as calendar-scoped roles, not global application roles.
 - Protect the last active `ADMIN` membership on every active calendar from being disabled or demoted.
 - Keep production cookies secure and HTTP-only, and do not rely on client-side checks for authorization.
-- Public calendar access must be read-only, unguessable, and marked `noindex`.
-- Invite links must be revocable and must assign only the intended calendar role.
+- Calendar bearer-link access must be read-only for nonmembers, unguessable, and marked `noindex`. Disabling public access must leave member access at the same canonical URL intact, while regenerating the URL must invalidate the previous bearer token for everyone.
+- Reject malformed canonical calendar paths before database access. Bound valid-looking calendar-link requests by verified client source and by global concurrent work, keep throttle state bounded, and return generic not-found or rate-limit responses that do not disclose tokens. Treat these controls as application-layer brute-force and load-shedding defenses, not as a replacement for an upstream DDoS service.
+- Calendar invite links expire after seven days, must be revocable, may grant only `EDITOR`, and must become unusable when their creator loses permission to invite for that calendar. Calendar admins must be able to list and revoke unused editor invitations for calendars they administer.
+- Registration invite links must become unusable when their creator's account becomes inactive.
+- Serialize invitation acceptance so one invitation can be consumed by exactly one account, including under concurrent requests.
+- Treat bootstrap registration as a permanent database fact. Claim it atomically with account creation, roll the claim back when registration fails, and never re-enable it because accounts were deactivated.
+- Keep login throttling source-aware and username-aware without revealing whether an account exists.
+- Keep authenticated session cookies unconditionally Secure, HTTP-only, SameSite `Lax`, and rolling for 30 days across both authenticated application pages and canonical calendar routes. Sessions remain in memory, so application restart or redeploy requires reauthentication.
+- Keep `/health` database-aware: return `200 ok` only when PostgreSQL is usable and `503 unavailable` otherwise.
 
 ## Implementation rules
 
@@ -60,7 +68,7 @@
 
 ## Testing and verification
 
-- Prefer focused tests for application logic: password policy, registration, calendar creation, token generation, invite acceptance, event validation, role checks, last-admin protection, and time handling.
+- Prefer focused tests for application logic: password policy, login throttling, registration, atomic bootstrap admission, calendar creation, token generation, concurrent invite acceptance, event validation, role checks, last-admin protection, session behavior, health, and time handling.
 - Tests should cover edge cases and failure paths, not only obvious equality checks.
 - Do not accept flaky tests. Reproduce, identify the root cause, and fix it.
 - For code changes, use the repository's `mise` tasks. Expected checks are:
@@ -70,6 +78,7 @@ mise run package
 mise run db
 mise run dev
 mise run verify-local
+mise run verify-bootstrap-registration
 ```
 
 Run `mise run dev` in a separate terminal when another verification command needs the application to stay online. If production Docker packaging changes or a Dockerfile is present, also run the relevant Docker build.
@@ -79,5 +88,7 @@ Run `mise run dev` in a separate terminal when another verification command need
 ## Completion standard
 
 - A task is done only when the relevant code, tests, documentation, and local verification are complete.
+- After every task, leave PostgreSQL and an application instance built from the current source running and accessible for manual testing. Verify that `/health` returns `200 ok` and that a representative browser page loads before handing off. Prefer the documented default local URL; if a pre-existing process already owns that port, do not stop it, start the current application on available non-default ports, and report the exact manual-testing URL.
+- Do not finish a task with the only verified application instance stopped. Leave the verified instance running unless the owner explicitly asks for it to be shut down.
 - For app features, verify the behavior through the smallest reliable automated or manual path that exercises the real application behavior.
 - Before claiming deployment or production readiness, verify Docker runtime behavior, database persistence, registration, calendar role behavior, public links, invite links, and backup/restore instructions.

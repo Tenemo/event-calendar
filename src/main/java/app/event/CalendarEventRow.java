@@ -2,6 +2,7 @@ package app.event;
 
 import app.calendar.CalendarTimeService;
 import java.io.Serializable;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
@@ -19,6 +20,7 @@ public final class CalendarEventRow implements Serializable {
     private final LocalDateTime startTime;
     private final LocalDateTime endTime;
     private final boolean allDay;
+    private final LocalDate inclusiveEndDate;
 
     private CalendarEventRow(
             Long id,
@@ -28,7 +30,8 @@ public final class CalendarEventRow implements Serializable {
             String location,
             LocalDateTime startTime,
             LocalDateTime endTime,
-            boolean allDay) {
+            boolean allDay,
+            LocalDate inclusiveEndDate) {
         this.id = id;
         this.version = version;
         this.title = title;
@@ -37,12 +40,14 @@ public final class CalendarEventRow implements Serializable {
         this.startTime = startTime;
         this.endTime = endTime;
         this.allDay = allDay;
+        this.inclusiveEndDate = inclusiveEndDate;
     }
 
     public static CalendarEventRow from(
             CalendarEvent event,
             String timeZone,
             CalendarTimeService calendarTimeService) {
+        LocalDateTime calendarEndTime = calendarTimeService.toCalendarTime(event.getEndTime(), timeZone);
         return new CalendarEventRow(
                 event.getId(),
                 event.getVersion(),
@@ -50,8 +55,11 @@ public final class CalendarEventRow implements Serializable {
                 event.getDescription(),
                 event.getLocation(),
                 calendarTimeService.toCalendarTime(event.getStartTime(), timeZone),
-                calendarTimeService.toCalendarTime(event.getEndTime(), timeZone),
-                event.isAllDay());
+                calendarEndTime,
+                event.isAllDay(),
+                event.isAllDay()
+                        ? calendarTimeService.toCalendarDateImmediatelyBefore(event.getEndTime(), timeZone)
+                        : calendarEndTime.toLocalDate());
     }
 
     public Long getId() {
@@ -82,6 +90,10 @@ public final class CalendarEventRow implements Serializable {
         return endTime;
     }
 
+    public LocalDate getInclusiveEndDate() {
+        return inclusiveEndDate;
+    }
+
     public boolean isAllDay() {
         return allDay;
     }
@@ -92,11 +104,13 @@ public final class CalendarEventRow implements Serializable {
 
     public String getTimeLabel() {
         if (allDay) {
-            if (!startTime.toLocalDate().equals(endTime.toLocalDate())) {
+            LocalDate firstDay = startTime.toLocalDate();
+            LocalDate lastDay = getInclusiveEndDate();
+            if (!firstDay.equals(lastDay)) {
                 return "All day from "
-                        + startTime.format(ALL_DAY_DATE_FORMAT)
+                        + firstDay.format(ALL_DAY_DATE_FORMAT)
                         + " to "
-                        + endTime.format(ALL_DAY_DATE_FORMAT);
+                        + lastDay.format(ALL_DAY_DATE_FORMAT);
             }
             return "All day";
         }

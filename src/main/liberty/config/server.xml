@@ -6,7 +6,7 @@
 
     <variable name="PORT" defaultValue="9080"/>
     <variable name="HTTPS_PORT" defaultValue="9443"/>
-    <variable name="COOKIE_SECURE" defaultValue="false"/>
+    <variable name="APP_LTPA_KEYS_PASSWORD" defaultValue="local-development-only"/>
 
     <variable name="PGHOST" defaultValue="localhost"/>
     <variable name="PGPORT" defaultValue="5432"/>
@@ -17,24 +17,46 @@
     <httpEndpoint id="defaultHttpEndpoint"
                   host="*"
                   httpPort="${PORT}"
-                  httpsPort="${HTTPS_PORT}"/>
+                  httpsPort="${HTTPS_PORT}">
+        <headers>
+            <setIfMissing>Content-Security-Policy:frame-ancestors 'none'; base-uri 'self'; object-src 'none'</setIfMissing>
+            <setIfMissing>X-Frame-Options:DENY</setIfMissing>
+            <setIfMissing>X-Content-Type-Options:nosniff</setIfMissing>
+            <setIfMissing>Referrer-Policy:strict-origin-when-cross-origin</setIfMissing>
+            <setIfMissing>Permissions-Policy:camera=(), geolocation=(), microphone=(), payment=(), usb=()</setIfMissing>
+            <setIfMissing>Strict-Transport-Security:max-age=31536000</setIfMissing>
+        </headers>
+    </httpEndpoint>
+
+    <httpDispatcher trustedHeaderOrigin="none"/>
+    <webContainer redirectToRelativeUrl="true"/>
+    <ltpa keysPassword="${APP_LTPA_KEYS_PASSWORD}"/>
+    <webAppSecurity httpOnlyCookies="true"
+                    sameSiteCookie="Lax"
+                    ssoCookieName="LtpaToken2"
+                    ssoRequiresSSL="true"
+                    trackLoggedOutSSOCookies="true"/>
 
     <httpSession cookieHttpOnly="true"
-                 cookieSecure="${COOKIE_SECURE}"
+                 cookieSecure="true"
                  cookieSameSite="Lax"
+                 invalidationTimeout="30m"
                  urlRewritingEnabled="false"/>
 
     <library id="postgresqlDriver">
         <file name="${shared.resource.dir}/postgresql/postgresql.jar"/>
     </library>
 
-    <dataSource id="CalendarDS" jndiName="jdbc/CalendarDS">
+    <dataSource id="CalendarDataSource" jndiName="jdbc/CalendarDataSource">
+        <connectionManager connectionTimeout="2s"/>
         <jdbcDriver libraryRef="postgresqlDriver"/>
         <properties.postgresql serverName="${PGHOST}"
                                portNumber="${PGPORT}"
                                databaseName="${PGDATABASE}"
                                user="${PGUSER}"
-                               password="${PGPASSWORD}"/>
+                               password="${PGPASSWORD}"
+                               connectTimeout="2s"
+                               loginTimeout="2s"/>
     </dataSource>
 
     <webApplication location="shared-calendar.war"

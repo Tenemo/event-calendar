@@ -27,7 +27,11 @@ public class Invitation {
     @JoinColumn(name = "calendar_id")
     private Calendar calendar;
 
-    @Column(name = "invite_token", nullable = false, unique = true, length = 80)
+    @Column(
+            name = "invite_token",
+            nullable = false,
+            unique = true,
+            length = InvitationToken.MAXIMUM_LENGTH)
     private String invitationToken;
 
     @Enumerated(EnumType.STRING)
@@ -48,7 +52,7 @@ public class Invitation {
     @Column(name = "accepted_at")
     private OffsetDateTime acceptedAt;
 
-    @Column(name = "expires_at")
+    @Column(name = "expires_at", nullable = false)
     private OffsetDateTime expiresAt;
 
     @Column(name = "created_at", nullable = false)

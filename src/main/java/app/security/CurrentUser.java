@@ -7,6 +7,7 @@ import jakarta.enterprise.context.RequestScoped;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.security.enterprise.SecurityContext;
+import jakarta.servlet.http.HttpServletRequest;
 import java.security.Principal;
 import java.util.Optional;
 
@@ -18,6 +19,9 @@ public class CurrentUser {
 
     @Inject
     private UserService userService;
+
+    @Inject
+    private HttpServletRequest request;
 
     private Optional<ApplicationUser> currentUser = Optional.empty();
     private boolean currentUserLoaded;
@@ -43,6 +47,7 @@ public class CurrentUser {
         if (callerPrincipal == null) {
             return Optional.empty();
         }
-        return userService.findActiveByUsername(callerPrincipal.getName());
+        return userService.findActiveByUsername(callerPrincipal.getName())
+                .filter(user -> AuthenticatedSessionSecurity.hasCurrentPasswordVersion(request, user));
     }
 }

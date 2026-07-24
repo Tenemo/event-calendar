@@ -3,8 +3,8 @@ package app.security;
 import app.util.ValidationException;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Named;
 import jakarta.inject.Inject;
+import jakarta.inject.Named;
 import jakarta.security.enterprise.identitystore.Pbkdf2PasswordHash;
 import java.util.Arrays;
 import java.util.Map;
@@ -14,21 +14,22 @@ import java.util.Map;
 public class PasswordService {
     static final String PASSWORD_HASH_ALGORITHM = "PBKDF2WithHmacSHA256";
     static final int PASSWORD_HASH_ITERATIONS = 600_000;
+    private static final String DUMMY_PASSWORD_HASH =
+            PASSWORD_HASH_ALGORITHM
+                    + ":"
+                    + PASSWORD_HASH_ITERATIONS
+                    + ":AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=:"
+                    + "1CWgpzdZaXuiv+M7nJjALTxRC5d19dsMY6jY4Nm9n0E=";
     private static final int PASSWORD_HASH_SALT_BYTES = 32;
     private static final int PASSWORD_HASH_KEY_BYTES = 32;
-    public static final int MINIMUM_PASSWORD_LENGTH = 14;
+    public static final int MINIMUM_PASSWORD_LENGTH = 8;
     public static final int MAXIMUM_PASSWORD_LENGTH = 512;
 
     @Inject
     private Pbkdf2PasswordHash passwordHash;
 
-    private boolean passwordHashInitialized;
-
     @PostConstruct
-    synchronized void initializePasswordHash() {
-        if (passwordHashInitialized) {
-            return;
-        }
+    void initializePasswordHash() {
         if (passwordHash == null) {
             throw new IllegalStateException("Jakarta Security password hash is unavailable.");
         }
@@ -38,7 +39,6 @@ public class PasswordService {
                 "Pbkdf2PasswordHash.Iterations", Integer.toString(PASSWORD_HASH_ITERATIONS),
                 "Pbkdf2PasswordHash.SaltSizeBytes", Integer.toString(PASSWORD_HASH_SALT_BYTES),
                 "Pbkdf2PasswordHash.KeySizeBytes", Integer.toString(PASSWORD_HASH_KEY_BYTES)));
-        passwordHashInitialized = true;
     }
 
     public int getMaximumPasswordLength() {
@@ -49,14 +49,21 @@ public class PasswordService {
         if (password == null || password.isBlank()) {
             throw new ValidationException("Password is required.");
         }
-        if (password.length() < MINIMUM_PASSWORD_LENGTH) {
+        int passwordLength = password.codePointCount(0, password.length());
+        if (passwordLength < MINIMUM_PASSWORD_LENGTH) {
             throw new ValidationException("Password must be at least " + MINIMUM_PASSWORD_LENGTH + " characters.");
         }
-        if (password.length() > MAXIMUM_PASSWORD_LENGTH) {
+        if (passwordLength > MAXIMUM_PASSWORD_LENGTH) {
             throw new ValidationException("Password must be " + MAXIMUM_PASSWORD_LENGTH + " characters or fewer.");
         }
         if (username != null && password.equalsIgnoreCase(username.trim())) {
             throw new ValidationException("Password must not match the username.");
+        }
+        if (password.codePoints().noneMatch(Character::isUpperCase)) {
+            throw new ValidationException("Password must contain at least one uppercase letter.");
+        }
+        if (password.codePoints().noneMatch(Character::isDigit)) {
+            throw new ValidationException("Password must contain at least one digit.");
         }
     }
 
@@ -64,7 +71,7 @@ public class PasswordService {
         validatePasswordPolicy(username, password);
         char[] passwordCharacters = password.toCharArray();
         try {
-            return configuredPasswordHash().generate(passwordCharacters);
+            return passwordHash.generate(passwordCharacters);
         } finally {
             Arrays.fill(passwordCharacters, '\0');
         }
@@ -74,37 +81,27 @@ public class PasswordService {
         if (password == null || password.isBlank() || storedHash == null || storedHash.isBlank()) {
             return false;
         }
-        if (password.length() > MAXIMUM_PASSWORD_LENGTH) {
+        if (password.codePointCount(0, password.length()) > MAXIMUM_PASSWORD_LENGTH) {
             return false;
         }
 
         char[] passwordCharacters = password.toCharArray();
         try {
-            if (isJakartaSecurityPasswordHash(storedHash)) {
-                return verifyJakartaSecurityPasswordHash(passwordCharacters, storedHash);
-            }
-            return false;
+            return verifyJakartaSecurityPasswordHash(passwordCharacters, storedHash);
         } finally {
             Arrays.fill(passwordCharacters, '\0');
         }
     }
 
+    void verifyMissingUserPassword(String password) {
+        verifyPassword(password, DUMMY_PASSWORD_HASH);
+    }
+
     private boolean verifyJakartaSecurityPasswordHash(char[] passwordCharacters, String storedHash) {
         try {
-            return configuredPasswordHash().verify(passwordCharacters, storedHash);
+            return passwordHash.verify(passwordCharacters, storedHash);
         } catch (IllegalArgumentException exception) {
             return false;
         }
-    }
-
-    private boolean isJakartaSecurityPasswordHash(String storedHash) {
-        return storedHash.split(":", -1).length == 4;
-    }
-
-    private Pbkdf2PasswordHash configuredPasswordHash() {
-        if (!passwordHashInitialized) {
-            initializePasswordHash();
-        }
-        return passwordHash;
     }
 }

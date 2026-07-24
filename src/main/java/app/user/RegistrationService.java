@@ -21,16 +21,17 @@ public class RegistrationService {
     @Inject
     private InvitationService invitationService;
 
-    public void register(
+    public ApplicationUser register(
             String invitationToken,
             String username,
             String displayName,
             String password,
             String initialCalendarName) {
-        RegistrationAdmission admission = invitationService.requireAdmission(invitationToken);
+        RegistrationAdmission admission = invitationService.claimRegistrationAdmission(invitationToken);
         ApplicationUser user = userService.createUser(username, displayName, password);
         Calendar calendar = calendarService.createCalendar(user, initialCalendarName);
         invitationService.acceptAdmission(admission, user);
         auditService.record(user, calendar, "app_user", user.getId(), "registered", "User registered.");
+        return user;
     }
 }

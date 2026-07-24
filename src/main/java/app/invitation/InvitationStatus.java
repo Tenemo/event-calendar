@@ -2,7 +2,7 @@ package app.invitation;
 
 public enum InvitationStatus {
     AVAILABLE,
-    USED,
+    ACCEPTED,
     REVOKED,
     EXPIRED;
 

@@ -13,10 +13,11 @@
 
     <ui:define name="content">
         <section class="narrow-section">
-            <h:panelGroup rendered="#{registrationView.signedIn}"><h1>Accept invitation</h1></h:panelGroup>
-            <h:panelGroup rendered="#{not registrationView.signedIn}"><h1>Create your calendar</h1></h:panelGroup>
+            <h:panelGroup layout="block" rendered="#{registrationView.signedIn}"><h1 id="acceptInvitationHeading">Accept invitation</h1></h:panelGroup>
+            <h:panelGroup layout="block" rendered="#{not registrationView.signedIn}"><h1 id="createAccountHeading">Create your calendar</h1></h:panelGroup>
             <p:panel
                      styleClass="surface-panel form-panel"
+                     pt:aria-labelledby="acceptInvitationHeading"
                      rendered="#{registrationView.signedIn}">
                 <h:form styleClass="stacked-form">
                     <h:inputHidden value="#{registrationView.invitationToken}"/>
@@ -29,6 +30,7 @@
 
             <p:panel
                      styleClass="surface-panel form-panel"
+                     pt:aria-labelledby="createAccountHeading"
                      rendered="#{not registrationView.signedIn}">
                 <h:form styleClass="stacked-form">
                     <h:inputHidden id="invitationToken" value="#{registrationView.invitationToken}"/>
@@ -60,10 +62,12 @@
                     <p:password id="password"
                                 value="#{registrationView.password}"
                                 autocomplete="new-password"
+                                pt:aria-describedby="passwordRequirements"
                                 feedback="false"
                                 maxlength="#{passwordService.maximumPasswordLength}"
                                 required="true"
                                 requiredMessage="Password is required."/>
+                    <small id="passwordRequirements" class="field-help">Use at least 8 characters, including one uppercase letter and one digit.</small>
 
                     <p:commandButton value="Register" action="#{registrationView.register}" ajax="false"/>
                 </h:form>
@@ -71,7 +75,7 @@
                     Already registered?
                     <h:outputLink value="#{request.contextPath}/login">
                         Sign in to accept
-                        <f:param name="invite" value="#{registrationView.invitationToken}"/>
+                        <f:param name="token" value="#{registrationView.invitationToken}"/>
                     </h:outputLink>
                 </p>
             </p:panel>

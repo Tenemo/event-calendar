@@ -42,63 +42,23 @@ public class AuditLog {
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
-    public Long getId() {
-        return id;
+    protected AuditLog() {
     }
 
-    public ApplicationUser getActingUser() {
-        return actingUser;
-    }
-
-    public void setActingUser(ApplicationUser actingUser) {
+    AuditLog(
+            ApplicationUser actingUser,
+            Calendar calendar,
+            String entityType,
+            Long entityId,
+            String action,
+            String details,
+            OffsetDateTime createdAt) {
         this.actingUser = actingUser;
-    }
-
-    public Calendar getCalendar() {
-        return calendar;
-    }
-
-    public void setCalendar(Calendar calendar) {
         this.calendar = calendar;
-    }
-
-    public String getEntityType() {
-        return entityType;
-    }
-
-    public void setEntityType(String entityType) {
         this.entityType = entityType;
-    }
-
-    public Long getEntityId() {
-        return entityId;
-    }
-
-    public void setEntityId(Long entityId) {
         this.entityId = entityId;
-    }
-
-    public String getAction() {
-        return action;
-    }
-
-    public void setAction(String action) {
         this.action = action;
-    }
-
-    public String getDetails() {
-        return details;
-    }
-
-    public void setDetails(String details) {
         this.details = details;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(OffsetDateTime createdAt) {
         this.createdAt = createdAt;
     }
 }

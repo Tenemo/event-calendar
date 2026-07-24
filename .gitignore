@@ -30,10 +30,14 @@ replay_pid*
 
 # Build output
 target/
+.build/
+node_modules/
+.stylelintcache
 
 # Local tool and runtime output
 .mise.local.toml
 .liberty/
+.railway/
 
 # IDE state
 .idea/

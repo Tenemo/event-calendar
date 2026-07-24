@@ -7,6 +7,7 @@ import app.util.AuthorizationException;
 import app.util.ConflictException;
 import app.util.NotFoundException;
 import app.util.ValidationException;
+import app.web.ViewParameterParser;
 import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
 import jakarta.faces.view.ViewScoped;
@@ -14,6 +15,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.Serializable;
+import java.util.OptionalLong;
 
 @Named
 @ViewScoped
@@ -28,16 +30,22 @@ public class CalendarSettingsView implements Serializable {
     private ApplicationUrlService applicationUrlService;
 
     private Long calendarId;
+    private String calendarIdParameter;
     private String name;
     private String description;
     private String timeZone;
     private boolean publicAccessEnabled;
-    private String publicToken;
+    private String calendarLinkToken;
     private Integer version;
     private boolean available;
 
     public void load() {
         try {
+            OptionalLong parsedCalendarId = ViewParameterParser.positiveLong(calendarIdParameter);
+            if (parsedCalendarId.isEmpty()) {
+                throw new NotFoundException("Calendar was not found.");
+            }
+            calendarId = parsedCalendarId.getAsLong();
             ApplicationUser actingUser = currentUser.require();
             Calendar calendar = calendarService.requireAdminCalendar(actingUser, calendarId);
             copyCalendar(calendar);
@@ -64,19 +72,8 @@ public class CalendarSettingsView implements Serializable {
         }
     }
 
-    public void rotatePublicLink() {
-        try {
-            Calendar calendar = calendarService.rotatePublicToken(currentUser.require(), calendarId, version);
-            publicToken = calendar.getPublicToken();
-            version = calendar.getVersion();
-            addMessage(FacesMessage.SEVERITY_INFO, "Public link rotated.", "The previous public link no longer works.");
-        } catch (AuthorizationException | ConflictException | NotFoundException exception) {
-            addMessage(FacesMessage.SEVERITY_ERROR, "Public link could not be rotated.", exception.getMessage());
-        }
-    }
-
-    public String getPublicLink() {
-        return applicationUrlService.linkTo("/calendar/" + publicToken);
+    public String getCalendarLink() {
+        return applicationUrlService.linkTo("/" + calendarLinkToken);
     }
 
     private void copyCalendar(Calendar calendar) {
@@ -84,7 +81,7 @@ public class CalendarSettingsView implements Serializable {
         description = calendar.getDescription();
         timeZone = calendar.getTimeZone();
         publicAccessEnabled = calendar.isPublicAccessEnabled();
-        publicToken = calendar.getPublicToken();
+        calendarLinkToken = calendar.getCalendarLinkToken();
         version = calendar.getVersion();
     }
 
@@ -99,6 +96,8 @@ public class CalendarSettingsView implements Serializable {
 
     public Long getCalendarId() { return calendarId; }
     public void setCalendarId(Long calendarId) { this.calendarId = calendarId; }
+    public String getCalendarIdParameter() { return calendarIdParameter; }
+    public void setCalendarIdParameter(String calendarIdParameter) { this.calendarIdParameter = calendarIdParameter; }
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
     public String getDescription() { return description; }

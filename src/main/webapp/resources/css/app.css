@@ -1,16 +1,18 @@
 :root {
     color-scheme: light;
-    font-family: Inter, "Segoe UI", Arial, sans-serif;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     background: #f7f8fb;
     color: #111827;
+
     --app-background: #f7f8fb;
-    --surface: #ffffff;
+    --surface: #fff;
     --surface-muted: #eef2f7;
     --text: #111827;
     --muted-text: #5b6472;
     --border: #dde3eb;
-    --primary: #2563eb;
-    --primary-strong: #1d4ed8;
+    --control-border: #8490a3;
+    --primary: #1d4ed8;
+    --primary-strong: #1e40af;
     --primary-soft: #eff6ff;
     --green: #059669;
     --green-soft: #ecfdf5;
@@ -18,8 +20,10 @@
     --subtle-surface: #fbfcfe;
     --control-radius: 0.45rem;
     --panel-radius: 0.5rem;
-    --focus-ring: rgba(37, 99, 235, 0.42);
-    --shadow: 0 1px 3px rgba(17, 24, 39, 0.08);
+    --danger: #b91c1c;
+    --danger-strong: #991b1b;
+    --focus-ring: #0f3d9e;
+    --shadow: 0 1px 3px rgb(17 24 39 / 8%);
 }
 
 *,
@@ -46,7 +50,7 @@ a {
     padding: 0.75rem 1rem;
     border-radius: var(--control-radius);
     background: var(--text);
-    color: #ffffff;
+    color: #fff;
     font-weight: 700;
     text-decoration: none;
     transform: translateY(-200%);
@@ -66,7 +70,7 @@ a {
     gap: 2rem;
     padding: 0.9rem 2rem;
     border-bottom: 1px solid var(--border);
-    background: rgba(255, 255, 255, 0.94);
+    background: rgb(255 255 255 / 94%);
     backdrop-filter: blur(12px);
 }
 
@@ -74,7 +78,7 @@ a {
     display: inline-block;
     color: var(--text);
     font-size: 1.1rem;
-    font-weight: 750;
+    font-weight: 700;
     text-decoration: none;
 }
 
@@ -105,7 +109,7 @@ a {
     cursor: pointer;
     font-family: inherit;
     font-size: 0.92rem;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 1;
     text-decoration: none;
 }
@@ -123,7 +127,7 @@ a {
 .app-nav .nav-action,
 .primary-link {
     background: var(--primary);
-    color: #ffffff;
+    color: #fff;
 }
 
 .app-nav .nav-action:hover,
@@ -135,16 +139,32 @@ a:focus-visible,
 .link-button:focus-visible,
 .button-link:focus-visible,
 body .ui-button:focus-visible,
-.ui-inputfield:focus-visible,
-select:focus-visible,
-.ui-selectonemenu.ui-state-focus,
+body .ui-button.ui-state-focus,
+body .ui-inputfield.ui-state-focus,
+body select:focus-visible,
 body .ui-chkbox:focus-within .ui-chkbox-box,
 body .ui-chkbox .ui-chkbox-box.ui-state-focus,
 body .ui-dialog .ui-button:focus,
-body .ui-confirm-dialog .ui-button:focus,
+body .ui-datepicker .ui-datepicker-next:focus,
+body .ui-datepicker .ui-datepicker-prev:focus,
+body .ui-datepicker .ui-datepicker-calendar td > a:focus,
+body .ui-datepicker .ui-datepicker-calendar td > span:focus,
+body .ui-datepicker .ui-timepicker-timeinput input:focus,
+body .ui-datepicker .ui-datepicker-buttonpane button.ui-state-focus,
+body .ui-datepicker .ui-datepicker-buttonbar button.ui-state-focus,
+body .ui-datepicker .ui-monthpicker-month:focus,
+body .ui-datepicker .ui-picker-up:focus,
+body .ui-datepicker .ui-picker-down:focus,
+body .ui-paginator .ui-paginator-first.ui-state-focus,
+body .ui-paginator .ui-paginator-prev.ui-state-focus,
+body .ui-paginator .ui-paginator-next.ui-state-focus,
+body .ui-paginator .ui-paginator-last.ui-state-focus,
+body .ui-paginator .ui-paginator-pages .ui-paginator-page.ui-state-focus,
+body .ui-messages .ui-messages-close:focus,
 .table-scroll-region:focus-visible {
     outline: 3px solid var(--focus-ring);
     outline-offset: 3px;
+    box-shadow: none;
 }
 
 :target,
@@ -191,6 +211,14 @@ button,
     margin: 0 auto;
 }
 
+.narrow-section h1 {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: 0;
+    line-height: 1.1;
+}
+
 .section-header,
 .preview-header {
     display: flex;
@@ -218,7 +246,6 @@ button,
 }
 
 .preview-header h2,
-.event-item h2,
 .event-item h3 {
     margin: 0;
     font-size: 1rem;
@@ -234,9 +261,20 @@ button,
 }
 
 .lead-text {
+    display: block;
     margin: 1rem 0 0;
     max-width: 680px;
     font-size: 1.05rem;
+}
+
+.notice-message {
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--primary);
+    border-radius: var(--control-radius);
+    background: var(--subtle-surface);
+    color: var(--text);
+    line-height: 1.5;
 }
 
 .intro-panel,
@@ -275,6 +313,7 @@ button,
 
 .heading-meta {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.75rem;
     margin-bottom: 0.75rem;
@@ -286,8 +325,7 @@ button,
     margin: 0 0 0.5rem;
     color: var(--muted-text);
     font-size: 0.82rem;
-    font-weight: 750;
-    text-transform: uppercase;
+    font-weight: 700;
 }
 
 .button-link {
@@ -299,7 +337,7 @@ button,
 }
 
 .secondary-link {
-    border: 1px solid var(--border);
+    border: 1px solid var(--control-border);
     background: var(--surface);
 }
 
@@ -325,7 +363,7 @@ button,
     align-items: center;
     justify-content: center;
     min-height: 3.3rem;
-    border-radius: 0.45rem;
+    border-radius: var(--control-radius);
 }
 
 .month-grid span {
@@ -342,7 +380,7 @@ button,
 }
 
 .month-grid .has-event {
-    border-color: rgba(37, 99, 235, 0.35);
+    border-color: var(--primary);
     background: var(--primary-soft);
     color: var(--primary-strong);
 }
@@ -355,11 +393,8 @@ button,
     background: var(--green-soft);
     color: var(--green-strong);
     font-size: 0.82rem;
-    font-weight: 750;
+    font-weight: 700;
     line-height: 1.2;
-}
-
-.role-chip {
     padding: 0.45rem 0.7rem;
 }
 
@@ -483,7 +518,6 @@ button,
     width: 0.6rem;
     height: 0.6rem;
     border-radius: 50%;
-    background: #9ca3af;
 }
 
 .status-dot.enabled {
@@ -512,7 +546,7 @@ button,
     border-radius: 999px;
     padding: 0.4rem 0.65rem;
     font-size: 0.82rem;
-    font-weight: 750;
+    font-weight: 700;
 }
 
 .status-label.active {
@@ -522,7 +556,7 @@ button,
 
 .status-label.inactive {
     background: #f3f4f6;
-    color: #6b7280;
+    color: #4b5563;
 }
 
 .not-found-state {
@@ -534,11 +568,6 @@ button,
     margin: 0;
     font-size: 2rem;
     letter-spacing: 0;
-}
-
-.public-calendar-page {
-    max-width: 54rem;
-    margin: 0 auto;
 }
 
 .event-item {
@@ -560,7 +589,7 @@ button,
     justify-content: center;
     border-radius: var(--control-radius);
     background: var(--text);
-    color: #ffffff;
+    color: #fff;
     font-weight: 800;
 }
 
@@ -586,12 +615,28 @@ button,
     max-width: 100%;
 }
 
-.generated-invite {
+.generated-invitation {
     display: grid;
     gap: 0.5rem;
 }
 
-.generated-invite .ui-inputfield,
+.copy-control {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    align-items: start;
+}
+
+.copy-status {
+    grid-column: 1 / -1;
+    min-height: 1.25rem;
+    margin: 0;
+    color: var(--muted-text);
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
+.generated-invitation .ui-inputfield,
 .table-copy-field.ui-inputfield {
     width: 100%;
     font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
@@ -601,12 +646,32 @@ button,
     margin-bottom: 0;
 }
 
+.field-help {
+    margin-top: -0.35rem;
+    color: var(--muted-text);
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
+.panel-heading {
+    margin: 0 0 1rem;
+    color: var(--text);
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.3;
+}
+
+.panel-heading + .stacked-form {
+    margin-top: 0;
+}
+
 .table-scroll-region {
     width: 100%;
     min-width: 0;
     max-width: 100%;
     overflow-x: auto;
-    border: 1px solid var(--border);
+    border: 1px solid var(--control-border);
     border-radius: var(--panel-radius);
 }
 
@@ -622,17 +687,167 @@ button,
 }
 
 .surface-table table {
-    min-width: 42rem !important;
-}
-
-.ui-panel.surface-panel .ui-panel-titlebar {
-    border-bottom: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text);
+    min-width: 42rem;
 }
 
 .ui-panel.surface-panel .ui-panel-content {
     background: var(--surface);
+}
+
+body select,
+body .ui-inputfield,
+body .ui-chkbox .ui-chkbox-box {
+    border-color: var(--control-border);
+}
+
+body select {
+    min-height: 2.5rem;
+    padding: 0.6rem 0.75rem;
+    border-style: solid;
+    border-width: 1px;
+    border-radius: var(--control-radius);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+}
+
+body select:disabled {
+    background: var(--surface-muted);
+    color: var(--muted-text);
+    cursor: not-allowed;
+}
+
+body select:not(:disabled):hover,
+body .ui-inputfield.ui-state-hover,
+body .ui-chkbox .ui-chkbox-box.ui-state-hover,
+body .ui-datepicker .ui-timepicker-timeinput input:hover,
+body .ui-datepicker .ui-timepicker-timeinput input.ui-state-hover {
+    border-color: var(--primary);
+}
+
+body select:focus-visible,
+body .ui-inputfield.ui-state-focus,
+body .ui-datepicker .ui-timepicker-timeinput input:focus {
+    border-color: var(--primary);
+}
+
+body .ui-chkbox .ui-chkbox-box.ui-state-active {
+    border-color: var(--primary);
+    background: var(--primary);
+    color: #fff;
+}
+
+body .ui-chkbox .ui-chkbox-box.ui-state-active.ui-state-hover {
+    border-color: var(--primary-strong);
+    background: var(--primary-strong);
+}
+
+body .ui-datepicker .ui-datepicker-calendar td > a.ui-state-active,
+body .ui-datepicker .ui-datepicker-calendar td > span.ui-state-active,
+body .ui-datepicker .ui-datepicker-calendar td.ui-datepicker-today > a.ui-state-active,
+body .ui-datepicker .ui-datepicker-calendar td.ui-datepicker-today > span.ui-state-active,
+body .ui-datepicker .ui-datepicker-calendar td.ui-datepicker-current-day > a.ui-state-active,
+body .ui-datepicker .ui-datepicker-calendar td.ui-datepicker-current-day > span.ui-state-active,
+body .ui-datepicker .ui-monthpicker-month.ui-state-active,
+body .ui-paginator .ui-paginator-pages .ui-paginator-page.ui-state-active {
+    border-color: var(--primary);
+    background: var(--primary-soft);
+    color: var(--primary-strong);
+}
+
+body .ui-button {
+    border-color: var(--primary);
+    background: var(--primary);
+    color: #fff;
+}
+
+body .ui-button:not(.ui-state-disabled):hover {
+    border-color: var(--primary-strong);
+    background: var(--primary-strong);
+}
+
+body .ui-button.ui-state-active,
+body .ui-button.ui-state-down {
+    border-color: var(--primary-strong);
+    background: var(--primary-strong);
+    color: #fff;
+}
+
+body .ui-button.ui-button-outlined {
+    border-color: var(--primary);
+    background: var(--surface);
+    color: var(--primary-strong);
+}
+
+body .ui-button.ui-button-outlined:not(.ui-state-disabled):hover {
+    border-color: var(--primary-strong);
+    background: var(--primary-soft);
+    color: var(--primary-strong);
+}
+
+body .ui-button.ui-button-outlined.ui-state-active,
+body .ui-button.ui-button-outlined.ui-state-down {
+    border-color: var(--primary-strong);
+    background: var(--primary-soft);
+    color: var(--primary-strong);
+}
+
+body .ui-button.ui-button-secondary.ui-button-outlined {
+    border-color: var(--control-border);
+    background: var(--surface);
+    color: var(--text);
+}
+
+body .ui-button.ui-button-secondary.ui-state-active,
+body .ui-button.ui-button-secondary.ui-state-down,
+body .ui-button.ui-button-secondary:active {
+    border-color: var(--control-border);
+    background: var(--surface-muted);
+    color: var(--text);
+}
+
+body .ui-button.ui-button-danger {
+    border-color: var(--danger);
+    background: var(--danger);
+    color: #fff;
+}
+
+body .ui-button.ui-button-danger:not(.ui-state-disabled):hover {
+    border-color: var(--danger-strong);
+    background: var(--danger-strong);
+}
+
+body .ui-button.ui-button-danger.ui-state-active,
+body .ui-button.ui-button-danger.ui-state-down,
+body .ui-button.ui-button-danger:active {
+    border-color: var(--danger-strong);
+    background: var(--danger-strong);
+    color: #fff;
+}
+
+body .ui-button.ui-button-danger.ui-button-outlined {
+    border-color: var(--danger);
+    background: var(--surface);
+    color: var(--danger);
+}
+
+body .ui-button.ui-button-danger.ui-button-outlined:not(.ui-state-disabled):hover {
+    border-color: var(--danger-strong);
+    background: #fef2f2;
+    color: var(--danger-strong);
+}
+
+body .ui-button.ui-button-danger.ui-button-outlined.ui-state-active,
+body .ui-button.ui-button-danger.ui-button-outlined.ui-state-down,
+body .ui-button.ui-button-danger.ui-button-outlined:active {
+    border-color: var(--danger-strong);
+    background: #fef2f2;
+    color: var(--danger-strong);
+}
+
+body .ui-button.ui-button-secondary.ui-state-focus,
+body .ui-button.ui-button-danger.ui-state-focus {
+    box-shadow: none;
 }
 
 .preview-empty-state {
@@ -651,7 +866,7 @@ button,
 .settings-grid > *,
 .event-item > *,
 .heading-meta,
-.generated-invite,
+.generated-invitation,
 .inline-role-form,
 .surface-table td,
 .surface-table th {
@@ -667,20 +882,20 @@ button,
 .event-copy p,
 .event-description,
 .secondary-line,
-.generated-invite,
+.generated-invitation,
 .table-copy-field,
 .surface-table td,
 .surface-table a {
     overflow-wrap: anywhere;
 }
 
-@media (max-width: 1100px) {
+@media (width <= 1100px) {
     .intro-panel h1 {
         font-size: 3.3rem;
     }
 }
 
-@media (max-width: 820px) {
+@media (width <= 820px) {
     .app-header,
     .section-header,
     .preview-header {
@@ -737,6 +952,12 @@ button,
 
     .month-grid b {
         min-height: 2.5rem;
+    }
+}
+
+@media (height <= 48rem) {
+    .event-editor {
+        position: static;
     }
 }
 

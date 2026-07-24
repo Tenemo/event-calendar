@@ -3,6 +3,7 @@ package app.membership;
 import app.audit.AuditService;
 import app.calendar.Calendar;
 import app.user.ApplicationUser;
+import app.util.AuthorizationException;
 import app.util.NotFoundException;
 import app.util.ValidationException;
 import jakarta.ejb.Stateless;
@@ -18,7 +19,7 @@ import java.util.Optional;
 
 @Stateless
 public class CalendarMembershipService {
-    @PersistenceContext(unitName = "calendarPU")
+    @PersistenceContext(unitName = "calendarPersistenceUnit")
     private EntityManager entityManager;
 
     @Inject
@@ -27,35 +28,43 @@ public class CalendarMembershipService {
     @Inject
     private AuditService auditService;
 
-    @Inject
-    private CalendarMembershipPolicy calendarMembershipPolicy;
-
-    public List<CalendarMember> listMembers(ApplicationUser actingUser, Long calendarId) {
+    public List<CalendarMembership> listMembers(ApplicationUser actingUser, Long calendarId) {
         calendarAccessService.requireCanAdminister(actingUser, calendarId);
         return entityManager
                 .createQuery(
-                        "select calendarMember from CalendarMember calendarMember "
-                                + "join fetch calendarMember.user "
-                                + "where calendarMember.calendar.id = :calendarId "
-                                + "order by calendarMember.user.username",
-                        CalendarMember.class)
+                        "select calendarMembership from CalendarMembership calendarMembership "
+                                + "join fetch calendarMembership.user "
+                                + "where calendarMembership.calendar.id = :calendarId "
+                                + "order by calendarMembership.user.username",
+                        CalendarMembership.class)
                 .setParameter("calendarId", calendarId)
                 .getResultList();
     }
 
-    public CalendarMember grantMembershipFromAcceptedInvitation(Calendar calendar, ApplicationUser user, CalendarRole invitationRole) {
+    public Optional<CalendarMembership> grantMembershipFromAcceptedInvitation(
+            Calendar calendar,
+            ApplicationUser invitationCreator,
+            ApplicationUser user,
+            CalendarRole invitationRole) {
         requireValidInvitationMembership(calendar, user, invitationRole);
-        Optional<CalendarMember> existingMembership = findMembership(calendar.getId(), user.getId());
-        CalendarMember member = existingMembership.orElseGet(() -> createMembership(calendar, user));
+        Optional<Calendar> lockedCalendar = lockCalendarForMembershipChange(calendar.getId());
+        if (lockedCalendar.isEmpty()
+                || !lockedCalendar.get().isActive()
+                || !invitationCreatorCanStillEdit(invitationCreator, calendar.getId())) {
+            return Optional.empty();
+        }
+
+        Optional<CalendarMembership> existingMembership = findMembership(calendar.getId(), user.getId());
+        CalendarMembership member = existingMembership.orElseGet(() -> createMembership(lockedCalendar.get(), user));
         CalendarRole grantedRole = existingMembership.isPresent() && member.isActive()
                 ? CalendarRole.strongerRole(member.getRole(), invitationRole)
                 : invitationRole;
         applyMembership(member, grantedRole);
-        return member;
+        return Optional.of(member);
     }
 
-    private CalendarMember createMembership(Calendar calendar, ApplicationUser user) {
-        CalendarMember newMember = new CalendarMember();
+    private CalendarMembership createMembership(Calendar calendar, ApplicationUser user) {
+        CalendarMembership newMember = new CalendarMembership();
         newMember.setCalendar(calendar);
         newMember.setUser(user);
         newMember.setCreatedAt(OffsetDateTime.now(ZoneOffset.UTC));
@@ -63,42 +72,73 @@ public class CalendarMembershipService {
         return newMember;
     }
 
-    private void applyMembership(CalendarMember member, CalendarRole role) {
+    private void applyMembership(CalendarMembership member, CalendarRole role) {
         member.setRole(role);
         member.setActive(true);
         member.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
     }
 
-    public CalendarMember changeMemberRole(ApplicationUser actingUser, Long calendarId, Long targetUserId, CalendarRole newRole) {
+    public CalendarMembership changeMemberRole(ApplicationUser actingUser, Long calendarId, Long targetUserId, CalendarRole newRole) {
+        return updateMemberRole(actingUser, calendarId, targetUserId, newRole, false);
+    }
+
+    public CalendarMembership reactivateMembership(
+            ApplicationUser actingUser,
+            Long calendarId,
+            Long targetUserId,
+            CalendarRole newRole) {
+        return updateMemberRole(actingUser, calendarId, targetUserId, newRole, true);
+    }
+
+    private CalendarMembership updateMemberRole(
+            ApplicationUser actingUser,
+            Long calendarId,
+            Long targetUserId,
+            CalendarRole newRole,
+            boolean reactivationRequested) {
         calendarAccessService.requireCanAdminister(actingUser, calendarId);
         if (newRole == null) {
             throw new ValidationException("Role is required.");
         }
 
-        List<CalendarMember> lockedMembers = lockMembershipsForCalendar(calendarId);
+        requireLockedCalendarForMembershipChange(calendarId);
+        List<CalendarMembership> lockedMembers = lockMembershipsForCalendar(calendarId);
+        // Administration can be revoked while this transaction waits for the calendar lock.
         calendarAccessService.requireCanAdminister(actingUser, calendarId);
-        CalendarMember member = requireMembership(lockedMembers, targetUserId);
+        CalendarMembership member = requireMembership(lockedMembers, targetUserId);
+        if (member.isActive() == reactivationRequested) {
+            throw new ValidationException(reactivationRequested
+                    ? "Calendar membership is already active."
+                    : "Inactive calendar membership must be reactivated explicitly.");
+        }
         requireAdminNotChangingOwnRole(actingUser, member, newRole);
         if (member.getRole() == CalendarRole.ADMIN && newRole != CalendarRole.ADMIN) {
-            calendarMembershipPolicy.requireSafeRoleChange(
-                    member.getRole(), newRole, anotherActiveAdminExists(lockedMembers, targetUserId));
+            requireAnotherActiveAdmin(lockedMembers, targetUserId);
         }
 
         member.setRole(newRole);
         member.setActive(true);
         member.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
-        auditService.record(actingUser, member.getCalendar(), "calendar_member", targetUserId, "role_changed", "Member role changed.");
+        auditService.record(
+                actingUser,
+                member.getCalendar(),
+                "calendar_member",
+                targetUserId,
+                reactivationRequested ? "reactivated" : "role_changed",
+                reactivationRequested ? "Member access reactivated." : "Member role changed.");
         return member;
     }
 
-    public void disableMember(ApplicationUser actingUser, Long calendarId, Long targetUserId) {
+    public void disableMembership(ApplicationUser actingUser, Long calendarId, Long targetUserId) {
         calendarAccessService.requireCanAdminister(actingUser, calendarId);
-        List<CalendarMember> lockedMembers = lockMembershipsForCalendar(calendarId);
+        requireLockedCalendarForMembershipChange(calendarId);
+        List<CalendarMembership> lockedMembers = lockMembershipsForCalendar(calendarId);
+        // Administration can be revoked while this transaction waits for the calendar lock.
         calendarAccessService.requireCanAdminister(actingUser, calendarId);
-        CalendarMember member = requireMembership(lockedMembers, targetUserId);
+        CalendarMembership member = requireMembership(lockedMembers, targetUserId);
         requireAdminNotRemovingOwnAccess(actingUser, member);
         if (member.getRole() == CalendarRole.ADMIN) {
-            calendarMembershipPolicy.requireSafeDisable(member.getRole(), anotherActiveAdminExists(lockedMembers, targetUserId));
+            requireAnotherActiveAdmin(lockedMembers, targetUserId);
         }
 
         member.setActive(false);
@@ -106,13 +146,13 @@ public class CalendarMembershipService {
         auditService.record(actingUser, member.getCalendar(), "calendar_member", targetUserId, "disabled", "Member access disabled.");
     }
 
-    public Optional<CalendarMember> findMembership(Long calendarId, Long userId) {
+    private Optional<CalendarMembership> findMembership(Long calendarId, Long userId) {
         try {
-            CalendarMember member = entityManager
+            CalendarMembership member = entityManager
                     .createQuery(
-                            "select calendarMember from CalendarMember calendarMember "
-                                    + "where calendarMember.calendar.id = :calendarId and calendarMember.user.id = :userId",
-                            CalendarMember.class)
+                            "select calendarMembership from CalendarMembership calendarMembership "
+                                    + "where calendarMembership.calendar.id = :calendarId and calendarMembership.user.id = :userId",
+                            CalendarMembership.class)
                     .setParameter("calendarId", calendarId)
                     .setParameter("userId", userId)
                     .getSingleResult();
@@ -122,27 +162,63 @@ public class CalendarMembershipService {
         }
     }
 
-    private CalendarMember requireMembership(List<CalendarMember> members, Long userId) {
+    private CalendarMembership requireMembership(List<CalendarMembership> members, Long userId) {
         return members.stream()
                 .filter(member -> member.getUser() != null && userId.equals(member.getUser().getId()))
                 .findFirst()
                 .orElseThrow(() -> new NotFoundException("Calendar membership was not found."));
     }
 
-    private List<CalendarMember> lockMembershipsForCalendar(Long calendarId) {
+    private List<CalendarMembership> lockMembershipsForCalendar(Long calendarId) {
         return entityManager
                 .createQuery(
-                        "select calendarMember from CalendarMember calendarMember "
-                                + "join fetch calendarMember.user "
-                                + "where calendarMember.calendar.id = :calendarId "
-                                + "order by calendarMember.user.id",
-                        CalendarMember.class)
+                        "select calendarMembership from CalendarMembership calendarMembership "
+                                + "join fetch calendarMembership.user "
+                                + "where calendarMembership.calendar.id = :calendarId "
+                                + "order by calendarMembership.user.id",
+                        CalendarMembership.class)
                 .setParameter("calendarId", calendarId)
                 .setLockMode(LockModeType.PESSIMISTIC_WRITE)
                 .getResultList();
     }
 
-    private boolean anotherActiveAdminExists(List<CalendarMember> members, Long targetUserId) {
+    private Optional<Calendar> lockCalendarForMembershipChange(Long calendarId) {
+        try {
+            Calendar calendar = entityManager
+                    .createQuery(
+                            "select calendarEntity from Calendar calendarEntity "
+                                    + "where calendarEntity.id = :calendarId",
+                            Calendar.class)
+                    .setParameter("calendarId", calendarId)
+                    .setLockMode(LockModeType.PESSIMISTIC_WRITE)
+                    .getSingleResult();
+            return Optional.of(calendar);
+        } catch (NoResultException exception) {
+            return Optional.empty();
+        }
+    }
+
+    private Calendar requireLockedCalendarForMembershipChange(Long calendarId) {
+        return lockCalendarForMembershipChange(calendarId)
+                .orElseThrow(() -> new NotFoundException("Calendar was not found."));
+    }
+
+    private boolean invitationCreatorCanStillEdit(ApplicationUser invitationCreator, Long calendarId) {
+        if (invitationCreator == null
+                || invitationCreator.getId() == null
+                || !invitationCreator.isActive()) {
+            return false;
+        }
+
+        try {
+            calendarAccessService.requireCanEdit(invitationCreator, calendarId);
+            return true;
+        } catch (AuthorizationException exception) {
+            return false;
+        }
+    }
+
+    private boolean anotherActiveAdminExists(List<CalendarMembership> members, Long targetUserId) {
         return members.stream()
                 .anyMatch(member -> member.isActive()
                         && member.getRole() == CalendarRole.ADMIN
@@ -150,7 +226,13 @@ public class CalendarMembershipService {
                         && !targetUserId.equals(member.getUser().getId()));
     }
 
-    private void requireAdminNotChangingOwnRole(ApplicationUser actingUser, CalendarMember member, CalendarRole newRole) {
+    private void requireAnotherActiveAdmin(List<CalendarMembership> members, Long targetUserId) {
+        if (!anotherActiveAdminExists(members, targetUserId)) {
+            throw new ValidationException("A calendar must keep at least one active admin.");
+        }
+    }
+
+    private void requireAdminNotChangingOwnRole(ApplicationUser actingUser, CalendarMembership member, CalendarRole newRole) {
         if (member.getRole() == CalendarRole.ADMIN
                 && newRole != CalendarRole.ADMIN
                 && actingUser.getId().equals(member.getUser().getId())) {
@@ -158,7 +240,7 @@ public class CalendarMembershipService {
         }
     }
 
-    private void requireAdminNotRemovingOwnAccess(ApplicationUser actingUser, CalendarMember member) {
+    private void requireAdminNotRemovingOwnAccess(ApplicationUser actingUser, CalendarMembership member) {
         if (member.getRole() == CalendarRole.ADMIN && actingUser.getId().equals(member.getUser().getId())) {
             throw new ValidationException("You cannot remove your own admin access.");
         }
@@ -166,8 +248,8 @@ public class CalendarMembershipService {
 
     private void requireValidInvitationMembership(Calendar calendar, ApplicationUser user, CalendarRole role) {
         requireValidMembership(calendar, user, role);
-        if (role == CalendarRole.ADMIN) {
-            throw new ValidationException("Invitations can only grant viewer or editor access.");
+        if (role != CalendarRole.EDITOR) {
+            throw new ValidationException("Invitations can only grant editor access.");
         }
     }
 

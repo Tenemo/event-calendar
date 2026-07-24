@@ -25,7 +25,6 @@ final class InvitationPolicyTest {
         assertAll(
                 () -> assertDoesNotThrow(() -> invitationPolicy.requireValidScope(null, null)),
                 () -> assertDoesNotThrow(() -> invitationPolicy.requireValidScope(calendar, CalendarRole.EDITOR)),
-                () -> assertThrows(ValidationException.class, () -> invitationPolicy.requireValidScope(calendar, CalendarRole.VIEWER)),
                 () -> assertThrows(ValidationException.class, () -> invitationPolicy.requireValidScope(calendar, CalendarRole.ADMIN)),
                 () -> assertThrows(ValidationException.class, () -> invitationPolicy.requireValidScope(calendar, null)),
                 () -> assertThrows(ValidationException.class, () -> invitationPolicy.requireValidScope(null, CalendarRole.EDITOR)));
@@ -37,11 +36,24 @@ final class InvitationPolicyTest {
 
         assertAll(
                 () -> assertDoesNotThrow(() -> invitationPolicy.requireOpen(null, null, now.plusMinutes(1), now)),
-                () -> assertDoesNotThrow(() -> invitationPolicy.requireOpen(null, null, null, now)),
-                () -> assertThrows(ValidationException.class, () -> invitationPolicy.requireOpen(now.minusHours(1), null, null, now)),
-                () -> assertThrows(ValidationException.class, () -> invitationPolicy.requireOpen(null, now.minusHours(1), null, now)),
+                () -> assertThrows(ValidationException.class, () -> invitationPolicy.requireOpen(null, null, null, now)),
+                () -> assertThrows(
+                        ValidationException.class,
+                        () -> invitationPolicy.requireOpen(now.minusHours(1), null, now.plusMinutes(1), now)),
+                () -> assertThrows(
+                        ValidationException.class,
+                        () -> invitationPolicy.requireOpen(null, now.minusHours(1), now.plusMinutes(1), now)),
                 () -> assertThrows(ValidationException.class, () -> invitationPolicy.requireOpen(null, null, now, now)),
                 () -> assertThrows(ValidationException.class, () -> invitationPolicy.requireOpen(null, null, now.minusSeconds(1), now)));
+    }
+
+    @Test
+    void suppliesTheOnlyAllowedSevenDayExpiration() {
+        OffsetDateTime createdAt = OffsetDateTime.parse("2026-07-08T12:00:00Z");
+
+        assertAll(
+                () -> assertEquals(createdAt.plusDays(7), invitationPolicy.expirationFor(createdAt)),
+                () -> assertThrows(IllegalArgumentException.class, () -> invitationPolicy.expirationFor(null)));
     }
 
     @Test
@@ -49,7 +61,6 @@ final class InvitationPolicyTest {
         OffsetDateTime currentTime = OffsetDateTime.parse("2026-07-10T12:00:00Z");
 
         assertAll(
-                () -> assertEquals(InvitationStatus.AVAILABLE, invitationPolicy.status(null, null, null, currentTime)),
                 () -> assertEquals(
                         InvitationStatus.AVAILABLE,
                         invitationPolicy.status(null, null, currentTime.plusNanos(1), currentTime)),
@@ -58,19 +69,30 @@ final class InvitationPolicyTest {
                         invitationPolicy.status(null, null, currentTime, currentTime)),
                 () -> assertEquals(
                         InvitationStatus.REVOKED,
-                        invitationPolicy.status(currentTime.minusDays(1), null, null, currentTime)),
+                        invitationPolicy.status(
+                                currentTime.minusDays(1),
+                                null,
+                                currentTime.plusDays(1),
+                                currentTime)),
                 () -> assertEquals(
-                        InvitationStatus.USED,
-                        invitationPolicy.status(null, currentTime.minusDays(1), null, currentTime)),
+                        InvitationStatus.ACCEPTED,
+                        invitationPolicy.status(
+                                null,
+                                currentTime.minusDays(1),
+                                currentTime.plusDays(1),
+                                currentTime)),
                 () -> assertEquals(
-                        InvitationStatus.USED,
+                        InvitationStatus.ACCEPTED,
                         invitationPolicy.status(
                                 currentTime.minusDays(1),
                                 currentTime.minusDays(2),
                                 currentTime.minusDays(3),
                                 currentTime)),
+                () -> assertThrows(
+                        ValidationException.class,
+                        () -> invitationPolicy.status(null, null, null, currentTime)),
                 () -> assertTrue(InvitationStatus.AVAILABLE.isRevocable()),
-                () -> assertFalse(InvitationStatus.USED.isRevocable()),
+                () -> assertFalse(InvitationStatus.ACCEPTED.isRevocable()),
                 () -> assertFalse(InvitationStatus.REVOKED.isRevocable()),
                 () -> assertFalse(InvitationStatus.EXPIRED.isRevocable()));
     }

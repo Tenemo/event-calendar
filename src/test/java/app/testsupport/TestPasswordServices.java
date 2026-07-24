@@ -17,10 +17,21 @@ public final class TestPasswordServices {
         return passwordService(new RecordingPasswordHash());
     }
 
-    public static PasswordService passwordService(RecordingPasswordHash passwordHash) {
+    public static PasswordService passwordService(Pbkdf2PasswordHash passwordHash) {
         PasswordService passwordService = new PasswordService();
         ServiceTestSupport.setField(passwordService, "passwordHash", passwordHash);
+        initializePasswordService(passwordService);
         return passwordService;
+    }
+
+    private static void initializePasswordService(PasswordService passwordService) {
+        try {
+            var initializationMethod = PasswordService.class.getDeclaredMethod("initializePasswordHash");
+            initializationMethod.setAccessible(true);
+            initializationMethod.invoke(passwordService);
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException("Could not initialize the password service for a test.", exception);
+        }
     }
 
     public static final class RecordingPasswordHash implements Pbkdf2PasswordHash {

@@ -7,6 +7,7 @@ import app.user.ApplicationUser;
 import app.util.AuthorizationException;
 import app.util.NotFoundException;
 import app.util.ValidationException;
+import app.web.ViewParameterParser;
 import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
 import jakarta.faces.view.ViewScoped;
@@ -15,6 +16,7 @@ import jakarta.inject.Named;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.Serializable;
 import java.util.List;
+import java.util.OptionalLong;
 
 @Named
 @ViewScoped
@@ -29,17 +31,25 @@ public class CalendarMembersView implements Serializable {
     private CalendarMembershipService calendarMembershipService;
 
     private Long calendarId;
+    private String calendarIdParameter;
     private Long currentUserId;
     private String calendarName;
+    private String calendarLinkToken;
     private boolean available;
     private List<MemberRow> members = List.of();
 
     public void load() {
         try {
+            OptionalLong parsedCalendarId = ViewParameterParser.positiveLong(calendarIdParameter);
+            if (parsedCalendarId.isEmpty()) {
+                throw new NotFoundException("Calendar was not found.");
+            }
+            calendarId = parsedCalendarId.getAsLong();
             ApplicationUser actingUser = currentUser.require();
             currentUserId = actingUser.getId();
             Calendar calendar = calendarService.requireAdminCalendar(actingUser, calendarId);
             calendarName = calendar.getName();
+            calendarLinkToken = calendar.getCalendarLinkToken();
             reloadMembers(actingUser);
             available = true;
         } catch (AuthorizationException | NotFoundException exception) {
@@ -48,31 +58,69 @@ public class CalendarMembersView implements Serializable {
     }
 
     public void saveRole(Long userId, CalendarRole role) {
-        try {
-            ApplicationUser actingUser = currentUser.require();
-            calendarMembershipService.changeMemberRole(actingUser, calendarId, userId, role);
-            reloadMembers(actingUser);
-            addMessage(FacesMessage.SEVERITY_INFO, "Member role saved.", "The member's access has been updated.");
-        } catch (ValidationException exception) {
-            reloadMembersAfterRejectedChange();
-            addMessage(FacesMessage.SEVERITY_ERROR, "Member role could not be saved.", exception.getMessage());
-        } catch (AuthorizationException | NotFoundException exception) {
-            addMessage(FacesMessage.SEVERITY_ERROR, "Member role could not be saved.", exception.getMessage());
-        }
+        updateMemberRole(userId, role, false);
     }
 
-    public void disableMember(Long userId) {
+    public void reactivateMembership(Long userId, CalendarRole role) {
+        updateMemberRole(userId, role, true);
+    }
+
+    private void updateMemberRole(Long userId, CalendarRole role, boolean reactivationRequested) {
+        ApplicationUser actingUser;
         try {
-            ApplicationUser actingUser = currentUser.require();
-            calendarMembershipService.disableMember(actingUser, calendarId, userId);
-            reloadMembers(actingUser);
-            addMessage(FacesMessage.SEVERITY_INFO, "Member access removed.", "The member can no longer open this calendar.");
+            actingUser = currentUser.require();
+            if (reactivationRequested) {
+                calendarMembershipService.reactivateMembership(actingUser, calendarId, userId, role);
+            } else {
+                calendarMembershipService.changeMemberRole(actingUser, calendarId, userId, role);
+            }
+        } catch (ValidationException exception) {
+            reloadMembersAfterRejectedChange();
+            addMessage(
+                    FacesMessage.SEVERITY_ERROR,
+                    reactivationRequested
+                            ? "Member access could not be reactivated."
+                            : "Member role could not be saved.",
+                    exception.getMessage());
+            return;
+        } catch (AuthorizationException | NotFoundException exception) {
+            addMessage(
+                    FacesMessage.SEVERITY_ERROR,
+                    reactivationRequested
+                            ? "Member access could not be reactivated."
+                            : "Member role could not be saved.",
+                    exception.getMessage());
+            return;
+        }
+
+        addMessage(
+                FacesMessage.SEVERITY_INFO,
+                reactivationRequested ? "Member access reactivated." : "Member role saved.",
+                reactivationRequested
+                        ? "The member can edit this calendar again with the selected role."
+                        : "The member's role has been updated.");
+        reloadMembersAfterCommittedChange(actingUser);
+    }
+
+    public void removeMemberAccess(Long userId) {
+        ApplicationUser actingUser;
+        try {
+            actingUser = currentUser.require();
+            calendarMembershipService.disableMembership(actingUser, calendarId, userId);
         } catch (ValidationException exception) {
             reloadMembersAfterRejectedChange();
             addMessage(FacesMessage.SEVERITY_ERROR, "Member access could not be removed.", exception.getMessage());
+            return;
         } catch (AuthorizationException | NotFoundException exception) {
             addMessage(FacesMessage.SEVERITY_ERROR, "Member access could not be removed.", exception.getMessage());
+            return;
         }
+
+        addMessage(
+                FacesMessage.SEVERITY_INFO,
+                "Member access removed.",
+                "The member can no longer edit this calendar. Public access through the calendar link is unchanged.");
+        reloadMembersAfterCommittedChange(actingUser);
     }
 
     private void reloadMembers(ApplicationUser actingUser) {
@@ -95,6 +143,18 @@ public class CalendarMembersView implements Serializable {
         }
     }
 
+    private void reloadMembersAfterCommittedChange(ApplicationUser actingUser) {
+        try {
+            reloadMembers(actingUser);
+        } catch (AuthorizationException | NotFoundException exception) {
+            markNotFound();
+            addMessage(
+                    FacesMessage.SEVERITY_WARN,
+                    "The change was saved, but the page could not be refreshed.",
+                    "Open the calendar again to see its current membership state.");
+        }
+    }
+
     private void markNotFound() {
         available = false;
         FacesContext.getCurrentInstance().getExternalContext().setResponseStatus(HttpServletResponse.SC_NOT_FOUND);
@@ -106,7 +166,10 @@ public class CalendarMembersView implements Serializable {
 
     public Long getCalendarId() { return calendarId; }
     public void setCalendarId(Long calendarId) { this.calendarId = calendarId; }
+    public String getCalendarIdParameter() { return calendarIdParameter; }
+    public void setCalendarIdParameter(String calendarIdParameter) { this.calendarIdParameter = calendarIdParameter; }
     public String getCalendarName() { return calendarName; }
+    public String getCalendarLinkToken() { return calendarLinkToken; }
     public boolean isAvailable() { return available; }
     public List<MemberRow> getMembers() { return members; }
     public CalendarRole[] getRoles() { return CalendarRole.values(); }

@@ -12,7 +12,7 @@ import java.util.Optional;
 
 @Stateless
 public class CalendarAccessService {
-    @PersistenceContext(unitName = "calendarPU")
+    @PersistenceContext(unitName = "calendarPersistenceUnit")
     private EntityManager entityManager;
 
     public Optional<CalendarRole> findActiveRole(ApplicationUser user, Long calendarId) {
@@ -23,11 +23,12 @@ public class CalendarAccessService {
         try {
             CalendarRole role = entityManager
                     .createQuery(
-                            "select calendarMember.role from CalendarMember calendarMember "
-                                    + "where calendarMember.user.id = :userId "
-                                    + "and calendarMember.calendar.id = :calendarId "
-                                    + "and calendarMember.active = true "
-                                    + "and calendarMember.calendar.active = true",
+                            "select calendarMembership.role from CalendarMembership calendarMembership "
+                                    + "where calendarMembership.user.id = :userId "
+                                    + "and calendarMembership.calendar.id = :calendarId "
+                                    + "and calendarMembership.active = true "
+                                    + "and calendarMembership.user.active = true "
+                                    + "and calendarMembership.calendar.active = true",
                             CalendarRole.class)
                     .setParameter("userId", user.getId())
                     .setParameter("calendarId", calendarId)
@@ -38,40 +39,25 @@ public class CalendarAccessService {
         }
     }
 
-    public Calendar requirePublicReadableCalendar(String publicToken) {
-        if (publicToken == null || publicToken.isBlank()) {
+    public Calendar requirePublicReadableCalendar(String calendarLinkToken) {
+        Calendar calendar = requireActiveCalendarByCalendarLinkToken(calendarLinkToken);
+        if (!calendar.isPublicAccessEnabled()) {
             throw new NotFoundException("Calendar was not found.");
         }
-
-        try {
-            return entityManager
-                    .createQuery(
-                            "select calendarEntity from Calendar calendarEntity "
-                                    + "where calendarEntity.publicToken = :publicToken "
-                                    + "and calendarEntity.publicAccessEnabled = true "
-                                    + "and calendarEntity.active = true",
-                            Calendar.class)
-                    .setParameter("publicToken", publicToken.trim())
-                    .getSingleResult();
-        } catch (NoResultException exception) {
-            throw new NotFoundException("Calendar was not found.");
-        }
+        return calendar;
     }
 
-    public void requireCanView(ApplicationUser user, Long calendarId) {
-        CalendarRole role = findActiveRole(user, calendarId)
-                .orElseThrow(() -> new AuthorizationException("Calendar access is required."));
-        if (!role.canView()) {
-            throw new AuthorizationException("Calendar access is required.");
+    public Calendar requireCalendarReadableByLinkToken(ApplicationUser user, String calendarLinkToken) {
+        Calendar calendar = requireActiveCalendarByCalendarLinkToken(calendarLinkToken);
+        if (calendar.isPublicAccessEnabled() || findActiveRole(user, calendar.getId()).isPresent()) {
+            return calendar;
         }
+        throw new NotFoundException("Calendar was not found.");
     }
 
     public void requireCanEdit(ApplicationUser user, Long calendarId) {
-        CalendarRole role = findActiveRole(user, calendarId)
+        findActiveRole(user, calendarId)
                 .orElseThrow(() -> new AuthorizationException("Editor access is required."));
-        if (!role.canEdit()) {
-            throw new AuthorizationException("Editor access is required.");
-        }
     }
 
     public void requireCanAdminister(ApplicationUser user, Long calendarId) {
@@ -79,6 +65,25 @@ public class CalendarAccessService {
                 .orElseThrow(() -> new AuthorizationException("Admin access is required."));
         if (!role.canAdminister()) {
             throw new AuthorizationException("Admin access is required.");
+        }
+    }
+
+    private Calendar requireActiveCalendarByCalendarLinkToken(String calendarLinkToken) {
+        if (calendarLinkToken == null || calendarLinkToken.isBlank()) {
+            throw new NotFoundException("Calendar was not found.");
+        }
+
+        try {
+            return entityManager
+                    .createQuery(
+                            "select calendarEntity from Calendar calendarEntity "
+                                    + "where calendarEntity.calendarLinkToken = :calendarLinkToken "
+                                    + "and calendarEntity.active = true",
+                            Calendar.class)
+                    .setParameter("calendarLinkToken", calendarLinkToken.trim())
+                    .getSingleResult();
+        } catch (NoResultException exception) {
+            throw new NotFoundException("Calendar was not found.");
         }
     }
 }

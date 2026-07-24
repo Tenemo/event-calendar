@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<faces-config xmlns="https://jakarta.ee/xml/ns/jakartaee"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee https://jakarta.ee/xml/ns/jakartaee/web-facesconfig_4_0.xsd"
+              version="4.0">
+    <factory>
+        <exception-handler-factory>app.security.ExpiredLoginViewExceptionHandlerFactory</exception-handler-factory>
+    </factory>
+    <render-kit>
+        <renderer>
+            <component-family>org.primefaces.component</component-family>
+            <renderer-type>org.primefaces.component.MessagesRenderer</renderer-type>
+            <renderer-class>app.web.AccessibleMessagesRenderer</renderer-class>
+        </renderer>
+    </render-kit>
+</faces-config>

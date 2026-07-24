@@ -17,7 +17,12 @@
                 </div>
 
                 <div class="action-row">
-                    <h:outputLink value="#{request.contextPath}/login" styleClass="button-link primary-link">Sign in</h:outputLink>
+                    <h:outputLink value="#{request.contextPath}/login"
+                                  styleClass="button-link primary-link"
+                                  rendered="#{not currentUser.signedIn}">Sign in</h:outputLink>
+                    <h:outputLink value="#{request.contextPath}/app/calendars"
+                                  styleClass="button-link primary-link"
+                                  rendered="#{currentUser.signedIn}">My calendars</h:outputLink>
                 </div>
             </div>
 

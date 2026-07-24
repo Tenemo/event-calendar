@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-PROJECT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+PROJECT_DIR="$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)"
 PROPERTIES_FILE="${PROJECT_DIR}/.mvn/wrapper/maven-wrapper.properties"
 
 if [ ! -f "$PROPERTIES_FILE" ]; then

@@ -8,7 +8,7 @@ import jakarta.security.enterprise.authentication.mechanism.http.LoginToContinue
 @CustomFormAuthenticationMechanismDefinition(
         loginToContinue = @LoginToContinue(
                 loginPage = "/login",
-                errorPage = "/login-error",
+                errorPage = "/sign-in-error",
                 useForwardToLogin = false))
 public class SecurityConfiguration {
 }
