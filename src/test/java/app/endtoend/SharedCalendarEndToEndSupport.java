@@ -52,7 +52,7 @@ abstract class SharedCalendarEndToEndSupport {
     static final String DEFAULT_APPLICATION_BASE_URL = "http://localhost:9080";
     static final String APPLICATION_BASE_URL_PROPERTY = "app.baseUrl";
     static final String APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE = "APP_BASE_URL";
-    static final String HEALTH_URL_ENVIRONMENT_VARIABLE = "E2E_VERIFICATION_HEALTH_URL";
+    static final String HEALTH_URL_ENVIRONMENT_VARIABLE = "END_TO_END_VERIFICATION_HEALTH_URL";
     static final String BROWSER_ENVIRONMENT_VARIABLE = "BROWSER";
     static final String POSTGRESQL_HOST_ENVIRONMENT_VARIABLE = "PGHOST";
     static final String POSTGRESQL_PORT_ENVIRONMENT_VARIABLE = "PGPORT";
@@ -62,7 +62,7 @@ abstract class SharedCalendarEndToEndSupport {
     static final String PLAYWRIGHT_HEADED_ENVIRONMENT_VARIABLE = "PLAYWRIGHT_HEADED";
     static final String PLAYWRIGHT_HEADLESS_ENVIRONMENT_VARIABLE = "PLAYWRIGHT_HEADLESS";
     static final String MANAGED_RECOVERY_SCENARIOS_ENVIRONMENT_VARIABLE =
-            "E2E_MANAGED_RECOVERY_SCENARIOS";
+            "END_TO_END_MANAGED_RECOVERY_SCENARIOS";
     static final String SEEDED_PASSWORD_HASH_FOR_TEST_PASSWORD =
             "PBKDF2WithHmacSHA256:600000:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=:"
                     + "YTpMNBE5TiT//mxRmUMHckVy5XS82Y6oz0V8ZImb+/4=";
@@ -635,7 +635,7 @@ abstract class SharedCalendarEndToEndSupport {
     }
 
     boolean isDockerComposeManagedEndToEndEnvironment() {
-        String managedApplicationBaseUrl = System.getenv("E2E_VERIFICATION_BASE_URL");
+        String managedApplicationBaseUrl = System.getenv("END_TO_END_VERIFICATION_BASE_URL");
         return managedApplicationBaseUrl != null
                 && !managedApplicationBaseUrl.isBlank()
                 && removeTrailingSlashes(managedApplicationBaseUrl.trim())
@@ -650,7 +650,7 @@ abstract class SharedCalendarEndToEndSupport {
         assertEquals(
                 "true",
                 configuredValue.trim().toLowerCase(Locale.ROOT),
-                "E2E_MANAGED_RECOVERY_SCENARIOS must be either absent or true.");
+                "END_TO_END_MANAGED_RECOVERY_SCENARIOS must be either absent or true.");
         assertTrue(
                 isDockerComposeManagedEndToEndEnvironment(),
                 "Managed recovery scenarios must target the repository's isolated Docker Compose application.");
@@ -716,7 +716,7 @@ abstract class SharedCalendarEndToEndSupport {
                 "docker",
                 "compose",
                 "--profile",
-                "e2e-verification"));
+                "end-to-end-verification"));
         command.addAll(List.of(composeArguments));
         Process process = new ProcessBuilder(command)
                 .directory(projectDirectory.toFile())

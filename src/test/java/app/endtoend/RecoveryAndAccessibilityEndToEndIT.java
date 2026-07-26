@@ -109,7 +109,7 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
                 runDockerComposeCommand(
                         "stop isolated end-to-end application",
                         "stop",
-                        "web-e2e-verification");
+                        "web-end-to-end-verification");
                 applicationWasStopped = true;
                 waitForApplicationToBecomeUnavailable();
             } finally {
@@ -117,7 +117,7 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
                     runDockerComposeCommand(
                             "start isolated end-to-end application",
                             "start",
-                            "web-e2e-verification");
+                            "web-end-to-end-verification");
                     waitForHealthResponse(200, "ok", Duration.ofSeconds(120));
                 }
             }
@@ -178,7 +178,7 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
             runDockerComposeCommand(
                     "pause isolated end-to-end database",
                     "pause",
-                    "postgres-e2e-verification");
+                    "postgres-end-to-end-verification");
             databaseWasPaused = true;
             waitForHealthResponse(503, "unavailable", Duration.ofSeconds(45));
         } finally {
@@ -186,7 +186,7 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
                 runDockerComposeCommand(
                         "unpause isolated end-to-end database",
                         "unpause",
-                        "postgres-e2e-verification");
+                        "postgres-end-to-end-verification");
                 waitForHealthResponse(200, "ok", Duration.ofSeconds(120));
             }
         }

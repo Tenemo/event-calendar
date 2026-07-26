@@ -14,16 +14,19 @@ import java.util.Map;
 public class PasswordService {
     static final String PASSWORD_HASH_ALGORITHM = "PBKDF2WithHmacSHA256";
     static final int PASSWORD_HASH_ITERATIONS = 600_000;
-    private static final String DUMMY_PASSWORD_HASH =
-            PASSWORD_HASH_ALGORITHM
-                    + ":"
-                    + PASSWORD_HASH_ITERATIONS
-                    + ":AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=:"
-                    + "1CWgpzdZaXuiv+M7nJjALTxRC5d19dsMY6jY4Nm9n0E=";
     private static final int PASSWORD_HASH_SALT_BYTES = 32;
     private static final int PASSWORD_HASH_KEY_BYTES = 32;
     public static final int MINIMUM_PASSWORD_LENGTH = 8;
     public static final int MAXIMUM_PASSWORD_LENGTH = 512;
+
+    /**
+     * Verified instead of a real stored hash when the username does not exist, so that a missing
+     * account costs the same key derivation as a wrong password and cannot be told apart by
+     * response timing. It is derived from the configured parameters at startup rather than written
+     * as a literal, because a literal that stops matching the configured salt or key size would
+     * make verification fail early and silently restore the timing difference.
+     */
+    private String absentUserPasswordHash;
 
     @Inject
     private Pbkdf2PasswordHash passwordHash;
@@ -39,6 +42,17 @@ public class PasswordService {
                 "Pbkdf2PasswordHash.Iterations", Integer.toString(PASSWORD_HASH_ITERATIONS),
                 "Pbkdf2PasswordHash.SaltSizeBytes", Integer.toString(PASSWORD_HASH_SALT_BYTES),
                 "Pbkdf2PasswordHash.KeySizeBytes", Integer.toString(PASSWORD_HASH_KEY_BYTES)));
+        absentUserPasswordHash = generateAbsentUserPasswordHash();
+    }
+
+    private String generateAbsentUserPasswordHash() {
+        char[] unusablePasswordCharacters = ("absent-account-placeholder-"
+                + PASSWORD_HASH_ALGORITHM + "-" + PASSWORD_HASH_ITERATIONS).toCharArray();
+        try {
+            return passwordHash.generate(unusablePasswordCharacters);
+        } finally {
+            Arrays.fill(unusablePasswordCharacters, '\0');
+        }
     }
 
     public int getMaximumPasswordLength() {
@@ -94,7 +108,10 @@ public class PasswordService {
     }
 
     void verifyMissingUserPassword(String password) {
-        verifyPassword(password, DUMMY_PASSWORD_HASH);
+        if (absentUserPasswordHash == null) {
+            throw new IllegalStateException("The absent-account password hash was not initialized.");
+        }
+        verifyPassword(password, absentUserPasswordHash);
     }
 
     private boolean verifyJakartaSecurityPasswordHash(char[] passwordCharacters, String storedHash) {

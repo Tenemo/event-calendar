@@ -41,21 +41,19 @@ public class DatabaseIdentityStore implements IdentityStore {
         String username = userService.normalizeUsername(usernamePasswordCredential.getCaller());
         String password = usernamePasswordCredential.getPasswordAsString();
         String sourceIdentifier = sourceIdentifier();
-        synchronized (signInAttemptThrottle.validationLock(sourceIdentifier)) {
-            if (!signInAttemptThrottle.isAuthenticationAllowed(username, sourceIdentifier)) {
-                return CredentialValidationResult.INVALID_RESULT;
-            }
-
-            CredentialValidationResult validationResult = userService.findActiveByUsername(username)
-                    .map(user -> validatePassword(user, password))
-                    .orElseGet(() -> validateMissingUserPassword(password));
-            if (validationResult.getStatus() == CredentialValidationResult.Status.VALID) {
-                signInAttemptThrottle.clearUsernameAndSourceFailures(username, sourceIdentifier);
-            } else {
-                signInAttemptThrottle.recordFailedAuthentication(username, sourceIdentifier);
-            }
-            return validationResult;
+        if (!signInAttemptThrottle.reserveAuthenticationAttempt(username, sourceIdentifier)) {
+            return CredentialValidationResult.INVALID_RESULT;
         }
+
+        // Reserving first means the key derivation below runs without holding the throttle, so one
+        // slow verification cannot delay unrelated sign-ins.
+        CredentialValidationResult validationResult = userService.findActiveByUsername(username)
+                .map(user -> validatePassword(user, password))
+                .orElseGet(() -> validateMissingUserPassword(password));
+        if (validationResult.getStatus() == CredentialValidationResult.Status.VALID) {
+            signInAttemptThrottle.releaseSuccessfulAttempt(username, sourceIdentifier);
+        }
+        return validationResult;
     }
 
     private CredentialValidationResult validatePassword(ApplicationUser user, String password) {

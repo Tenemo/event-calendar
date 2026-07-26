@@ -166,6 +166,92 @@ final class SignInAttemptThrottleTest {
                 () -> assertEquals(1, throttle.trackedSourceCount()));
     }
 
+    @Test
+    void saturationRefusesUnknownSourcesForAsLongAsTheBlocksThatCausedItRemainActive() {
+        MutableClock clock = new MutableClock(TEST_START);
+        SignInAttemptThrottle throttle = throttle(clock, 1, 1, 1, 1);
+
+        throttle.recordFailedAuthentication("first-person", "198.51.100.10");
+        assertFalse(throttle.isAuthenticationAllowed("unseen-person", "203.0.113.20"));
+
+        clock.advance(SignInAttemptThrottle.SATURATION_BLOCK_DURATION);
+
+        assertFalse(
+                throttle.isAuthenticationAllowed("unseen-person", "203.0.113.20"),
+                "Saturation re-arms while the tracker is full of active blocks, so an unknown source "
+                        + "stays refused rather than being allowed to evict one.");
+    }
+
+    @Test
+    void aSourceThatHasSignedInSuccessfullyStillSignsInWhileSaturationRefusesUnknownSources() {
+        MutableClock clock = new MutableClock(TEST_START);
+        SignInAttemptThrottle throttle = throttle(clock, 5, 5, 2, 2);
+
+        assertTrue(throttle.reserveAuthenticationAttempt("piotr", "192.0.2.50"));
+        throttle.releaseSuccessfulAttempt("piotr", "192.0.2.50");
+
+        for (String hostileSource : new String[] {"198.51.100.10", "203.0.113.20"}) {
+            for (int failureIndex = 0; failureIndex < 5; failureIndex++) {
+                throttle.recordFailedAuthentication("intruder-" + hostileSource, hostileSource);
+            }
+        }
+
+        assertAll(
+                () -> assertFalse(
+                        throttle.isAuthenticationAllowed("unseen-person", "203.0.113.99"),
+                        "An unknown source is shed while the tracker is saturated."),
+                () -> assertTrue(
+                        throttle.isAuthenticationAllowed("piotr", "192.0.2.50"),
+                        "A source that proved credentials must keep signing in during saturation, "
+                                + "otherwise cheaply obtained sources deny sign-in to everyone."),
+                () -> assertEquals(1, throttle.provenSourceCount()));
+    }
+
+    @Test
+    void aProvenSourceStopsBeingExemptOnceItsRetentionExpires() {
+        MutableClock clock = new MutableClock(TEST_START);
+        // Blocks must outlive the retention window, so the expiring proof is the only thing that
+        // changes across the clock advance below.
+        SignInAttemptThrottle throttle = new SignInAttemptThrottle(
+                clock,
+                5,
+                5,
+                Duration.ofDays(30),
+                Duration.ofDays(30),
+                1,
+                1);
+
+        assertTrue(throttle.reserveAuthenticationAttempt("piotr", "192.0.2.50"));
+        throttle.releaseSuccessfulAttempt("piotr", "192.0.2.50");
+        for (int failureIndex = 0; failureIndex < 5; failureIndex++) {
+            throttle.recordFailedAuthentication("intruder", "198.51.100.10");
+        }
+        assertTrue(throttle.isAuthenticationAllowed("piotr", "192.0.2.50"));
+
+        clock.advance(SignInAttemptThrottle.PROVEN_SOURCE_RETENTION);
+
+        assertAll(
+                () -> assertEquals(0, throttle.provenSourceCount()),
+                () -> assertFalse(
+                        throttle.isAuthenticationAllowed("piotr", "192.0.2.50"),
+                        "A stale proof must not exempt a source indefinitely."));
+    }
+
+    @Test
+    void aProvenSourceIsStillSubjectToItsOwnBlocks() {
+        MutableClock clock = new MutableClock(TEST_START);
+        SignInAttemptThrottle throttle = throttle(clock, 2, 100, 100, 100);
+
+        assertTrue(throttle.reserveAuthenticationAttempt("piotr", "192.0.2.50"));
+        throttle.releaseSuccessfulAttempt("piotr", "192.0.2.50");
+        throttle.recordFailedAuthentication("piotr", "192.0.2.50");
+        throttle.recordFailedAuthentication("piotr", "192.0.2.50");
+
+        assertFalse(
+                throttle.isAuthenticationAllowed("piotr", "192.0.2.50"),
+                "The exemption waives only the global saturation gate, never the source's own block.");
+    }
+
     private static SignInAttemptThrottle throttle(
             Clock clock,
             int maximumFailedAttemptsPerUsernameAndSource,

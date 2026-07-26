@@ -51,12 +51,12 @@ final class CalendarTool extends CalendarToolProcessRunner {
                 CalendarToolVerification.runLighthouse(!reuseImage);
             }
             case "verify-preview-deployment" -> CalendarToolVerification.verifyPreviewDeployment();
-            case "e2e" -> CalendarToolVerification.runEndToEndTests();
-            case "e2e-shared" -> CalendarToolVerification.runSharedEndToEndTests();
-            case "e2e-cross-browser-smoke" -> CalendarToolVerification.runCrossBrowserSmokeEndToEndTests();
-            case "e2e-calendar-link-throttle" -> CalendarToolVerification.runIsolatedEndToEndTest(
+            case "end-to-end" -> CalendarToolVerification.runEndToEndTests();
+            case "end-to-end-shared" -> CalendarToolVerification.runSharedEndToEndTests();
+            case "end-to-end-cross-browser-smoke" -> CalendarToolVerification.runCrossBrowserSmokeEndToEndTests();
+            case "end-to-end-calendar-link-throttle" -> CalendarToolVerification.runIsolatedEndToEndTest(
                     "CalendarLinkRequestThrottleIT",
-                    "e2e-calendar-link-throttle");
+                    "end-to-end-calendar-link-throttle");
             case "verify-bootstrap-registration" -> {
                 boolean reuseImage = invocation.arguments().contains("--reuse-image");
                 CalendarToolVerification.verifyBootstrapRegistrationConcurrency(true, !reuseImage);
@@ -87,8 +87,8 @@ final class CalendarTool extends CalendarToolProcessRunner {
         int maximumArgumentCount;
         switch (command) {
             case "help", "--help", "setup", "db", "dev", "package", "tooling-self-test", "format",
-                    "static-analysis", "verify-reproducible-build", "lint-css", "e2e", "e2e-shared",
-                    "e2e-cross-browser-smoke", "e2e-calendar-link-throttle", "wait-for-app", "verify-local",
+                    "static-analysis", "verify-reproducible-build", "lint-css", "end-to-end", "end-to-end-shared",
+                    "end-to-end-cross-browser-smoke", "end-to-end-calendar-link-throttle", "wait-for-app", "verify-local",
                     "verify-preview-deployment", "docker-build", "image-scan", "docker-up",
                     "verify-backup-restore" -> {
                 minimumArgumentCount = 0;
@@ -361,8 +361,8 @@ final class CalendarTool extends CalendarToolProcessRunner {
         System.err.println("Usage: " + executableName + " <command> [arguments]");
         System.err.println(
                 "Commands: help, setup, db, dev, package, tooling-self-test, format, static-analysis, "
-                        + "verify-reproducible-build, lint-css, e2e, e2e-shared, e2e-cross-browser-smoke, "
-                        + "e2e-calendar-link-throttle, verify-bootstrap-registration [--reuse-image], "
+                        + "verify-reproducible-build, lint-css, end-to-end, end-to-end-shared, end-to-end-cross-browser-smoke, "
+                        + "end-to-end-calendar-link-throttle, verify-bootstrap-registration [--reuse-image], "
                         + "lighthouse [--reuse-image], verify-preview-deployment, "
                         + "wait-for-app, verify-local, docker-build, image-scan, docker-up, "
                         + "backup-postgres [output-file], "

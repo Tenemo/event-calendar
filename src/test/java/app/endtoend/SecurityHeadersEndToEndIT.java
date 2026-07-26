@@ -18,8 +18,8 @@ final class SecurityHeadersEndToEndIT {
     private static final String DEFAULT_APPLICATION_BASE_URL = "http://localhost:9080";
     private static final String APPLICATION_BASE_URL_PROPERTY = "app.baseUrl";
     private static final String APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE = "APP_BASE_URL";
-    private static final String E2E_VERIFICATION_HEALTH_URL_ENVIRONMENT_VARIABLE =
-            "E2E_VERIFICATION_HEALTH_URL";
+    private static final String END_TO_END_VERIFICATION_HEALTH_URL_ENVIRONMENT_VARIABLE =
+            "END_TO_END_VERIFICATION_HEALTH_URL";
     private static final String CONTENT_SECURITY_POLICY =
             "frame-ancestors 'none'; base-uri 'self'; object-src 'none'";
     private static final String PERMISSIONS_POLICY =
@@ -259,7 +259,7 @@ final class SecurityHeadersEndToEndIT {
 
     private static URI resolveApplicationBaseUri() {
         String configuredBaseUrl = Optional.ofNullable(
-                        System.getenv(E2E_VERIFICATION_HEALTH_URL_ENVIRONMENT_VARIABLE))
+                        System.getenv(END_TO_END_VERIFICATION_HEALTH_URL_ENVIRONMENT_VARIABLE))
                 .filter(value -> !value.isBlank())
                 .map(value -> URI.create(value).resolve("/").toString())
                 .orElseGet(() -> resolveConfiguredApplicationBaseUrl());

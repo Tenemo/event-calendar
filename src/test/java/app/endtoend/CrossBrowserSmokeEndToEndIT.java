@@ -281,7 +281,7 @@ final class CrossBrowserSmokeEndToEndIT {
     }
 
     private void waitForApplicationHealth() throws InterruptedException {
-        String configuredHealthUrl = System.getenv("E2E_VERIFICATION_HEALTH_URL");
+        String configuredHealthUrl = System.getenv("END_TO_END_VERIFICATION_HEALTH_URL");
         URI healthUri = configuredHealthUrl == null || configuredHealthUrl.isBlank()
                 ? URI.create(route("/health"))
                 : URI.create(configuredHealthUrl.trim());

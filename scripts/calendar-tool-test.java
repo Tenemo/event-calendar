@@ -49,10 +49,10 @@ final class CalendarToolTest {
                 "verify-reproducible-build",
                 "lint-css",
                 "lighthouse",
-                "e2e",
-                "e2e-shared",
-                "e2e-cross-browser-smoke",
-                "e2e-calendar-link-throttle",
+                "end-to-end",
+                "end-to-end-shared",
+                "end-to-end-cross-browser-smoke",
+                "end-to-end-calendar-link-throttle",
                 "verify-preview-deployment",
                 "wait-for-app",
                 "verify-local",
@@ -99,7 +99,7 @@ final class CalendarToolTest {
         assertContains(
                 expectThrows(
                                 CalendarTool.UsageException.class,
-                                () -> CalendarTool.parseInvocation(new String[] {"e2e", "unexpected"}))
+                                () -> CalendarTool.parseInvocation(new String[] {"end-to-end", "unexpected"}))
                         .getMessage(),
                 "Invalid arguments",
                 "Extra argument failure");
@@ -276,9 +276,9 @@ final class CalendarToolTest {
 
         CalendarToolVerification.VerificationEndpoints configured =
                 CalendarToolVerification.endToEndVerificationEndpoints(Map.of(
-                "E2E_VERIFICATION_APPLICATION_PORT", "19082",
-                "E2E_VERIFICATION_HTTPS_PORT", "19445",
-                "E2E_VERIFICATION_DATABASE_PORT", "15433"));
+                "END_TO_END_VERIFICATION_APPLICATION_PORT", "19082",
+                "END_TO_END_VERIFICATION_HTTPS_PORT", "19445",
+                "END_TO_END_VERIFICATION_DATABASE_PORT", "15433"));
         assertEquals(
                 URI.create("https://localhost:19445"),
                 configured.applicationBaseUri(),
@@ -291,13 +291,13 @@ final class CalendarToolTest {
         expectThrows(
                 IllegalArgumentException.class,
                 () -> CalendarToolVerification.endToEndVerificationEndpoints(Map.of(
-                        "E2E_VERIFICATION_APPLICATION_PORT", "19445",
-                        "E2E_VERIFICATION_HTTPS_PORT", "19445")));
+                        "END_TO_END_VERIFICATION_APPLICATION_PORT", "19445",
+                        "END_TO_END_VERIFICATION_HTTPS_PORT", "19445")));
         expectThrows(
                 IllegalArgumentException.class,
                 () -> CalendarToolVerification.endToEndVerificationEndpoints(Map.of(
-                        "E2E_VERIFICATION_HTTPS_PORT", "15433",
-                        "E2E_VERIFICATION_DATABASE_PORT", "15433")));
+                        "END_TO_END_VERIFICATION_HTTPS_PORT", "15433",
+                        "END_TO_END_VERIFICATION_DATABASE_PORT", "15433")));
 
         CalendarToolVerification.VerificationEndpoints bootstrapDefaults =
                 CalendarToolVerification.bootstrapVerificationEndpoints(Map.of());
@@ -336,7 +336,7 @@ final class CalendarToolTest {
 
     private static void keepsDiagnosticsSecretFree() {
         String diagnosticContext = CalendarToolVerification.verificationDiagnosticContext(
-                "e2e-verification",
+                "end-to-end-verification",
                 Map.of(
                         "BROWSER", "webkit",
                         "APP_BASE_URL", "https://localhost:9445",
@@ -344,7 +344,7 @@ final class CalendarToolTest {
                         "BOOTSTRAP_VERIFICATION_INVITATION_TOKEN", "invitation-secret"),
                 URI.create("http://localhost:9082/health"));
 
-        assertContains(diagnosticContext, "e2e-verification", "Diagnostic profile");
+        assertContains(diagnosticContext, "end-to-end-verification", "Diagnostic profile");
         assertContains(diagnosticContext, "webkit", "Diagnostic browser");
         assertContains(diagnosticContext, "https://localhost:9445", "Diagnostic browser URL");
         assertContains(diagnosticContext, "http://localhost:9082/health", "Diagnostic health URL");
@@ -673,26 +673,26 @@ final class CalendarToolTest {
                 CalendarToolVerification.sharedEndToEndSelections();
         assertEquals(2, sharedSelections.size(), "Shared end-to-end lifecycle count");
         assertEquals(null, sharedSelections.get(0).selectedTest(), "Aggregate suite selector");
-        assertEquals("e2e-shared", sharedSelections.get(0).diagnosticDirectoryName(), "Aggregate diagnostics");
+        assertEquals("end-to-end-shared", sharedSelections.get(0).diagnosticDirectoryName(), "Aggregate diagnostics");
         assertEquals(
                 "CalendarLinkRequestThrottleIT",
                 sharedSelections.get(1).selectedTest(),
                 "Isolated throttle selector");
         assertEquals(
-                "e2e-calendar-link-throttle",
+                "end-to-end-calendar-link-throttle",
                 sharedSelections.get(1).diagnosticDirectoryName(),
                 "Isolated throttle diagnostics");
 
         assertArrayEquals(
                 new String[] {
-                    "mvnw", "-Pe2e", "test-compile", "failsafe:integration-test", "failsafe:verify"
+                    "mvnw", "-Pend-to-end", "test-compile", "failsafe:integration-test", "failsafe:verify"
                 },
                 CalendarToolVerification.endToEndMavenCommand(null),
                 "Full end-to-end command");
         assertArrayEquals(
                 new String[] {
                     "mvnw",
-                    "-Pe2e",
+                    "-Pend-to-end",
                     "-Dit.test=CrossBrowserSmokeEndToEndIT",
                     "test-compile",
                     "failsafe:integration-test",
@@ -703,7 +703,7 @@ final class CalendarToolTest {
         assertArrayEquals(
                 new String[] {
                     "mvnw",
-                    "-Pe2e",
+                    "-Pend-to-end",
                     "-Dit.test=CalendarLinkRequestThrottleIT",
                     "test-compile",
                     "failsafe:integration-test",
@@ -714,7 +714,7 @@ final class CalendarToolTest {
         assertArrayEquals(
                 new String[] {
                     "mvnw",
-                    "-Ppreview-deployment-e2e",
+                    "-Ppreview-deployment-end-to-end",
                     "test-compile",
                     "failsafe:integration-test",
                     "failsafe:verify"
@@ -726,45 +726,45 @@ final class CalendarToolTest {
                     "docker",
                     "compose",
                     "--profile",
-                    "e2e-verification",
+                    "end-to-end-verification",
                     "up",
                     "-d",
                     "--force-recreate",
                     "--no-build",
-                    "postgres-e2e-verification",
-                    "web-e2e-verification"
+                    "postgres-end-to-end-verification",
+                    "web-end-to-end-verification"
                 },
                 CalendarToolVerification.composeUpCommand(
-                        "e2e-verification", "postgres-e2e-verification", "web-e2e-verification"),
+                        "end-to-end-verification", "postgres-end-to-end-verification", "web-end-to-end-verification"),
                 "Compose startup command");
         assertArrayEquals(
                 new String[] {
                     "docker",
                     "compose",
                     "--profile",
-                    "e2e-verification",
+                    "end-to-end-verification",
                     "logs",
                     "--no-color",
-                    "web-e2e-verification",
-                    "postgres-e2e-verification"
+                    "web-end-to-end-verification",
+                    "postgres-end-to-end-verification"
                 },
                 CalendarToolVerification.composeLogsCommand(
-                        "e2e-verification", "web-e2e-verification", "postgres-e2e-verification"),
+                        "end-to-end-verification", "web-end-to-end-verification", "postgres-end-to-end-verification"),
                 "Compose logs command");
         assertArrayEquals(
                 new String[] {
                     "docker",
                     "compose",
                     "--profile",
-                    "e2e-verification",
+                    "end-to-end-verification",
                     "rm",
                     "--force",
                     "--stop",
-                    "web-e2e-verification",
-                    "postgres-e2e-verification"
+                    "web-end-to-end-verification",
+                    "postgres-end-to-end-verification"
                 },
                 CalendarToolVerification.composeCleanupCommand(
-                        "e2e-verification", "web-e2e-verification", "postgres-e2e-verification"),
+                        "end-to-end-verification", "web-end-to-end-verification", "postgres-end-to-end-verification"),
                 "Compose cleanup command");
     }
 

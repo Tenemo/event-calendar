@@ -1,6 +1,7 @@
 package app.security;
 
 import static app.testsupport.ServiceTestSupport.setField;
+import static app.testsupport.TestPasswordServices.initialize;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -343,6 +344,7 @@ final class DatabaseIdentityStoreTest {
         private String lastStoredHash;
 
         private RecordingPasswordService(boolean verificationResult) {
+            initialize(this);
             this.verificationResult = verificationResult;
         }
 
@@ -363,6 +365,7 @@ final class DatabaseIdentityStoreTest {
         private BlockingPasswordService(
                 CountDownLatch verificationStarted,
                 CountDownLatch continueVerification) {
+            initialize(this);
             this.verificationStarted = verificationStarted;
             this.continueVerification = continueVerification;
         }

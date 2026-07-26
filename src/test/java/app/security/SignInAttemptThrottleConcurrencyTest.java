@@ -3,7 +3,6 @@ package app.security;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Clock;
@@ -76,19 +75,77 @@ final class SignInAttemptThrottleConcurrencyTest {
     }
 
     @Test
-    void validationLocksUseTheSameBoundedSourceIdentityAsFailureTracking() {
-        SignInAttemptThrottle throttle = throttle(5, 25, 100, 100);
+    void concurrentReservationsForOneIdentityCannotExceedTheFailureLimit() throws Exception {
+        SignInAttemptThrottle throttle = throttle(5, 100, 100, 100);
+        List<Boolean> reservations = synchronizedResults();
+
+        runConcurrently(32, taskIndex ->
+                reservations.add(throttle.reserveAuthenticationAttempt("piotr", TEST_SOURCE)));
 
         assertAll(
-                () -> assertSame(
-                        throttle.validationLock(" 192.0.2.10 "),
-                        throttle.validationLock("192.0.2.10")),
-                () -> assertSame(
-                        throttle.validationLock("a".repeat(129)),
-                        throttle.validationLock("b".repeat(256))),
-                () -> assertSame(
-                        throttle.validationLock(null),
-                        throttle.validationLock("   ")));
+                () -> assertEquals(
+                        5,
+                        reservations.stream().filter(Boolean::booleanValue).count(),
+                        "Reserving before verifying is what bounds concurrent guesses at the limit."),
+                () -> assertFalse(throttle.isAuthenticationAllowed("piotr", TEST_SOURCE)),
+                () -> assertTrue(throttle.isAuthenticationAllowed("piotr", "198.51.100.20")));
+    }
+
+    @Test
+    void releasingASuccessfulAttemptLeavesNoTrackedStateBehind() {
+        SignInAttemptThrottle throttle = throttle(5, 25, 100, 100);
+
+        assertTrue(throttle.reserveAuthenticationAttempt("piotr", TEST_SOURCE));
+        throttle.releaseSuccessfulAttempt("piotr", TEST_SOURCE);
+
+        assertAll(
+                () -> assertEquals(0, throttle.trackedUsernameAndSourceCount()),
+                () -> assertEquals(0, throttle.trackedSourceCount()),
+                () -> assertTrue(throttle.isAuthenticationAllowed("piotr", TEST_SOURCE)));
+    }
+
+    @Test
+    void repeatedSuccessfulSignInsFromOneSourceNeverExhaustTheSourceLimit() {
+        SignInAttemptThrottle throttle = throttle(5, 3, 100, 100);
+
+        for (int signInIndex = 0; signInIndex < 20; signInIndex++) {
+            assertTrue(
+                    throttle.reserveAuthenticationAttempt("person-" + signInIndex, TEST_SOURCE),
+                    "A successful sign-in must not consume the source failure budget.");
+            throttle.releaseSuccessfulAttempt("person-" + signInIndex, TEST_SOURCE);
+        }
+
+        assertEquals(0, throttle.trackedSourceCount());
+    }
+
+    @Test
+    void withdrawingAReservationRestoresExactlyTheGenuineFailureCount() {
+        SignInAttemptThrottle throttle = throttle(5, 3, 100, 100);
+
+        throttle.recordFailedAuthentication("intruder", TEST_SOURCE);
+        throttle.recordFailedAuthentication("intruder", TEST_SOURCE);
+        assertTrue(throttle.reserveAuthenticationAttempt("piotr", TEST_SOURCE));
+        assertFalse(
+                throttle.isAuthenticationAllowed("unseen-person", TEST_SOURCE),
+                "The reservation is the third counted attempt, so the source limit is reached.");
+
+        throttle.releaseSuccessfulAttempt("piotr", TEST_SOURCE);
+
+        assertAll(
+                () -> assertEquals(1, throttle.trackedSourceCount(), "Other identities' failures must survive."),
+                () -> assertTrue(
+                        throttle.isAuthenticationAllowed("unseen-person", TEST_SOURCE),
+                        "Withdrawing the reservation must also lift the block it armed."));
+
+        throttle.recordFailedAuthentication("intruder", TEST_SOURCE);
+
+        assertFalse(
+                throttle.isAuthenticationAllowed("unseen-person", TEST_SOURCE),
+                "Withdrawal must restore the count to two, so one more genuine failure reaches the limit again.");
+    }
+
+    private static List<Boolean> synchronizedResults() {
+        return java.util.Collections.synchronizedList(new ArrayList<>());
     }
 
     private static SignInAttemptThrottle throttle(

@@ -40,32 +40,32 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
             "BOOTSTRAP_VERIFICATION_BASE_URL";
     private static final String BOOTSTRAP_VERIFICATION_HEALTH_URL_ENVIRONMENT_VARIABLE =
             "BOOTSTRAP_VERIFICATION_HEALTH_URL";
-    private static final String E2E_VERIFICATION_APPLICATION_SERVICE_NAME = "web-e2e-verification";
-    private static final String E2E_VERIFICATION_DATABASE_SERVICE_NAME = "postgres-e2e-verification";
-    private static final String E2E_VERIFICATION_PROFILE = "e2e-verification";
-    private static final String E2E_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE =
-            "E2E_VERIFICATION_APPLICATION_PORT";
-    private static final String E2E_VERIFICATION_HTTPS_PORT_ENVIRONMENT_VARIABLE =
-            "E2E_VERIFICATION_HTTPS_PORT";
-    private static final String E2E_VERIFICATION_DATABASE_PORT_ENVIRONMENT_VARIABLE =
-            "E2E_VERIFICATION_DATABASE_PORT";
-    private static final String E2E_VERIFICATION_BASE_URL_ENVIRONMENT_VARIABLE =
-            "E2E_VERIFICATION_BASE_URL";
-    private static final String E2E_VERIFICATION_HEALTH_URL_ENVIRONMENT_VARIABLE =
-            "E2E_VERIFICATION_HEALTH_URL";
-    private static final String E2E_MANAGED_RECOVERY_SCENARIOS_ENVIRONMENT_VARIABLE =
-            "E2E_MANAGED_RECOVERY_SCENARIOS";
+    private static final String END_TO_END_VERIFICATION_APPLICATION_SERVICE_NAME = "web-end-to-end-verification";
+    private static final String END_TO_END_VERIFICATION_DATABASE_SERVICE_NAME = "postgres-end-to-end-verification";
+    private static final String END_TO_END_VERIFICATION_PROFILE = "end-to-end-verification";
+    private static final String END_TO_END_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE =
+            "END_TO_END_VERIFICATION_APPLICATION_PORT";
+    private static final String END_TO_END_VERIFICATION_HTTPS_PORT_ENVIRONMENT_VARIABLE =
+            "END_TO_END_VERIFICATION_HTTPS_PORT";
+    private static final String END_TO_END_VERIFICATION_DATABASE_PORT_ENVIRONMENT_VARIABLE =
+            "END_TO_END_VERIFICATION_DATABASE_PORT";
+    private static final String END_TO_END_VERIFICATION_BASE_URL_ENVIRONMENT_VARIABLE =
+            "END_TO_END_VERIFICATION_BASE_URL";
+    private static final String END_TO_END_VERIFICATION_HEALTH_URL_ENVIRONMENT_VARIABLE =
+            "END_TO_END_VERIFICATION_HEALTH_URL";
+    private static final String END_TO_END_MANAGED_RECOVERY_SCENARIOS_ENVIRONMENT_VARIABLE =
+            "END_TO_END_MANAGED_RECOVERY_SCENARIOS";
     private static final String LIGHTHOUSE_BASE_URL_ENVIRONMENT_VARIABLE =
             "LIGHTHOUSE_BASE_URL";
     private static final String DEFAULT_BOOTSTRAP_VERIFICATION_APPLICATION_PORT = "9081";
     private static final String DEFAULT_BOOTSTRAP_VERIFICATION_HTTPS_PORT = "9444";
     private static final String DEFAULT_BOOTSTRAP_VERIFICATION_DATABASE_PORT = "55432";
-    private static final String DEFAULT_E2E_VERIFICATION_APPLICATION_PORT = "9082";
-    private static final String DEFAULT_E2E_VERIFICATION_HTTPS_PORT = "9445";
-    private static final String DEFAULT_E2E_VERIFICATION_DATABASE_PORT = "55433";
-    private static final String E2E_VERIFICATION_DATABASE_NAME = "calendar_e2e_verification";
-    private static final String E2E_VERIFICATION_DATABASE_USER = "calendar_e2e_verification";
-    private static final String E2E_VERIFICATION_DATABASE_PASSWORD = "calendar_e2e_verification";
+    private static final String DEFAULT_END_TO_END_VERIFICATION_APPLICATION_PORT = "9082";
+    private static final String DEFAULT_END_TO_END_VERIFICATION_HTTPS_PORT = "9445";
+    private static final String DEFAULT_END_TO_END_VERIFICATION_DATABASE_PORT = "55433";
+    private static final String END_TO_END_VERIFICATION_DATABASE_NAME = "calendar_end_to_end_verification";
+    private static final String END_TO_END_VERIFICATION_DATABASE_USER = "calendar_end_to_end_verification";
+    private static final String END_TO_END_VERIFICATION_DATABASE_PASSWORD = "calendar_end_to_end_verification";
     private static final String DEFAULT_BOOTSTRAP_VERIFICATION_INVITATION_TOKEN =
             "bootstrap-verification-only-token-00000000000000000000000000000000";
     private static final Duration APPLICATION_READY_TIMEOUT = Duration.ofSeconds(120);
@@ -115,7 +115,7 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
         String browserName = configuredBrowserName();
         verifySharedCalendarEndToEnd(
                 "CrossBrowserSmokeEndToEndIT",
-                "e2e-cross-browser-smoke-" + browserName);
+                "end-to-end-cross-browser-smoke-" + browserName);
     }
 
     static void verifyPreviewDeployment() throws IOException, InterruptedException {
@@ -126,7 +126,7 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
     static String[] previewDeploymentMavenCommand() {
         return new String[] {
             MAVEN_WRAPPER_COMMAND,
-            "-Ppreview-deployment-e2e",
+            "-Ppreview-deployment-end-to-end",
             "test-compile",
             "failsafe:integration-test",
             "failsafe:verify"
@@ -148,19 +148,19 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
         VerificationEndpoints endpoints = endToEndVerificationEndpoints(System.getenv());
         Map<String, String> verificationEnvironment = new HashMap<>();
         verificationEnvironment.put(
-                E2E_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE,
+                END_TO_END_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE,
                 endpoints.healthControlPort());
         verificationEnvironment.put(
-                E2E_VERIFICATION_HTTPS_PORT_ENVIRONMENT_VARIABLE,
+                END_TO_END_VERIFICATION_HTTPS_PORT_ENVIRONMENT_VARIABLE,
                 endpoints.httpsPort());
         verificationEnvironment.put(
-                E2E_VERIFICATION_DATABASE_PORT_ENVIRONMENT_VARIABLE,
+                END_TO_END_VERIFICATION_DATABASE_PORT_ENVIRONMENT_VARIABLE,
                 endpoints.databasePort());
         verificationEnvironment.put(
-                E2E_VERIFICATION_BASE_URL_ENVIRONMENT_VARIABLE,
+                END_TO_END_VERIFICATION_BASE_URL_ENVIRONMENT_VARIABLE,
                 endpoints.applicationBaseUri().toString());
         verificationEnvironment.put(
-                E2E_VERIFICATION_HEALTH_URL_ENVIRONMENT_VARIABLE,
+                END_TO_END_VERIFICATION_HEALTH_URL_ENVIRONMENT_VARIABLE,
                 endpoints.healthControlUri().toString());
         verificationEnvironment.put(
                 LIGHTHOUSE_BASE_URL_ENVIRONMENT_VARIABLE,
@@ -170,13 +170,13 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
                 "lighthouse",
                 "Lighthouse verification",
                 "Mobile Lighthouse measurements",
-                E2E_VERIFICATION_PROFILE,
-                E2E_VERIFICATION_APPLICATION_SERVICE_NAME,
-                E2E_VERIFICATION_DATABASE_SERVICE_NAME,
+                END_TO_END_VERIFICATION_PROFILE,
+                END_TO_END_VERIFICATION_APPLICATION_SERVICE_NAME,
+                END_TO_END_VERIFICATION_DATABASE_SERVICE_NAME,
                 endpoints.healthControlUri(),
                 verificationEnvironment,
-                E2E_VERIFICATION_DATABASE_USER,
-                E2E_VERIFICATION_DATABASE_NAME,
+                END_TO_END_VERIFICATION_DATABASE_USER,
+                END_TO_END_VERIFICATION_DATABASE_NAME,
                 new String[] {"npm", "run", "lighthouse"}));
     }
 
@@ -188,8 +188,8 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
 
     static List<EndToEndSelection> sharedEndToEndSelections() {
         return List.of(
-                new EndToEndSelection(null, "e2e-shared"),
-                new EndToEndSelection("CalendarLinkRequestThrottleIT", "e2e-calendar-link-throttle"));
+                new EndToEndSelection(null, "end-to-end-shared"),
+                new EndToEndSelection("CalendarLinkRequestThrottleIT", "end-to-end-calendar-link-throttle"));
     }
 
     record EndToEndSelection(String selectedTest, String diagnosticDirectoryName) {}
@@ -200,15 +200,15 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
         VerificationEndpoints endpoints = endToEndVerificationEndpoints(System.getenv());
         Map<String, String> verificationEnvironment = new HashMap<>();
         verificationEnvironment.put(
-                E2E_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE,
+                END_TO_END_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE,
                 endpoints.healthControlPort());
-        verificationEnvironment.put(E2E_VERIFICATION_HTTPS_PORT_ENVIRONMENT_VARIABLE, endpoints.httpsPort());
-        verificationEnvironment.put(E2E_VERIFICATION_DATABASE_PORT_ENVIRONMENT_VARIABLE, endpoints.databasePort());
+        verificationEnvironment.put(END_TO_END_VERIFICATION_HTTPS_PORT_ENVIRONMENT_VARIABLE, endpoints.httpsPort());
+        verificationEnvironment.put(END_TO_END_VERIFICATION_DATABASE_PORT_ENVIRONMENT_VARIABLE, endpoints.databasePort());
         verificationEnvironment.put(
-                E2E_VERIFICATION_BASE_URL_ENVIRONMENT_VARIABLE,
+                END_TO_END_VERIFICATION_BASE_URL_ENVIRONMENT_VARIABLE,
                 endpoints.applicationBaseUri().toString());
         verificationEnvironment.put(
-                E2E_VERIFICATION_HEALTH_URL_ENVIRONMENT_VARIABLE,
+                END_TO_END_VERIFICATION_HEALTH_URL_ENVIRONMENT_VARIABLE,
                 endpoints.healthControlUri().toString());
         verificationEnvironment.put(
                 APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE,
@@ -219,27 +219,27 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
                 endpoints.databasePort());
         verificationEnvironment.put(
                 CalendarToolPostgreSql.POSTGRESQL_DATABASE_ENVIRONMENT_VARIABLE,
-                E2E_VERIFICATION_DATABASE_NAME);
+                END_TO_END_VERIFICATION_DATABASE_NAME);
         verificationEnvironment.put(
                 CalendarToolPostgreSql.POSTGRESQL_USER_ENVIRONMENT_VARIABLE,
-                E2E_VERIFICATION_DATABASE_USER);
+                END_TO_END_VERIFICATION_DATABASE_USER);
         verificationEnvironment.put(
                 CalendarToolPostgreSql.POSTGRESQL_PASSWORD_ENVIRONMENT_VARIABLE,
-                E2E_VERIFICATION_DATABASE_PASSWORD);
+                END_TO_END_VERIFICATION_DATABASE_PASSWORD);
         verificationEnvironment.put(BROWSER_ENVIRONMENT_VARIABLE, configuredBrowserName());
-        verificationEnvironment.put(E2E_MANAGED_RECOVERY_SCENARIOS_ENVIRONMENT_VARIABLE, "true");
+        verificationEnvironment.put(END_TO_END_MANAGED_RECOVERY_SCENARIOS_ENVIRONMENT_VARIABLE, "true");
 
         runComposeVerification(new ComposeVerification(
                 diagnosticDirectoryName,
                 "End-to-end verification",
                 "Playwright end-to-end tests",
-                E2E_VERIFICATION_PROFILE,
-                E2E_VERIFICATION_APPLICATION_SERVICE_NAME,
-                E2E_VERIFICATION_DATABASE_SERVICE_NAME,
+                END_TO_END_VERIFICATION_PROFILE,
+                END_TO_END_VERIFICATION_APPLICATION_SERVICE_NAME,
+                END_TO_END_VERIFICATION_DATABASE_SERVICE_NAME,
                 endpoints.healthControlUri(),
                 verificationEnvironment,
-                E2E_VERIFICATION_DATABASE_USER,
-                E2E_VERIFICATION_DATABASE_NAME,
+                END_TO_END_VERIFICATION_DATABASE_USER,
+                END_TO_END_VERIFICATION_DATABASE_NAME,
                 endToEndMavenCommand(selectedTest)));
     }
 
@@ -247,17 +247,17 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
             Map<String, String> environment) {
         return verificationEndpoints(
                 environment,
-                E2E_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE,
-                DEFAULT_E2E_VERIFICATION_APPLICATION_PORT,
-                E2E_VERIFICATION_HTTPS_PORT_ENVIRONMENT_VARIABLE,
-                DEFAULT_E2E_VERIFICATION_HTTPS_PORT,
-                E2E_VERIFICATION_DATABASE_PORT_ENVIRONMENT_VARIABLE,
-                DEFAULT_E2E_VERIFICATION_DATABASE_PORT,
-                "E2E verification");
+                END_TO_END_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE,
+                DEFAULT_END_TO_END_VERIFICATION_APPLICATION_PORT,
+                END_TO_END_VERIFICATION_HTTPS_PORT_ENVIRONMENT_VARIABLE,
+                DEFAULT_END_TO_END_VERIFICATION_HTTPS_PORT,
+                END_TO_END_VERIFICATION_DATABASE_PORT_ENVIRONMENT_VARIABLE,
+                DEFAULT_END_TO_END_VERIFICATION_DATABASE_PORT,
+                "end-to-end verification");
     }
 
     static String[] endToEndMavenCommand(String selectedTest) {
-        List<String> command = new ArrayList<>(List.of(MAVEN_WRAPPER_COMMAND, "-Pe2e"));
+        List<String> command = new ArrayList<>(List.of(MAVEN_WRAPPER_COMMAND, "-Pend-to-end"));
         if (selectedTest != null) {
             command.add("-Dit.test=" + selectedTest);
         }
@@ -315,7 +315,7 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
                 "calendar_bootstrap_verification",
                 new String[] {
                     MAVEN_WRAPPER_COMMAND,
-                    "-Pbootstrap-concurrency-e2e",
+                    "-Pbootstrap-concurrency-end-to-end",
                     "test-compile",
                     "failsafe:integration-test",
                     "failsafe:verify"

@@ -20,6 +20,10 @@
     --subtle-surface: #fbfcfe;
     --control-radius: 0.45rem;
     --panel-radius: 0.5rem;
+    --pill-radius: 999px;
+
+    /* Clears the sticky header when scrolling a target into view. */
+    --scroll-offset: 5rem;
     --compact-text-size: 0.82rem;
     --small-text-size: 0.86rem;
     --interactive-control-size: 2.7rem;
@@ -184,7 +188,7 @@ select,
 textarea,
 button,
 [tabindex] {
-    scroll-margin-block-start: 7rem;
+    scroll-margin-block-start: var(--scroll-offset);
 }
 
 .app-main {
@@ -397,7 +401,7 @@ button,
     display: inline-flex;
     max-width: 100%;
     align-items: center;
-    border-radius: 999px;
+    border-radius: var(--pill-radius);
     background: var(--green-soft);
     color: var(--green-strong);
     font-size: var(--compact-text-size);
@@ -543,7 +547,7 @@ button,
 }
 
 .status-dot.disabled {
-    background: #dc2626;
+    background: var(--danger);
 }
 
 .secondary-line {
@@ -561,7 +565,7 @@ button,
 
 .status-label {
     display: inline-flex;
-    border-radius: 999px;
+    border-radius: var(--pill-radius);
     padding: 0.4rem 0.65rem;
     font-size: var(--compact-text-size);
     font-weight: 700;
@@ -986,6 +990,12 @@ body .ui-button.ui-button-danger.ui-state-focus {
 
     .app-header {
         position: static;
+    }
+
+    /* The header is no longer sticky here, so a header-sized scroll offset would only
+       push focused content down the shortest viewports. */
+    :root {
+        --scroll-offset: 1rem;
     }
 
     .home-layout,

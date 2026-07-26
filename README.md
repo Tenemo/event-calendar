@@ -72,7 +72,7 @@ Copy `.env.example` to `.env` for local development. Do not commit `.env`.
 
 ## Database migrations
 
-Flyway runs during application startup and owns the database schema. The application fails startup when a migration cannot be applied. The current schema is migration version 12. Migration 8 removes existing read-only memberships rather than promoting them to editor access and restricts calendar memberships to `EDITOR` and `ADMIN`. Migration 9 adds the password version used to invalidate older authenticated sessions after a password change. Migration 10 replaces every existing calendar bearer token with the compact format, so deploying it invalidates every previously shared calendar URL once. Migration 11 caps every existing invitation at seven days after creation and adds a database constraint that prevents longer lifetimes. Migration 12 audits existing calendar time zones without changing them and fails closed if any stored value is not an exact identifier supported by Java's IANA time-zone database. If that audit fails, inspect the distinct `calendar.timezone` values, back up the database, map each unsupported value to its intended supported region identifier, and restart the application so Flyway retries the migration. Host-installed PostgreSQL client programs are not required.
+Flyway runs during application startup and owns the database schema. The application fails startup when a migration cannot be applied. The current schema is migration version 13. Migration 8 removes existing read-only memberships rather than promoting them to editor access and restricts calendar memberships to `EDITOR` and `ADMIN`. Migration 9 adds the password version used to invalidate older authenticated sessions after a password change. Migration 10 replaces every existing calendar bearer token with the compact format, so deploying it invalidates every previously shared calendar URL once. Migration 11 caps every existing invitation at seven days after creation and adds a database constraint that prevents longer lifetimes. Migration 12 audits existing calendar time zones without changing them and fails closed if any stored value is not an exact identifier supported by Java's IANA time-zone database. If that audit fails, inspect the distinct `calendar.timezone` values, back up the database, map each unsupported value to its intended supported region identifier, and restart the application so Flyway retries the migration. Migration 13 re-applies the canonical calendar bearer-token constraint, because migration 10 is a Java migration without a checksum and its constraint was tightened after databases had already been migrated, leaving those databases with a looser check that Flyway could not detect. It changes no data. Host-installed PostgreSQL client programs are not required.
 
 Start and inspect the local database with:
 
@@ -93,7 +93,7 @@ mise run package
 Browser tests build the production image and run against disposable application and PostgreSQL containers on non-default loopback ports. They do not use or modify the persistent development database. Chromium is installed automatically by default.
 
 ```bash
-mise run e2e
+mise run end-to-end
 ```
 
 Set `BROWSER` to `firefox` or `webkit` when intentionally running another supported browser. Pull requests run the complete suite in Chromium and focused compatibility journeys in Firefox and WebKit. The automated suite covers registration, sign-in, sign-out, password changes and session revocation, calendar creation, event creation/editing/deletion, compact canonical calendar links, public-access disabling, link regeneration, invitation acceptance, editor removal, last-admin protection, validation, request throttling, and anonymous read-only behavior. A second isolated scenario verifies bootstrap-registration rollback and concurrency.
@@ -138,7 +138,7 @@ mise run dev
 
 The development command prepares the Maven-managed PostgreSQL driver and keeps the generated Liberty installation under `.liberty/`. Development classes use `.build/development`, while clean distributable builds use `.build/package`, so packaging does not remove or modify a running development server. No generated runtime or downloaded driver is committed.
 
-Dev mode requires `t` before running tests on demand and excludes integration and browser tests so an interactive development server cannot write E2E fixtures into the normal development database. Use `mise run package` for the normal test suite and the dedicated E2E tasks for isolated browser verification.
+Dev mode requires `t` before running tests on demand and excludes integration and browser tests so an interactive development server cannot write end-to-end fixtures into the normal development database. Use `mise run package` for the normal test suite and the dedicated end-to-end tasks for isolated browser verification.
 
 To require the exact `200 ok` health contract and the current successful Flyway schema without rebuilding or starting services:
 

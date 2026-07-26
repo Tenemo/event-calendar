@@ -29,7 +29,6 @@ import java.util.Optional;
 public class InvitationService {
     static final int MAXIMUM_INVITATIONS_PER_PAGE = 50;
 
-    private static final int MAXIMUM_INVITATION_TOKEN_GENERATION_ATTEMPTS = 10;
     private static final String VISIBLE_INVITATION_PREDICATE =
             "invitation.createdByUser.id = :actingUserId "
                     + "or exists ("
@@ -222,7 +221,7 @@ public class InvitationService {
 
         Invitation invitation = new Invitation();
         invitation.setCalendar(calendar);
-        invitation.setInvitationToken(generateUniqueInvitationToken());
+        invitation.setInvitationToken(generateInvitationToken());
         invitation.setRole(role);
         invitation.setCreatedByUser(actingUser);
         OffsetDateTime createdAt = OffsetDateTime.now(ZoneOffset.UTC);
@@ -399,21 +398,13 @@ public class InvitationService {
         }
     }
 
-    private String generateUniqueInvitationToken() {
-        for (int attempt = 0; attempt < MAXIMUM_INVITATION_TOKEN_GENERATION_ATTEMPTS; attempt++) {
-            String token = tokenService.generateInvitationToken();
-            Long existingCount = entityManager
-                    .createQuery(
-                            "select count(invitation) from Invitation invitation "
-                                    + "where invitation.invitationToken = :token",
-                            Long.class)
-                    .setParameter("token", token)
-                    .getSingleResult();
-            if (existingCount == 0) {
-                return token;
-            }
-        }
-        throw new IllegalStateException("Could not generate a unique invitation token.");
+    /**
+     * Uniqueness is guaranteed by the unique {@code app_invitation.invite_token} constraint, not by
+     * reading the column first: a read cannot see a token another transaction is about to insert,
+     * so a pre-check would still leave the constraint as the only real guarantee.
+     */
+    private String generateInvitationToken() {
+        return tokenService.generateInvitationToken();
     }
 
     private boolean matchesBootstrapInvitationToken(String invitationToken) {

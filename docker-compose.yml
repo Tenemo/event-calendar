@@ -125,44 +125,44 @@ services:
       timeout: 5s
       retries: 30
 
-  postgres-e2e-verification:
-    profiles: [e2e-verification]
+  postgres-end-to-end-verification:
+    profiles: [end-to-end-verification]
     image: postgres:17.10@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
     environment:
-      POSTGRES_DB: calendar_e2e_verification
-      POSTGRES_USER: calendar_e2e_verification
-      POSTGRES_PASSWORD: calendar_e2e_verification
+      POSTGRES_DB: calendar_end_to_end_verification
+      POSTGRES_USER: calendar_end_to_end_verification
+      POSTGRES_PASSWORD: calendar_end_to_end_verification
     ports:
-      - "127.0.0.1:${E2E_VERIFICATION_DATABASE_PORT:-55433}:5432"
+      - "127.0.0.1:${END_TO_END_VERIFICATION_DATABASE_PORT:-55433}:5432"
     tmpfs:
       - /var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U calendar_e2e_verification -d calendar_e2e_verification"]
+      test: ["CMD-SHELL", "pg_isready -U calendar_end_to_end_verification -d calendar_end_to_end_verification"]
       interval: 2s
       timeout: 5s
       retries: 30
 
-  web-e2e-verification:
-    profiles: [e2e-verification]
+  web-end-to-end-verification:
+    profiles: [end-to-end-verification]
     image: shared-calendar:local
     depends_on:
-      postgres-e2e-verification:
+      postgres-end-to-end-verification:
         condition: service_healthy
     environment:
       PORT: 9080
       HTTPS_PORT: 9443
-      PGHOST: postgres-e2e-verification
+      PGHOST: postgres-end-to-end-verification
       PGPORT: 5432
-      PGDATABASE: calendar_e2e_verification
-      PGUSER: calendar_e2e_verification
-      PGPASSWORD: calendar_e2e_verification
+      PGDATABASE: calendar_end_to_end_verification
+      PGUSER: calendar_end_to_end_verification
+      PGPASSWORD: calendar_end_to_end_verification
       APP_TIMEZONE: Europe/Warsaw
-      APP_BASE_URL: ${E2E_VERIFICATION_BASE_URL:-https://localhost:9445}
-      APP_LTPA_KEYS_PASSWORD: e2e-verification-only
+      APP_BASE_URL: ${END_TO_END_VERIFICATION_BASE_URL:-https://localhost:9445}
+      APP_LTPA_KEYS_PASSWORD: end-to-end-verification-only
       APP_BOOTSTRAP_INVITE_TOKEN: ""
     ports:
-      - "127.0.0.1:${E2E_VERIFICATION_APPLICATION_PORT:-9082}:9080"
-      - "127.0.0.1:${E2E_VERIFICATION_HTTPS_PORT:-9445}:9443"
+      - "127.0.0.1:${END_TO_END_VERIFICATION_APPLICATION_PORT:-9082}:9080"
+      - "127.0.0.1:${END_TO_END_VERIFICATION_HTTPS_PORT:-9445}:9443"
     healthcheck:
       test: *application-health-command
       interval: 2s

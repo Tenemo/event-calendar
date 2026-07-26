@@ -67,11 +67,11 @@ final class PostgreSqlApplicationContractEndToEndIT {
         }
 
         assertEquals(
-                List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
+                List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13),
                 installedRanks,
                 "The isolated database must contain one ordered history row for every migration.");
         assertEquals(
-                List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"),
+                List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"),
                 installedVersions,
                 "No versioned SQL or Java migration may be missing from the deployed schema.");
     }

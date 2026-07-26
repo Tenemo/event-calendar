@@ -380,7 +380,7 @@
         </profile>
 
         <profile>
-            <id>e2e</id>
+            <id>end-to-end</id>
             <build>
                 <plugins>
                     <plugin>
@@ -407,7 +407,7 @@
         </profile>
 
         <profile>
-            <id>bootstrap-concurrency-e2e</id>
+            <id>bootstrap-concurrency-end-to-end</id>
             <build>
                 <plugins>
                     <plugin>
@@ -434,7 +434,7 @@
         </profile>
 
         <profile>
-            <id>preview-deployment-e2e</id>
+            <id>preview-deployment-end-to-end</id>
             <build>
                 <plugins>
                     <plugin>

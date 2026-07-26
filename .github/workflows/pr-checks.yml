@@ -238,7 +238,7 @@ jobs:
     needs: production-image
     env:
       BROWSER: chromium
-      E2E_ARTIFACTS_DIRECTORY: .build/e2e-artifacts/chromium
+      END_TO_END_ARTIFACTS_DIRECTORY: .build/end-to-end-artifacts/chromium
 
     steps:
       - name: Check out repository
@@ -282,16 +282,16 @@ jobs:
           test "$actual_image_id" = "$expected_image_id"
 
       - name: Run shared-calendar browser workflows
-        run: java scripts/calendar-tool.java e2e-shared
+        run: java scripts/calendar-tool.java end-to-end-shared
 
       - name: Upload browser diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           include-hidden-files: true
-          name: e2e-chromium-diagnostics-${{ github.run_attempt }}
+          name: end-to-end-chromium-diagnostics-${{ github.run_attempt }}
           path: |
-            .build/e2e-artifacts/**
+            .build/end-to-end-artifacts/**
             .build/package/failsafe-reports/**
             .build/verification/**
           if-no-files-found: ignore
@@ -308,7 +308,7 @@ jobs:
         browser: [firefox, webkit]
     env:
       BROWSER: ${{ matrix.browser }}
-      E2E_ARTIFACTS_DIRECTORY: .build/e2e-artifacts/${{ matrix.browser }}
+      END_TO_END_ARTIFACTS_DIRECTORY: .build/end-to-end-artifacts/${{ matrix.browser }}
 
     steps:
       - name: Check out repository
@@ -352,16 +352,16 @@ jobs:
           test "$actual_image_id" = "$expected_image_id"
 
       - name: Run focused cross-browser workflows
-        run: java scripts/calendar-tool.java e2e-cross-browser-smoke
+        run: java scripts/calendar-tool.java end-to-end-cross-browser-smoke
 
       - name: Upload cross-browser diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           include-hidden-files: true
-          name: e2e-${{ matrix.browser }}-diagnostics-${{ github.run_attempt }}
+          name: end-to-end-${{ matrix.browser }}-diagnostics-${{ github.run_attempt }}
           path: |
-            .build/e2e-artifacts/**
+            .build/end-to-end-artifacts/**
             .build/package/failsafe-reports/**
             .build/verification/**
           if-no-files-found: ignore
@@ -374,7 +374,7 @@ jobs:
     needs: production-image
     env:
       BROWSER: chromium
-      E2E_ARTIFACTS_DIRECTORY: .build/e2e-artifacts/bootstrap-registration
+      END_TO_END_ARTIFACTS_DIRECTORY: .build/end-to-end-artifacts/bootstrap-registration
 
     steps:
       - name: Check out repository
@@ -427,7 +427,7 @@ jobs:
           include-hidden-files: true
           name: bootstrap-registration-diagnostics-${{ github.run_attempt }}
           path: |
-            .build/e2e-artifacts/**
+            .build/end-to-end-artifacts/**
             .build/package/failsafe-reports/**
             .build/verification/**
           if-no-files-found: ignore
