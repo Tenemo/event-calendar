@@ -148,6 +148,40 @@ final class SecurityHeadersFilterTest {
         assertEquals(0, requestCapture.sessionAccessCount.get());
     }
 
+    @Test
+    void preventsIndexingInEveryNonProductionRailwayEnvironment() throws Exception {
+        for (String environmentName : new String[] {null, "preview-base", "event-calendar-pr-19"}) {
+            ResponseCapture responseCapture = new ResponseCapture();
+
+            new SecurityHeadersFilter("railway-environment-id", environmentName)
+                    .doFilter(
+                            new RequestCapture().request(),
+                            responseCapture.response(),
+                            (request, response) -> { });
+
+            assertEquals(
+                    SecurityHeadersFilter.PREVIEW_ROBOTS_POLICY,
+                    responseCapture.headers.get("X-Robots-Tag"));
+        }
+    }
+
+    @Test
+    void leavesProductionAndLocalIndexingDecisionsToEachPage() throws Exception {
+        for (SecurityHeadersFilter filter : new SecurityHeadersFilter[] {
+            new SecurityHeadersFilter(null, null),
+            new SecurityHeadersFilter("railway-environment-id", " production ")
+        }) {
+            ResponseCapture responseCapture = new ResponseCapture();
+
+            filter.doFilter(
+                    new RequestCapture().request(),
+                    responseCapture.response(),
+                    (request, response) -> { });
+
+            assertTrue(!responseCapture.headers.containsKey("X-Robots-Tag"));
+        }
+    }
+
     private static void assertSecurityHeaders(Map<String, String> headers) {
         assertAll(
                 () -> assertEquals(

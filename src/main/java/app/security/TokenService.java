@@ -7,12 +7,12 @@ import java.util.Base64;
 
 @ApplicationScoped
 public class TokenService {
-    private static final int TOKEN_BYTES = 32;
+    private static final int INVITATION_TOKEN_BYTE_COUNT = 32;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
     public String generateInvitationToken() {
-        byte[] tokenBytes = new byte[TOKEN_BYTES];
+        byte[] tokenBytes = new byte[INVITATION_TOKEN_BYTE_COUNT];
         secureRandom.nextBytes(tokenBytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
     }

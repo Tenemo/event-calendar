@@ -88,7 +88,7 @@
                                 <span class="event-date">#{event.dateLabel}</span>
                                 <div class="event-copy">
                                     <h3>#{event.title}</h3>
-                                    <p>#{event.detailLabel}</p>
+                                    <p>#{event.scheduleAndLocationLabel}</p>
                                     <h:panelGroup layout="block"
                                                   styleClass="event-description"
                                                   rendered="#{not empty event.description}">#{event.description}</h:panelGroup>
@@ -101,7 +101,7 @@
                                                          ajax="true"
                                                          process="@this"
                                                          update=":messages :calendarContent"
-                                                         oncomplete="focusElementByIdSuffix('eventTitle');"
+                                                         oncomplete="focusAfterSuccessfulAjax(args, 'eventTitle');"
                                                          styleClass="ui-button-outlined"/>
                                     </h:form>
                                     <h:form>
@@ -111,7 +111,7 @@
                                                          ajax="true"
                                                          process="@this"
                                                          update=":messages :calendarContent"
-                                                         oncomplete="focusElementByIdSuffix('events-heading');"
+                                                         oncomplete="focusAfterSuccessfulAjax(args, 'events-heading');"
                                                          styleClass="ui-button-danger ui-button-outlined">
                                             <p:confirm header="Delete event"
                                                        message="Delete this event permanently?"
@@ -127,6 +127,15 @@
                         </ui:repeat>
                     </h:panelGroup>
                     <h:panelGroup layout="block" styleClass="empty-state" rendered="#{empty calendarView.events}">No events yet.</h:panelGroup>
+                    <h:form rendered="#{calendarView.moreEventsAvailable}" styleClass="event-pagination">
+                        <p:commandButton value="Load more events"
+                                         action="#{calendarView.loadMoreEvents}"
+                                         ajax="true"
+                                         process="@this"
+                                         update=":messages :calendarContent"
+                                         oncomplete="focusElementByIdSuffix('events-heading');"
+                                         styleClass="ui-button-outlined"/>
+                    </h:form>
                 </section>
 
                 <p:panel styleClass="surface-panel event-editor"
@@ -151,7 +160,7 @@
                                 <p:ajax listener="#{calendarView.changeEventAllDayMode}"
                                         process="eventScheduleFields @this"
                                         update=":messages @this eventScheduleFields"
-                                        oncomplete="if (args.validationFailed) { var checkbox = PF('eventAllDayCheckbox'); checkbox.isChecked() ? checkbox.uncheck(true) : checkbox.check(true); }"/>
+                                        oncomplete="if (args.validationFailed) { var checkbox = PF('eventAllDayCheckbox'); var shouldBeChecked = #{calendarView.eventAllDay}; shouldBeChecked ? checkbox.check(true) : checkbox.uncheck(true); }"/>
                             </p:selectBooleanCheckbox>
                             <p:outputLabel for="allDay" value="All-day event"/>
                         </div>

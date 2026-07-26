@@ -1,11 +1,13 @@
 package app.security;
 
+import static app.testsupport.XmlTestDocuments.parseXml;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.nio.file.Path;
-import javax.xml.parsers.DocumentBuilderFactory;
+import java.util.List;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
@@ -15,7 +17,7 @@ final class ReverseProxyConfigurationTest {
             "src", "main", "liberty", "config", "server.xml");
 
     @Test
-    void doesNotRewriteClientAddressOrOriginFromForwardingHeaders() throws Exception {
+    void doesNotRewriteClientAddressOrOriginFromStandardForwardingHeaders() throws Exception {
         NodeList remoteIpConfigurations =
                 readServerConfiguration().getElementsByTagName("remoteIp");
 
@@ -23,19 +25,41 @@ final class ReverseProxyConfigurationTest {
     }
 
     @Test
-    void rejectsWebSpherePrivateProxyHeadersFromEverySource() throws Exception {
+    void trustsPrivateProxyHeadersFromTheConfiguredRailwayIngressRange() throws Exception {
         Element httpDispatcher = firstElement(readServerConfiguration(), "httpDispatcher");
 
-        assertEquals("none", httpDispatcher.getAttribute("trustedHeaderOrigin"));
+        assertEquals(
+                "100.*.*.*",
+                httpDispatcher.getAttribute("trustedHeaderOrigin"));
     }
 
     @Test
-    void forcesContainerRedirectsToRemainRelativeWithoutPrivateSslIndicators() throws Exception {
+    void recognizesRailwaysEdgeMarkerForSslOffloadWhileKeepingRedirectsRelative() throws Exception {
         Element webContainer = firstElement(readServerConfiguration(), "webContainer");
 
         assertAll(
                 () -> assertEquals("true", webContainer.getAttribute("redirectToRelativeUrl")),
-                () -> assertEquals("", webContainer.getAttribute("httpsIndicatorHeader")));
+                () -> assertEquals(
+                        "X-Railway-Edge",
+                        webContainer.getAttribute("httpsIndicatorHeader")));
+    }
+
+    @Test
+    void compressesTextAndCommonWebApplicationMediaTypesWithGzip() throws Exception {
+        Element httpEndpoint = firstElement(readServerConfiguration(), "httpEndpoint");
+        Element compression = firstElement(httpEndpoint, "compression");
+        NodeList configuredTypes = compression.getElementsByTagName("types");
+        List<String> mediaTypes = IntStream.range(0, configuredTypes.getLength())
+                .mapToObj(index -> configuredTypes.item(index).getTextContent().trim())
+                .toList();
+
+        assertAll(
+                () -> assertEquals("gzip", compression.getAttribute("serverPreferredAlgorithm")),
+                () -> assertEquals(
+                        List.of(
+                                "+application/*",
+                                "+image/svg+xml"),
+                        mediaTypes));
     }
 
     private static Element readServerConfiguration() throws Exception {
@@ -43,12 +67,7 @@ final class ReverseProxyConfigurationTest {
     }
 
     private static Element readXmlRoot(Path configurationPath) throws Exception {
-        DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
-        documentBuilderFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-        return documentBuilderFactory
-                .newDocumentBuilder()
-                .parse(configurationPath.toFile())
-                .getDocumentElement();
+        return parseXml(configurationPath).getDocumentElement();
     }
 
     private static Element firstElement(Element parent, String tagName) {

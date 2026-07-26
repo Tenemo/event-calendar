@@ -9,12 +9,12 @@ import app.user.ApplicationUser;
 import app.util.AuthorizationException;
 import app.util.ConflictException;
 import app.util.NotFoundException;
+import app.util.OptimisticLockConflicts;
 import app.util.TextNormalizer;
 import app.util.ValidationException;
 import jakarta.ejb.Stateless;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PersistenceContext;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -27,6 +27,11 @@ import java.util.Objects;
 public class CalendarEventService {
     private static final int MAXIMUM_EVENT_TITLE_LENGTH = 200;
     private static final int MAXIMUM_EVENT_LOCATION_LENGTH = 200;
+    private static final int MAXIMUM_EVENT_PAGE_SIZE = 100;
+    private static final String EVENT_CONFLICT_MESSAGE =
+            "This event changed after you opened it. Reload the page and try again.";
+    private static final String CALENDAR_CONFLICT_MESSAGE =
+            "This calendar changed after you opened the event form. Reload the page and try again.";
 
     @PersistenceContext(unitName = "calendarPersistenceUnit")
     private EntityManager entityManager;
@@ -43,14 +48,21 @@ public class CalendarEventService {
     @Inject
     private AuditService auditService;
 
-    public List<CalendarEvent> findPublicEvents(String calendarLinkToken) {
+    public CalendarEventPage findPublicEvents(
+            String calendarLinkToken,
+            int firstResult,
+            int pageSize) {
         Calendar calendar = calendarAccessService.requirePublicReadableCalendar(calendarLinkToken);
-        return findEvents(calendar.getId());
+        return findEvents(calendar.getId(), firstResult, pageSize);
     }
 
-    public List<CalendarEvent> findEventsForMember(ApplicationUser user, Long calendarId) {
+    public CalendarEventPage findEventsForMember(
+            ApplicationUser user,
+            Long calendarId,
+            int firstResult,
+            int pageSize) {
         calendarAccessService.requireCanEdit(user, calendarId);
-        return findEvents(calendarId);
+        return findEvents(calendarId, firstResult, pageSize);
     }
 
     public CalendarEvent createEvent(
@@ -75,6 +87,8 @@ public class CalendarEventService {
 
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         Calendar calendar = calendarService.requireActiveCalendarForChildMutation(calendarId);
+        // Deliberate second check: the acting user's role can be revoked between the first check
+        // and the lock, so authorization is confirmed again once the calendar row is held.
         calendarAccessService.requireCanEdit(actingUser, calendarId);
         requireExpectedCalendarState(calendar, expectedCalendarVersion, expectedCalendarTimeZone);
         EventTimeRange normalizedTimeRange = normalizeEventTimes(calendar, eventTimeInput);
@@ -117,6 +131,8 @@ public class CalendarEventService {
                 MAXIMUM_EVENT_LOCATION_LENGTH,
                 "Event location must be 200 characters or fewer.");
         Calendar calendar = calendarService.requireActiveCalendarForChildMutation(event.getCalendar().getId());
+        // Deliberate second check: the acting user's role can be revoked between the first check
+        // and the lock, so authorization is confirmed again once the calendar row is held.
         calendarAccessService.requireCanEdit(actingUser, calendar.getId());
         requireExpectedVersion(event, expectedVersion);
         requireExpectedCalendarState(calendar, expectedCalendarVersion, expectedCalendarTimeZone);
@@ -138,6 +154,8 @@ public class CalendarEventService {
     public void deleteEvent(ApplicationUser actingUser, Long eventId, Integer expectedVersion) {
         CalendarEvent event = requireEditableEvent(actingUser, eventId);
         Calendar calendar = calendarService.requireActiveCalendarForChildMutation(event.getCalendar().getId());
+        // Deliberate second check: the acting user's role can be revoked between the first check
+        // and the lock, so authorization is confirmed again once the calendar row is held.
         calendarAccessService.requireCanEdit(actingUser, calendar.getId());
         requireExpectedVersion(event, expectedVersion);
         auditService.record(actingUser, event.getCalendar(), "calendar_event", event.getId(), "deleted", "Event deleted.");
@@ -192,21 +210,36 @@ public class CalendarEventService {
             Integer expectedCalendarVersion,
             String expectedCalendarTimeZone) {
         if (expectedCalendarVersion == null
-                || calendar.getVersion() != expectedCalendarVersion
+                || calendar.getVersion() != expectedCalendarVersion.intValue()
                 || !Objects.equals(calendar.getTimeZone(), expectedCalendarTimeZone)) {
             throw calendarConflictException();
         }
     }
 
-    private List<CalendarEvent> findEvents(Long calendarId) {
-        return entityManager
+    private CalendarEventPage findEvents(Long calendarId, int firstResult, int pageSize) {
+        if (firstResult < 0) {
+            throw new IllegalArgumentException("The first event result must not be negative.");
+        }
+        if (pageSize < 1 || pageSize > MAXIMUM_EVENT_PAGE_SIZE) {
+            throw new IllegalArgumentException(
+                    "The event page size must be between 1 and " + MAXIMUM_EVENT_PAGE_SIZE + ".");
+        }
+
+        List<CalendarEvent> loadedEvents = entityManager
                 .createQuery(
                         "select calendarEvent from CalendarEvent calendarEvent "
                                 + "where calendarEvent.calendar.id = :calendarId "
-                                + "order by calendarEvent.startTime",
+                                + "order by calendarEvent.startTime, calendarEvent.id",
                         CalendarEvent.class)
                 .setParameter("calendarId", calendarId)
+                .setFirstResult(firstResult)
+                .setMaxResults(pageSize + 1)
                 .getResultList();
+        boolean hasMore = loadedEvents.size() > pageSize;
+        List<CalendarEvent> pageEvents = hasMore
+                ? List.copyOf(loadedEvents.subList(0, pageSize))
+                : List.copyOf(loadedEvents);
+        return new CalendarEventPage(pageEvents, hasMore);
     }
 
     private CalendarEvent requireEvent(Long eventId) {
@@ -228,26 +261,16 @@ public class CalendarEventService {
     }
 
     private void requireExpectedVersion(CalendarEvent event, Integer expectedVersion) {
-        if (expectedVersion != null && event.getVersion() != expectedVersion) {
-            throw eventConflictException();
-        }
+        OptimisticLockConflicts.requireExpectedVersion(
+                event.getVersion(), expectedVersion, EVENT_CONFLICT_MESSAGE);
     }
 
     private void flushWithConflictMessage() {
-        try {
-            entityManager.flush();
-        } catch (OptimisticLockException exception) {
-            throw eventConflictException();
-        }
-    }
-
-    private ConflictException eventConflictException() {
-        return new ConflictException("This event changed after you opened it. Reload the page and try again.");
+        OptimisticLockConflicts.flushOrConflict(entityManager, EVENT_CONFLICT_MESSAGE);
     }
 
     private ConflictException calendarConflictException() {
-        return new ConflictException(
-                "This calendar changed after you opened the event form. Reload the page and try again.");
+        return new ConflictException(CALENDAR_CONFLICT_MESSAGE);
     }
 
     private record EventTimeRange(OffsetDateTime startTime, OffsetDateTime endTime) {

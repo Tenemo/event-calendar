@@ -61,6 +61,7 @@
 ## Repository hygiene
 
 - Do not commit `.env`, downloaded toolchains, Maven distributions, PostgreSQL driver jars, IDE state, `target/`, generated build output, backups, or local scratch artifacts.
+- Never add, restore, or enable Dependabot in this repository, including version updates, security updates, or Dependabot configuration files. Dependency updates must be initiated and reviewed manually unless the owner explicitly requests a different tool.
 - Do not edit generated output directly unless the task explicitly targets generated artifacts.
 - Do not add shell wrappers for non-trivial orchestration. Keep shell scripts thin and move real orchestration into portable project code when needed.
 - Never rely on platform-specific project scripts for required workflows. Prefer portable `mise` tasks, Maven configuration, Java source-launcher helpers, or Docker Compose commands that work the same way across supported platforms.

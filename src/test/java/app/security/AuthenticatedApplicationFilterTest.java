@@ -1,5 +1,6 @@
 package app.security;
 
+import static app.testsupport.ProxyReturnValues.defaultValue;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -37,7 +38,7 @@ final class AuthenticatedApplicationFilterTest {
     }
 
     @Test
-    void anonymousUsersReceiveOnlyTheFixedOriginRelativeLoginRedirect() throws Exception {
+    void anonymousUsersReceiveOnlyTheFixedOriginRelativeSignInRedirect() throws Exception {
         AtomicInteger filterChainCalls = new AtomicInteger();
         TestResponse response = new TestResponse();
 
@@ -56,7 +57,7 @@ final class AuthenticatedApplicationFilterTest {
     }
 
     @Test
-    void anonymousFacesAjaxRequestsReceiveAPartialRedirectInsteadOfLoginHtml() throws Exception {
+    void anonymousFacesAjaxRequestsReceiveAPartialRedirectInsteadOfSignInHtml() throws Exception {
         AtomicInteger filterChainCalls = new AtomicInteger();
         TestResponse response = new TestResponse();
 
@@ -165,19 +166,6 @@ final class AuthenticatedApplicationFilterTest {
                 interfaceType.getClassLoader(),
                 new Class<?>[] {interfaceType},
                 (ignoredProxy, method, arguments) -> defaultValue(method.getReturnType()));
-    }
-
-    private static Object defaultValue(Class<?> returnType) {
-        if (!returnType.isPrimitive()) {
-            return null;
-        }
-        if (returnType == boolean.class) {
-            return false;
-        }
-        if (returnType == char.class) {
-            return '\0';
-        }
-        return 0;
     }
 
     private static final class TestResponse {

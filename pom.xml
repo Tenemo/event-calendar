@@ -380,7 +380,7 @@
         </profile>
 
         <profile>
-            <id>e2e</id>
+            <id>end-to-end</id>
             <build>
                 <plugins>
                     <plugin>
@@ -407,7 +407,7 @@
         </profile>
 
         <profile>
-            <id>bootstrap-concurrency-e2e</id>
+            <id>bootstrap-concurrency-end-to-end</id>
             <build>
                 <plugins>
                     <plugin>
@@ -418,6 +418,33 @@
                             <useModulePath>false</useModulePath>
                             <includes>
                                 <include>**/BootstrapRegistrationConcurrencyIT.java</include>
+                            </includes>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <profile>
+            <id>preview-deployment-end-to-end</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <version>${maven.failsafe.plugin.version}</version>
+                        <configuration>
+                            <useModulePath>false</useModulePath>
+                            <includes>
+                                <include>**/PreviewDeploymentAuthenticationIT.java</include>
                             </includes>
                         </configuration>
                         <executions>

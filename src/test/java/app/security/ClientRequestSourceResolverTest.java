@@ -45,9 +45,29 @@ final class ClientRequestSourceResolverTest {
     void ignoresSpoofedRailwayHeadersFromAnUntrustedImmediatePeer() {
         ClientRequestSourceResolver resolver = new ClientRequestSourceResolver("production-environment-id");
 
-        assertEquals(
-                "198.51.100.90",
-                resolver.resolve(request("198.51.100.90", "203.0.113.77")));
+        assertAll(
+                () -> assertEquals(
+                        "198.51.100.90",
+                        resolver.resolve(request("198.51.100.90", "203.0.113.77"))),
+                () -> assertEquals(
+                        "99.255.255.255",
+                        resolver.resolve(request("99.255.255.255", "203.0.113.77"))),
+                () -> assertEquals(
+                        "101.0.0.0",
+                        resolver.resolve(request("101.0.0.0", "203.0.113.77"))));
+    }
+
+    @Test
+    void acceptsBothBoundariesOfTheConfiguredRailwayIngressRange() {
+        ClientRequestSourceResolver resolver = new ClientRequestSourceResolver("production-environment-id");
+
+        assertAll(
+                () -> assertEquals(
+                        "198.51.100.1",
+                        resolver.resolve(request("100.0.0.0", "198.51.100.1"))),
+                () -> assertEquals(
+                        "198.51.100.254",
+                        resolver.resolve(request("100.255.255.255", "198.51.100.254"))));
     }
 
     @Test

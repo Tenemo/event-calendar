@@ -1,0 +1,357 @@
+package app.security;
+
+import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import org.junit.jupiter.api.Test;
+
+final class SignInAttemptThrottleTest {
+    private static final Instant TEST_START = Instant.parse("2026-07-15T10:00:00Z");
+    private static final String TEST_SOURCE = "192.0.2.10";
+
+    @Test
+    void usernameAndSourceBlockExpiresAtTheConfiguredTimeWithoutSleeping() {
+        MutableClock clock = new MutableClock(TEST_START);
+        SignInAttemptThrottle throttle = throttle(clock, 2, 20, 10, 10);
+
+        throttle.recordFailedAuthentication("piotr", TEST_SOURCE);
+        throttle.recordFailedAuthentication("piotr", TEST_SOURCE);
+
+        assertFalse(throttle.isAuthenticationAllowed("piotr", TEST_SOURCE));
+        clock.advance(Duration.ofMinutes(5).minusSeconds(1));
+        assertFalse(throttle.isAuthenticationAllowed("piotr", TEST_SOURCE));
+        clock.advance(Duration.ofSeconds(1));
+
+        assertAll(
+                () -> assertTrue(throttle.isAuthenticationAllowed("piotr", TEST_SOURCE)),
+                () -> assertEquals(0, throttle.trackedUsernameAndSourceCount()));
+    }
+
+    @Test
+    void failuresOutsideTheWindowStartANewWindow() {
+        MutableClock clock = new MutableClock(TEST_START);
+        SignInAttemptThrottle throttle = throttle(clock, 2, 20, 10, 10);
+
+        throttle.recordFailedAuthentication("piotr", TEST_SOURCE);
+        clock.advance(Duration.ofMinutes(10));
+        throttle.recordFailedAuthentication("piotr", TEST_SOURCE);
+
+        assertTrue(throttle.isAuthenticationAllowed("piotr", TEST_SOURCE));
+    }
+
+    @Test
+    void hostileSourceDoesNotBlockTheSameUsernameForAnotherSource() {
+        SignInAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 2, 20, 10, 10);
+
+        throttle.recordFailedAuthentication("piotr", "198.51.100.10");
+        throttle.recordFailedAuthentication("piotr", "198.51.100.10");
+
+        assertAll(
+                () -> assertFalse(throttle.isAuthenticationAllowed("piotr", "198.51.100.10")),
+                () -> assertTrue(throttle.isAuthenticationAllowed("piotr", "203.0.113.20")));
+    }
+
+    @Test
+    void sourceFailureLimitStopsUsernameSpraying() {
+        SignInAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 5, 3, 20, 10);
+
+        throttle.recordFailedAuthentication("person-one", TEST_SOURCE);
+        throttle.recordFailedAuthentication("person-two", TEST_SOURCE);
+        throttle.recordFailedAuthentication("person-three", TEST_SOURCE);
+
+        assertAll(
+                () -> assertFalse(throttle.isAuthenticationAllowed("untried-person", TEST_SOURCE)),
+                () -> assertTrue(throttle.isAuthenticationAllowed("untried-person", "203.0.113.20")));
+    }
+
+    @Test
+    void successfulUsernameDoesNotEraseCrossUsernameSourceFailures() {
+        SignInAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 5, 3, 20, 10);
+
+        throttle.recordFailedAuthentication("person-one", TEST_SOURCE);
+        throttle.recordFailedAuthentication("person-two", TEST_SOURCE);
+        throttle.clearUsernameAndSourceFailures("person-one", TEST_SOURCE);
+        throttle.recordFailedAuthentication("person-three", TEST_SOURCE);
+
+        assertAll(
+                () -> assertTrue(throttle.isAuthenticationAllowed("person-one", "203.0.113.20")),
+                () -> assertFalse(throttle.isAuthenticationAllowed("untried-person", TEST_SOURCE)));
+    }
+
+    @Test
+    void usernameAndSourceStateCannotExceedItsConfiguredLimit() {
+        SignInAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 5, 200, 3, 10);
+
+        for (int usernameIndex = 0; usernameIndex < 100; usernameIndex++) {
+            throttle.recordFailedAuthentication("person-" + usernameIndex, TEST_SOURCE);
+        }
+
+        assertEquals(3, throttle.trackedUsernameAndSourceCount());
+    }
+
+    @Test
+    void sourceStateCannotExceedItsConfiguredLimit() {
+        SignInAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 5, 5, 200, 3);
+
+        for (int sourceIndex = 0; sourceIndex < 100; sourceIndex++) {
+            throttle.recordFailedAuthentication("person-" + sourceIndex, "192.0.2." + sourceIndex);
+        }
+
+        assertEquals(3, throttle.trackedSourceCount());
+    }
+
+    @Test
+    void usernameAndSourceSprayingDoesNotEvictAnActiveBlock() {
+        SignInAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 2, 1_000, 3, 10);
+
+        throttle.recordFailedAuthentication("target", TEST_SOURCE);
+        throttle.recordFailedAuthentication("target", TEST_SOURCE);
+        for (int usernameIndex = 0; usernameIndex < 100; usernameIndex++) {
+            throttle.recordFailedAuthentication("sprayed-person-" + usernameIndex, TEST_SOURCE);
+        }
+
+        assertAll(
+                () -> assertFalse(throttle.isAuthenticationAllowed("target", TEST_SOURCE)),
+                () -> assertEquals(3, throttle.trackedUsernameAndSourceCount()));
+    }
+
+    @Test
+    void sourceSprayingDoesNotEvictAnActiveSourceBlock() {
+        SignInAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 5, 2, 200, 3);
+        String blockedSource = "198.51.100.10";
+
+        throttle.recordFailedAuthentication("person-one", blockedSource);
+        throttle.recordFailedAuthentication("person-two", blockedSource);
+        for (int sourceIndex = 0; sourceIndex < 100; sourceIndex++) {
+            throttle.recordFailedAuthentication("sprayed-person-" + sourceIndex, "203.0.113." + sourceIndex);
+        }
+
+        assertAll(
+                () -> assertFalse(throttle.isAuthenticationAllowed("another-person", blockedSource)),
+                () -> assertEquals(3, throttle.trackedSourceCount()));
+    }
+
+    @Test
+    void saturationFailsClosedWhenEveryTrackedStateIsActivelyBlocked() {
+        MutableClock clock = new MutableClock(TEST_START);
+        SignInAttemptThrottle throttle = throttle(clock, 1, 1, 1, 1);
+
+        throttle.recordFailedAuthentication("first-person", "198.51.100.10");
+
+        assertFalse(throttle.isAuthenticationAllowed("unseen-person", "203.0.113.20"));
+        clock.advance(Duration.ofMinutes(5));
+
+        assertAll(
+                () -> assertTrue(throttle.isAuthenticationAllowed("unseen-person", "203.0.113.20")),
+                () -> assertEquals(0, throttle.trackedUsernameAndSourceCount()),
+                () -> assertEquals(0, throttle.trackedSourceCount()));
+    }
+
+    @Test
+    void oversizedIdentifiersUseBoundedTrackingKeys() {
+        SignInAttemptThrottle throttle = throttle(Clock.fixed(TEST_START, ZoneOffset.UTC), 5, 20, 10, 10);
+
+        throttle.recordFailedAuthentication("a".repeat(81), "x".repeat(129));
+        throttle.recordFailedAuthentication("b".repeat(160), "y".repeat(256));
+
+        assertAll(
+                () -> assertEquals(1, throttle.trackedUsernameAndSourceCount()),
+                () -> assertEquals(1, throttle.trackedSourceCount()));
+    }
+
+    @Test
+    void saturationRefusesUnknownSourcesForAsLongAsTheBlocksThatCausedItRemainActive() {
+        MutableClock clock = new MutableClock(TEST_START);
+        SignInAttemptThrottle throttle = throttle(clock, 1, 1, 1, 1);
+
+        throttle.recordFailedAuthentication("first-person", "198.51.100.10");
+        assertFalse(throttle.isAuthenticationAllowed("unseen-person", "203.0.113.20"));
+
+        clock.advance(SignInAttemptThrottle.SATURATION_BLOCK_DURATION);
+
+        assertFalse(
+                throttle.isAuthenticationAllowed("unseen-person", "203.0.113.20"),
+                "Saturation re-arms while the tracker is full of active blocks, so an unknown source "
+                        + "stays refused rather than being allowed to evict one.");
+    }
+
+    @Test
+    void aSourceThatHasSignedInSuccessfullyStillSignsInWhileSaturationRefusesUnknownSources() {
+        MutableClock clock = new MutableClock(TEST_START);
+        SignInAttemptThrottle throttle = throttle(clock, 5, 5, 2, 2);
+
+        assertTrue(throttle.reserveAuthenticationAttempt("piotr", "192.0.2.50"));
+        throttle.releaseSuccessfulAttempt("piotr", "192.0.2.50");
+
+        for (String hostileSource : new String[] {"198.51.100.10", "203.0.113.20"}) {
+            for (int failureIndex = 0; failureIndex < 5; failureIndex++) {
+                throttle.recordFailedAuthentication("intruder-" + hostileSource, hostileSource);
+            }
+        }
+
+        assertFalse(
+                throttle.reserveAuthenticationAttempt("unseen-person", "203.0.113.99"),
+                "An unknown source is shed while the tracker is saturated.");
+        for (int failureIndex = 0; failureIndex < 5; failureIndex++) {
+            assertTrue(
+                    throttle.reserveAuthenticationAttempt("piotr", "192.0.2.50"),
+                    "Reserved capacity must keep a proven source available without bypassing its limit.");
+        }
+
+        assertAll(
+                () -> assertFalse(
+                        throttle.reserveAuthenticationAttempt("piotr", "192.0.2.50"),
+                        "A proven source must stop at the configured username and source limit."),
+                () -> assertEquals(1, throttle.reservedProvenUsernameAndSourceCount()),
+                () -> assertEquals(1, throttle.reservedProvenSourceCount()),
+                () -> assertEquals(1, throttle.provenSourceCount()));
+    }
+
+    @Test
+    void provenSourceReservationsStillEnforceTheSourceLimitDuringSaturation() {
+        MutableClock clock = new MutableClock(TEST_START);
+        SignInAttemptThrottle throttle = throttle(clock, 5, 25, 5, 1);
+        String provenSource = "192.0.2.50";
+
+        assertTrue(throttle.reserveAuthenticationAttempt("piotr", provenSource));
+        throttle.releaseSuccessfulAttempt("piotr", provenSource);
+        for (int usernameIndex = 0; usernameIndex < 5; usernameIndex++) {
+            for (int failureIndex = 0; failureIndex < 5; failureIndex++) {
+                throttle.recordFailedAuthentication(
+                        "intruder-" + usernameIndex,
+                        "198.51.100.10");
+            }
+        }
+
+        for (int failureIndex = 0; failureIndex < 25; failureIndex++) {
+            assertTrue(throttle.reserveAuthenticationAttempt("person-" + failureIndex, provenSource));
+        }
+
+        assertAll(
+                () -> assertFalse(
+                        throttle.reserveAuthenticationAttempt("one-more-person", provenSource),
+                        "Reserved tracking must enforce the source-wide 25-attempt protection."),
+                () -> assertEquals(25, throttle.reservedProvenUsernameAndSourceCount()),
+                () -> assertEquals(1, throttle.reservedProvenSourceCount()));
+    }
+
+    @Test
+    void provenSourcesFailClosedWhenTheirReservedTrackingCapacityIsAlsoSaturated() {
+        MutableClock clock = new MutableClock(TEST_START);
+        SignInAttemptThrottle throttle = throttle(clock, 1, 1, 1, 1);
+        String firstProvenSource = "192.0.2.50";
+        String secondProvenSource = "192.0.2.51";
+
+        for (String provenSource : new String[] {firstProvenSource, secondProvenSource}) {
+            assertTrue(throttle.reserveAuthenticationAttempt("piotr", provenSource));
+            throttle.releaseSuccessfulAttempt("piotr", provenSource);
+        }
+        throttle.recordFailedAuthentication("intruder", "198.51.100.10");
+
+        assertTrue(throttle.reserveAuthenticationAttempt("first-person", firstProvenSource));
+
+        assertAll(
+                () -> assertFalse(
+                        throttle.reserveAuthenticationAttempt("second-person", secondProvenSource),
+                        "Admission must fail when neither bounded tracking pool can record it."),
+                () -> assertEquals(1, throttle.reservedProvenUsernameAndSourceCount()),
+                () -> assertEquals(1, throttle.reservedProvenSourceCount()),
+                () -> assertEquals(2, throttle.trackedUsernameAndSourceCount()),
+                () -> assertEquals(2, throttle.trackedSourceCount()));
+    }
+
+    @Test
+    void aProvenSourceStopsBeingExemptOnceItsRetentionExpires() {
+        MutableClock clock = new MutableClock(TEST_START);
+        // Blocks must outlive the retention window, so the expiring proof is the only thing that
+        // changes across the clock advance below.
+        SignInAttemptThrottle throttle = new SignInAttemptThrottle(
+                clock,
+                5,
+                5,
+                Duration.ofDays(30),
+                Duration.ofDays(30),
+                1,
+                1);
+
+        assertTrue(throttle.reserveAuthenticationAttempt("piotr", "192.0.2.50"));
+        throttle.releaseSuccessfulAttempt("piotr", "192.0.2.50");
+        for (int failureIndex = 0; failureIndex < 5; failureIndex++) {
+            throttle.recordFailedAuthentication("intruder", "198.51.100.10");
+        }
+        assertTrue(throttle.isAuthenticationAllowed("piotr", "192.0.2.50"));
+
+        clock.advance(SignInAttemptThrottle.PROVEN_SOURCE_RETENTION);
+
+        assertAll(
+                () -> assertEquals(0, throttle.provenSourceCount()),
+                () -> assertFalse(
+                        throttle.isAuthenticationAllowed("piotr", "192.0.2.50"),
+                        "A stale proof must not exempt a source indefinitely."));
+    }
+
+    @Test
+    void aProvenSourceIsStillSubjectToItsOwnBlocks() {
+        MutableClock clock = new MutableClock(TEST_START);
+        SignInAttemptThrottle throttle = throttle(clock, 2, 100, 100, 100);
+
+        assertTrue(throttle.reserveAuthenticationAttempt("piotr", "192.0.2.50"));
+        throttle.releaseSuccessfulAttempt("piotr", "192.0.2.50");
+        throttle.recordFailedAuthentication("piotr", "192.0.2.50");
+        throttle.recordFailedAuthentication("piotr", "192.0.2.50");
+
+        assertFalse(
+                throttle.isAuthenticationAllowed("piotr", "192.0.2.50"),
+                "The exemption waives only the global saturation gate, never the source's own block.");
+    }
+
+    private static SignInAttemptThrottle throttle(
+            Clock clock,
+            int maximumFailedAttemptsPerUsernameAndSource,
+            int maximumFailedAttemptsPerSource,
+            int maximumTrackedUsernameAndSourceCombinations,
+            int maximumTrackedSources) {
+        return new SignInAttemptThrottle(
+                clock,
+                maximumFailedAttemptsPerUsernameAndSource,
+                maximumFailedAttemptsPerSource,
+                Duration.ofMinutes(10),
+                Duration.ofMinutes(5),
+                maximumTrackedUsernameAndSourceCombinations,
+                maximumTrackedSources);
+    }
+
+    private static final class MutableClock extends Clock {
+        private Instant currentInstant;
+
+        private MutableClock(Instant currentInstant) {
+            this.currentInstant = currentInstant;
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return currentInstant;
+        }
+
+        private void advance(Duration duration) {
+            currentInstant = currentInstant.plus(duration);
+        }
+    }
+}

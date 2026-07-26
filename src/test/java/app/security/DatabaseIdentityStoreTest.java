@@ -1,6 +1,7 @@
 package app.security;
 
 import static app.testsupport.ServiceTestSupport.setField;
+import static app.testsupport.TestPasswordServices.initialize;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -72,7 +73,7 @@ final class DatabaseIdentityStoreTest {
         DatabaseIdentityStore identityStore = identityStore(
                 new FixedUserService(Optional.of(user)),
                 passwordService,
-                new LoginAttemptThrottle(),
+                new SignInAttemptThrottle(),
                 new MutableRequestSource("192.0.2.1"),
                 passwordValidationState);
 
@@ -92,7 +93,7 @@ final class DatabaseIdentityStoreTest {
     }
 
     @Test
-    void concurrentPasswordChangeCannotStampAnOldPasswordLoginWithTheNewVersion() throws Exception {
+    void concurrentPasswordChangeCannotStampAnOldPasswordSignInWithTheNewVersion() throws Exception {
         ApplicationUser user = new ApplicationUser();
         user.setUsername("piotr");
         user.setPasswordHash("old-password-hash");
@@ -107,7 +108,7 @@ final class DatabaseIdentityStoreTest {
         DatabaseIdentityStore identityStore = identityStore(
                 new FixedUserService(Optional.of(user)),
                 passwordService,
-                new LoginAttemptThrottle(),
+                new SignInAttemptThrottle(),
                 new MutableRequestSource("192.0.2.1"),
                 passwordValidationState);
         ExecutorService authenticationExecutor = Executors.newSingleThreadExecutor();
@@ -160,7 +161,7 @@ final class DatabaseIdentityStoreTest {
         DatabaseIdentityStore identityStore = identityStore(new FixedUserService(Optional.of(user)), passwordService);
 
         for (int failedAttemptIndex = 0;
-                failedAttemptIndex < LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE;
+                failedAttemptIndex < SignInAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE;
                 failedAttemptIndex++) {
             String username = failedAttemptIndex % 2 == 0 ? " Piotr " : "PIOTR";
             CredentialValidationResult result = identityStore.validate(
@@ -174,7 +175,7 @@ final class DatabaseIdentityStoreTest {
         assertAll(
                 () -> assertEquals(CredentialValidationResult.Status.INVALID, blockedResult.getStatus()),
                 () -> assertEquals(
-                        LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE,
+                        SignInAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE,
                         passwordService.verificationCount));
     }
 
@@ -189,11 +190,11 @@ final class DatabaseIdentityStoreTest {
         DatabaseIdentityStore identityStore = identityStore(
                 new FixedUserService(Optional.of(user)),
                 passwordService,
-                new LoginAttemptThrottle(),
+                new SignInAttemptThrottle(),
                 requestSource);
 
         for (int failedAttemptIndex = 0;
-                failedAttemptIndex < LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE;
+                failedAttemptIndex < SignInAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE;
                 failedAttemptIndex++) {
             identityStore.validate(new UsernamePasswordCredential("piotr", "wrong-password"));
         }
@@ -211,7 +212,7 @@ final class DatabaseIdentityStoreTest {
                 () -> assertEquals(CredentialValidationResult.Status.VALID, legitimateResult.getStatus()),
                 () -> assertEquals(CredentialValidationResult.Status.INVALID, hostileSourceResult.getStatus()),
                 () -> assertEquals(
-                        LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE + 1,
+                        SignInAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE + 1,
                         passwordService.verificationCount));
     }
 
@@ -229,7 +230,7 @@ final class DatabaseIdentityStoreTest {
                 new FixedUserService(Optional.empty()), missingUserPasswordService);
 
         for (int failedAttemptIndex = 0;
-                failedAttemptIndex <= LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE;
+                failedAttemptIndex <= SignInAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE;
                 failedAttemptIndex++) {
             existingUserIdentityStore.validate(new UsernamePasswordCredential("existing", "wrong-password"));
             missingUserIdentityStore.validate(new UsernamePasswordCredential("missing", "wrong-password"));
@@ -237,10 +238,10 @@ final class DatabaseIdentityStoreTest {
 
         assertAll(
                 () -> assertEquals(
-                        LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE,
+                        SignInAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE,
                         existingUserPasswordService.verificationCount),
                 () -> assertEquals(
-                        LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE,
+                        SignInAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE,
                         missingUserPasswordService.verificationCount),
                 () -> assertFalse(existingUserPasswordService.lastStoredHash.startsWith("PBKDF2WithHmacSHA256:")),
                 () -> assertTrue(missingUserPasswordService.lastStoredHash.startsWith(
@@ -260,7 +261,7 @@ final class DatabaseIdentityStoreTest {
         DatabaseIdentityStore identityStore = identityStore(new FixedUserService(Optional.of(user)), passwordService);
 
         for (int failedAttemptIndex = 0;
-                failedAttemptIndex < LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE - 1;
+                failedAttemptIndex < SignInAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE - 1;
                 failedAttemptIndex++) {
             identityStore.validate(new UsernamePasswordCredential("piotr", "wrong-password"));
         }
@@ -269,7 +270,7 @@ final class DatabaseIdentityStoreTest {
                 new UsernamePasswordCredential("piotr", "correct-password"));
         passwordService.verificationResult = false;
         for (int failedAttemptIndex = 0;
-                failedAttemptIndex < LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE;
+                failedAttemptIndex < SignInAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE;
                 failedAttemptIndex++) {
             identityStore.validate(new UsernamePasswordCredential("piotr", "wrong-password"));
         }
@@ -278,7 +279,7 @@ final class DatabaseIdentityStoreTest {
         assertAll(
                 () -> assertEquals(CredentialValidationResult.Status.VALID, successfulResult.getStatus()),
                 () -> assertEquals(
-                        LoginAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE * 2,
+                        SignInAttemptThrottle.MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE * 2,
                         passwordService.verificationCount));
     }
 
@@ -286,7 +287,7 @@ final class DatabaseIdentityStoreTest {
         return identityStore(
                 userService,
                 passwordService,
-                new LoginAttemptThrottle(),
+                new SignInAttemptThrottle(),
                 new MutableRequestSource("192.0.2.1"),
                 new PasswordValidationState());
     }
@@ -294,12 +295,12 @@ final class DatabaseIdentityStoreTest {
     private static DatabaseIdentityStore identityStore(
             UserService userService,
             PasswordService passwordService,
-            LoginAttemptThrottle loginAttemptThrottle,
+            SignInAttemptThrottle signInAttemptThrottle,
             MutableRequestSource requestSource) {
         return identityStore(
                 userService,
                 passwordService,
-                loginAttemptThrottle,
+                signInAttemptThrottle,
                 requestSource,
                 new PasswordValidationState());
     }
@@ -307,7 +308,7 @@ final class DatabaseIdentityStoreTest {
     private static DatabaseIdentityStore identityStore(
             UserService userService,
             PasswordService passwordService,
-            LoginAttemptThrottle loginAttemptThrottle,
+            SignInAttemptThrottle signInAttemptThrottle,
             MutableRequestSource requestSource,
             PasswordValidationState passwordValidationState) {
         DatabaseIdentityStore identityStore = new DatabaseIdentityStore() {
@@ -318,7 +319,7 @@ final class DatabaseIdentityStoreTest {
         };
         setField(identityStore, "userService", userService);
         setField(identityStore, "passwordService", passwordService);
-        setField(identityStore, "loginAttemptThrottle", loginAttemptThrottle);
+        setField(identityStore, "signInAttemptThrottle", signInAttemptThrottle);
         setField(identityStore, "passwordValidationState", passwordValidationState);
         return identityStore;
     }
@@ -343,6 +344,7 @@ final class DatabaseIdentityStoreTest {
         private String lastStoredHash;
 
         private RecordingPasswordService(boolean verificationResult) {
+            initialize(this);
             this.verificationResult = verificationResult;
         }
 
@@ -363,6 +365,7 @@ final class DatabaseIdentityStoreTest {
         private BlockingPasswordService(
                 CountDownLatch verificationStarted,
                 CountDownLatch continueVerification) {
+            initialize(this);
             this.verificationStarted = verificationStarted;
             this.continueVerification = continueVerification;
         }

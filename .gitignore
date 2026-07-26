@@ -37,6 +37,7 @@ node_modules/
 # Local tool and runtime output
 .mise.local.toml
 .liberty/
+.lighthouseci/
 .railway/
 
 # IDE state

@@ -1,6 +1,6 @@
 # Project specification
 
-This file is the authoritative specification for product behavior, architecture, security, user experience, testing, deployment, and operations. Milestone files contain dependency-ordered implementation and verification steps only. A milestone must not introduce requirements that are absent here.
+This file preserves private product and architecture context. Tracked project files and repository instructions are authoritative when they differ from this reference.
 
 ## 1. Non-negotiable decisions
 
@@ -9,7 +9,7 @@ Use these decisions unless the repository owner explicitly changes them later.
 | Area                         | Decision                                                                                                     |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | Runtime Java                 | Java 25 LTS                                                                                                  |
-| Compiler compatibility level | Java 21 by default; later Java 17 if required after all; Java 25 only after MVP if portability is not a goal |
+| Compiler compatibility level | Java 25                                                                                                      |
 | Build tool                   | Maven                                                                                                        |
 | Packaging                    | WAR                                                                                                          |
 | Runtime                      | Open Liberty container                                                                                       |
@@ -20,7 +20,7 @@ Use these decisions unless the repository owner explicitly changes them later.
 | Persistence                  | Jakarta Persistence / JPA, provider-neutral code, Liberty default EclipseLink provider                       |
 | Database                     | Dockerized PostgreSQL for local development, Railway PostgreSQL for production                               |
 | Migrations                   | Flyway                                                                                                       |
-| Auth                         | Username/password with invitation-only registration, signed-in password change, source-aware login throttling, no OAuth/SSO |
+| Auth                         | Username/password with invitation-only registration, signed-in password change, source-aware sign-in throttling, no OAuth/SSO |
 | Calendar access              | Root `/{calendarLinkToken}` read-only bearer links plus authenticated editor/admin roles                     |
 | Calendar roles               | `EDITOR`, `ADMIN`, scoped to one calendar                                                                    |
 | Deployment                   | Dockerfile to Railway first                                                                                  |
@@ -47,10 +47,10 @@ xmlns:p="primefaces"
 
 ### 1.1 Java 25 policy
 
-Use Java 25 LTS for the local developer JDK and production Open Liberty runtime. Compile application code with Java 21 compatibility by default:
+Use Java 25 LTS for the local developer JDK, compiler target, and production Open Liberty runtime:
 
 ```xml
-<maven.compiler.release>21</maven.compiler.release>
+<maven.compiler.release>25</maven.compiler.release>
 ```
 
 Do not use preview features. Do not modify global `JAVA_HOME`; use repository-scoped tooling.
@@ -71,17 +71,6 @@ Git clone
 ```
 
 Do not put downloaded JDKs, Maven distributions, PostgreSQL driver jars, PostgreSQL data volumes, `.env`, `target/`, or IDE state in source control.
-
-### 1.3 Implementation phases
-
-Each implementation phase must leave the repository runnable and verified. The phase files sequence work; the requirements themselves remain in this specification.
-
-| Milestone                         | Outcome                                                                                                                | Includes                                                                                                                                                             |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M0: project foundation            | A reproducible Jakarta EE web app that builds and starts locally                                                       | Repository skeleton, Maven wrapper, `mise`, Docker Compose PostgreSQL, Open Liberty config, health endpoint, placeholder JSF/PrimeFaces pages, flat responsive shell |
-| M1: persistence and security core | Database-backed registration, sign-in, password change, calendars, memberships, calendar-link tokens, invitations, and audit foundation | Flyway migrations, JPA entities, Jakarta Security password hashing, session revocation, registration, calendar-level authorization, focused tests |
-| M2: calendar and account workflows | One canonical calendar view, account settings, event CRUD, calendar creation, invitation links, and member management     | PrimeFaces calendar and account UI, bearer-link reads, role-aware event actions, settings, invitation acceptance, audit logging, manual role checks |
-| M3: production readiness          | The app is packaged, deployable, and recoverable                                                                       | Docker production image, local Docker runtime test, Railway deployment, custom domain, Dockerized backup/restore, README runbook                                     |
 
 ## 2. Product scope
 
@@ -110,7 +99,7 @@ The first deployed version must include:
 19. Audit log for account password, calendar, invitation, member, and event changes.
 20. Flyway-managed schema.
 21. Database-aware health endpoint.
-22. Login throttling.
+22. Sign-in throttling.
 23. Dockerized production build.
 24. Railway deployment with custom domain and HTTPS.
 25. Basic backup/restore procedure documented.
@@ -318,7 +307,7 @@ Before first real use:
 16. Do not log passwords, calendar-link tokens, invitation tokens, or full database URLs with credentials.
 17. Do not log app invitation tokens.
 18. Keep one app instance unless session handling is reviewed.
-19. Throttle repeated login failures by normalized username and client source without revealing whether an account exists or allowing one source to lock out other sources.
+19. Throttle repeated sign-in failures by normalized username and client source without revealing whether an account exists or allowing one source to lock out other sources.
 20. Keep anonymous sessions non-persistent with a 30-minute inactivity timeout. Refresh authenticated cookies on app and canonical calendar activity, use a 30-day authenticated inactivity timeout, and require reauthentication after application restart or redeploy while sessions remain in memory.
 21. Make `/health` fail when the database is unavailable and bound connection acquisition within the probe timeout.
 22. Make bootstrap consumption permanent after successful registration and transactional so a failed attempt releases the claim.
@@ -327,7 +316,7 @@ Before first real use:
 25. Serialize password replacement for one account and increment its password version atomically with the new hash.
 26. Invalidate the changing session immediately and reject every older session before protected request processing.
 27. Keep passwords, password hashes, password versions, and session identifiers out of URLs, audit details, and logs.
-28. Reject malformed root paths without calendar database access; source-rate-limit valid-looking paths through the same Railway-aware, spoof-resistant client-source resolver used by login, cap concurrent calendar rendering, and keep throttle memory bounded.
+28. Reject malformed root paths without calendar database access; source-rate-limit valid-looking paths through the same Railway-aware, spoof-resistant client-source resolver used by sign-in, cap concurrent calendar rendering, and keep throttle memory bounded.
 29. Use generic `404` and `429` responses that do not reveal whether a guessed token exists or echo the candidate token.
 30. Do not describe in-process throttling as complete DDoS protection. Railway supplies network-layer protection but no application-layer WAF; use an upstream application-layer edge and prevent direct-origin bypass when the threat requires it.
 
@@ -349,7 +338,7 @@ Optional v1.1 hardening:
 8. Keep role names centralized.
 9. Keep password policy and Jakarta Security password-hash parameters centralized.
 10. Keep calendar-token format/generation and invitation-token generation centralized without weakening invitation tokens when calendar URLs change.
-11. Use small verified checkpoints inside each milestone.
+11. Use small verified checkpoints for each coherent change.
 12. Prefer boring code over clever abstractions.
 13. Do not introduce Spring Boot into this repo.
 14. Do not introduce a JavaScript frontend framework into this repo.
@@ -397,10 +386,10 @@ Minimum automated tests:
 11. Inclusive all-day dates and exclusive stored ends across short, long, skipped, and repeated civil days.
 12. Exact seven-day invitation expiry in the service and database, migration capping of older invitations, creator permission revalidation, administrator visibility/revocation, and concurrent single-use acceptance.
 13. Permanent atomic bootstrap consumption, including rollback and a real PostgreSQL race.
-14. Source-aware login throttling with generic missing-user behavior.
+14. Source-aware sign-in throttling with generic missing-user behavior.
 15. Non-persistent 30-minute anonymous sessions, rolling authenticated cookies, 30-day authenticated inactivity, restart reauthentication, and database-aware health.
 16. Password-change validation for wrong current password, mismatched confirmation, policy failures, password reuse, successful hash replacement, password-version increment, audit safety, and database locking.
-17. Browser-level password change from two authenticated sessions, including immediate logout, old-password rejection, new-password acceptance, and stale-session invalidation.
+17. Browser-level password change from two authenticated sessions, including immediate sign-out, old-password rejection, new-password acceptance, and stale-session invalidation.
 18. Exact root-route recognition, legacy `/calendar/` rejection, and malformed-path rejection before calendar lookup.
 19. Railway direct/CDN/internal forwarded chains, spoof-resistant local fallback, per-source calendar-link throttling, bounded source state, global concurrency admission, generic overload responses, and permit release on every success and exception path.
 

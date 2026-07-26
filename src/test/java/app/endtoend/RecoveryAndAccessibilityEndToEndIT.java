@@ -9,6 +9,7 @@ import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
+import com.microsoft.playwright.options.ForcedColors;
 import com.microsoft.playwright.options.ReducedMotion;
 import java.sql.SQLException;
 import java.time.Duration;
@@ -72,7 +73,7 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
     @Test
     void applicationRestartInvalidatesMemorySessionsWhilePreservingCalendarData() throws Exception {
         Assumptions.assumeTrue(
-                isDockerComposeManagedEndToEndEnvironment(),
+                managedRecoveryScenariosAreRequired(),
                 "Application restart scenario requires the repository's isolated end-to-end Docker Compose services.");
         String uniqueSuffix = uniqueSuffix();
         String username = "restart-owner-" + uniqueSuffix;
@@ -108,7 +109,7 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
                 runDockerComposeCommand(
                         "stop isolated end-to-end application",
                         "stop",
-                        "web-e2e-verification");
+                        "web-end-to-end-verification");
                 applicationWasStopped = true;
                 waitForApplicationToBecomeUnavailable();
             } finally {
@@ -116,7 +117,7 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
                     runDockerComposeCommand(
                             "start isolated end-to-end application",
                             "start",
-                            "web-e2e-verification");
+                            "web-end-to-end-verification");
                     waitForHealthResponse(200, "ok", Duration.ofSeconds(120));
                 }
             }
@@ -139,7 +140,8 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
 
             clickAndWaitForNavigation(
                     staleLoginPage,
-                    staleLoginPage.locator("button:has-text('Sign in')"),
+                    staleLoginPage.locator(
+                            "button:has-text('Sign in'), input[type='submit'][value='Sign in']"),
                     "expired sign-in form submission after restart");
             waitForUrlOrFail(
                     staleLoginPage,
@@ -164,7 +166,7 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
     void databaseOutageMakesHealthUnavailableAndTheApplicationRecoversAfterConnectivityReturns()
             throws Exception {
         Assumptions.assumeTrue(
-                isDockerComposeManagedEndToEndEnvironment(),
+                managedRecoveryScenariosAreRequired(),
                 "Database recovery scenario requires the repository's isolated end-to-end Docker Compose services.");
         String uniqueSuffix = uniqueSuffix();
         String username = "database-recovery-owner-" + uniqueSuffix;
@@ -176,7 +178,7 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
             runDockerComposeCommand(
                     "pause isolated end-to-end database",
                     "pause",
-                    "postgres-e2e-verification");
+                    "postgres-end-to-end-verification");
             databaseWasPaused = true;
             waitForHealthResponse(503, "unavailable", Duration.ofSeconds(45));
         } finally {
@@ -184,7 +186,7 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
                 runDockerComposeCommand(
                         "unpause isolated end-to-end database",
                         "unpause",
-                        "postgres-e2e-verification");
+                        "postgres-end-to-end-verification");
                 waitForHealthResponse(200, "ok", Duration.ofSeconds(120));
             }
         }
@@ -296,7 +298,8 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
             navigateToBearerLink(page, route("/login"));
             Locator usernameInput = page.locator("input[id$='username']");
             Locator passwordInput = page.locator("input[id$='password']");
-            Locator signInButton = page.locator("button:has-text('Sign in')");
+            Locator signInButton = page.locator(
+                    "button:has-text('Sign in'), input[type='submit'][value='Sign in']");
             pressTabUntilFocused(page, usernameInput, 10);
             page.keyboard().press("Tab");
             assertEquals(true, passwordInput.evaluate("element => document.activeElement === element"));
@@ -319,6 +322,12 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
             assertEquals(1, page.locator("h1").count());
             assertEquals("Sign-in error", page.locator("h1").textContent().trim());
             assertRegionsHaveAccessibleNames(page);
+            navigateToBearerLink(page, route("/error.html"));
+            assertEquals(1, page.locator("h1").count());
+            assertEquals("Something went wrong", page.locator("h1").textContent().trim());
+            assertThat(page.locator("a:has-text('Return to the home page')")).isVisible();
+            assertFalse(hasHorizontalOverflow(page), "The static error page should not overflow.");
+            assertNoAutomaticAccessibilityViolations(page, "static error page");
             assertNoBrowserMessages(browserMessages);
         }
 
@@ -352,10 +361,13 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
                 assertFalse(hasHorizontalOverflow(page), "Calendar page overflowed at " + viewportWidth + " pixels.");
                 assertControlCanBeBroughtIntoView(
                         page, page.locator("button:has-text('Create event')"), viewportWidth, 900);
+                assertMinimumControlTargetSize(page.locator(".ui-button:visible"), 24);
 
                 navigateToBearerLink(page, route("/app/invitations"));
                 assertResponsiveTableRegion(page, "Invitations table", viewportWidth);
                 assertFalse(hasHorizontalOverflow(page), "Invitations page overflowed at " + viewportWidth + " pixels.");
+                assertMinimumControlTargetSize(
+                        page.locator(".ui-button:visible, .button-link:visible"), 24);
 
                 navigateToBearerLink(page, route("/app/calendar-members?id=" + calendarId));
                 assertBodyContains(page, longDisplayName);
@@ -372,6 +384,16 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
                 Page page = newPage(browserContext, browserMessages);
                 signIn(page, ownerUsername, TEST_PASSWORD);
                 navigateToBearerLink(page, calendarLink(calendarId));
+                page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)");
+                assertTrue(
+                        ((Number) page.evaluate("window.scrollY")).doubleValue() > 0,
+                        "The short calendar page must be scrollable for sticky-header verification.");
+                double headerViewportTop = ((Number) page.locator(".app-header")
+                                .evaluate("element => element.getBoundingClientRect().top"))
+                        .doubleValue();
+                assertTrue(
+                        Math.abs(headerViewportTop) <= 1,
+                        "The application header must remain pinned to the viewport after scrolling.");
                 assertControlCanBeBroughtIntoView(
                         page, page.locator("input[id$='eventTitle']"), viewportWidth, 600);
                 assertControlCanBeBroughtIntoView(
@@ -400,6 +422,47 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
                                     + "&& getComputedStyle(element).transitionDuration === '0s'"));
             reducedMotionPage.keyboard().press("Escape");
             assertNoBrowserMessages(reducedMotionBrowserMessages);
+        }
+
+        List<String> resizedTextBrowserMessages = new ArrayList<>();
+        try (BrowserContext resizedTextContext = browser.newContext(
+                new Browser.NewContextOptions().setViewportSize(1440, 900))) {
+            Page resizedTextPage = newPage(resizedTextContext, resizedTextBrowserMessages);
+            signIn(resizedTextPage, ownerUsername, TEST_PASSWORD);
+            navigateToBearerLink(resizedTextPage, calendarLink(calendarId));
+            resizedTextPage.evaluate("document.documentElement.style.fontSize = '200%'");
+            assertBodyContains(resizedTextPage, longEventTitle);
+            assertFalse(
+                    hasHorizontalOverflow(resizedTextPage),
+                    "The calendar page should not overflow when text is resized to 200 percent.");
+            assertControlCanBeBroughtIntoView(
+                    resizedTextPage,
+                    resizedTextPage.locator("button:has-text('Create event')"),
+                    1440,
+                    900);
+            assertMinimumControlTargetSize(resizedTextPage.locator(".ui-button:visible"), 24);
+            assertNoBrowserMessages(resizedTextBrowserMessages);
+        }
+
+        List<String> forcedColorsBrowserMessages = new ArrayList<>();
+        try (BrowserContext forcedColorsContext = browser.newContext(
+                new Browser.NewContextOptions().setForcedColors(ForcedColors.ACTIVE))) {
+            Page forcedColorsPage = newPage(forcedColorsContext, forcedColorsBrowserMessages);
+            signIn(forcedColorsPage, ownerUsername, TEST_PASSWORD);
+            navigateToBearerLink(forcedColorsPage, calendarLink(calendarId));
+            assertEquals(
+                    true,
+                    forcedColorsPage.evaluate("matchMedia('(forced-colors: active)').matches"));
+            assertEquals(
+                    "solid",
+                    forcedColorsPage.locator(".role-chip")
+                            .evaluate("element => getComputedStyle(element).borderStyle"));
+            Locator createEventButton =
+                    forcedColorsPage.locator("button:has-text('Create event')");
+            createEventButton.focus();
+            assertVisibleOutline(createEventButton);
+            assertMinimumControlTargetSize(forcedColorsPage.locator(".ui-button:visible"), 24);
+            assertNoBrowserMessages(forcedColorsBrowserMessages);
         }
     }
 

@@ -75,16 +75,16 @@ if (finalStageUserDirectives.length !== 1 || finalStageUserDirectives[0][1] !== 
     throw new Error("The final Docker stage must contain exactly one USER directive and it must be USER 1001.");
 }
 
-const generatedLtpaPasswordSetting = "ENV GENERATE_LTPA_KEYS_PASSWORD=false";
+const generatedLtpaPasswordSetting = "RUN GENERATE_LTPA_KEYS_PASSWORD=false configure.sh";
 const generatedLtpaPasswordSettingIndex = finalDockerStage.indexOf(generatedLtpaPasswordSetting);
-const libertyConfigurationIndex = finalDockerStage.indexOf("RUN configure.sh");
+const libertyConfigurationIndex = generatedLtpaPasswordSettingIndex;
 if (
     generatedLtpaPasswordSettingIndex < 0 ||
     libertyConfigurationIndex < 0 ||
     generatedLtpaPasswordSettingIndex > libertyConfigurationIndex
 ) {
     throw new Error(
-        "The final Docker stage must disable generated LTPA passwords before RUN configure.sh.",
+        "The final Docker stage must disable generated LTPA passwords only while configure.sh runs.",
     );
 }
 

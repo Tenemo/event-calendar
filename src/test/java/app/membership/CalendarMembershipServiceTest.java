@@ -140,7 +140,7 @@ final class CalendarMembershipServiceTest {
                         CalendarRole.EDITOR));
         ValidationException disableException = assertThrows(
                 ValidationException.class,
-                () -> membershipService.disableMembership(
+                () -> membershipService.deactivateMembership(
                         actingUser,
                         calendar.getId(),
                         soleAdminMembership.getUser().getId()));
@@ -210,7 +210,7 @@ final class CalendarMembershipServiceTest {
                 () -> membershipService.changeMemberRole(actingUser, calendar.getId(), actingUser.getId(), CalendarRole.EDITOR));
         ValidationException removalException = assertThrows(
                 ValidationException.class,
-                () -> membershipService.disableMembership(actingUser, calendar.getId(), actingUser.getId()));
+                () -> membershipService.deactivateMembership(actingUser, calendar.getId(), actingUser.getId()));
         assertAll(
                 () -> assertEquals("You cannot change your own admin role.", roleChangeException.getMessage()),
                 () -> assertEquals("You cannot remove your own admin access.", removalException.getMessage()),
@@ -233,7 +233,7 @@ final class CalendarMembershipServiceTest {
 
         AuthorizationException exception = assertThrows(
                 AuthorizationException.class,
-                () -> membershipService.disableMembership(
+                () -> membershipService.deactivateMembership(
                         actingUser,
                         calendar.getId(),
                         targetMembership.getUser().getId()));

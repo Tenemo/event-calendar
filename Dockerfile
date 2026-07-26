@@ -11,7 +11,7 @@ WORKDIR /app
 COPY .mvn .mvn
 COPY mvnw pom.xml ./
 RUN chmod +x mvnw \
-    && ./mvnw -B -ntp -Dmaven.test.skip=true -DincludeScope=compile dependency:go-offline
+    && ./mvnw -B -ntp -Dmaven.test.skip=true dependency:go-offline
 
 ARG RAILWAY_GIT_COMMIT_SHA=""
 
@@ -46,5 +46,4 @@ COPY --chown=1001:0 --from=build \
     /app/.build/package/shared-calendar.war \
     /config/apps/shared-calendar.war
 
-ENV GENERATE_LTPA_KEYS_PASSWORD=false
-RUN configure.sh
+RUN GENERATE_LTPA_KEYS_PASSWORD=false configure.sh

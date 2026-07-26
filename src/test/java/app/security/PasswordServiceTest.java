@@ -21,6 +21,7 @@ final class PasswordServiceTest {
         RecordingPasswordHash passwordHash = new RecordingPasswordHash();
         PasswordService passwordService = passwordService(passwordHash);
         String password = "Correct horse battery staple 1";
+        int generationsBeforeHashing = passwordHash.generationCount();
 
         String firstHash = passwordService.hashPassword("piotr", password);
         String secondHash = passwordService.hashPassword("piotr", password);
@@ -35,7 +36,7 @@ final class PasswordServiceTest {
                 () -> assertEquals("600000", passwordHash.initializedParameters().get("Pbkdf2PasswordHash.Iterations")),
                 () -> assertEquals("32", passwordHash.initializedParameters().get("Pbkdf2PasswordHash.SaltSizeBytes")),
                 () -> assertEquals("32", passwordHash.initializedParameters().get("Pbkdf2PasswordHash.KeySizeBytes")),
-                () -> assertEquals(2, passwordHash.generationCount()),
+                () -> assertEquals(2, passwordHash.generationCount() - generationsBeforeHashing),
                 () -> assertTrue(passwordService.verifyPassword(password, firstHash)),
                 () -> assertTrue(passwordService.verifyPassword(password, secondHash)),
                 () -> assertFalse(passwordService.verifyPassword("Correct horse battery staple 1!", firstHash)),
@@ -140,6 +141,45 @@ final class PasswordServiceTest {
     }
 
     @Test
+    void absentAccountsCostTheSameKeyDerivationAsAWrongPassword() {
+        RecordingPasswordHash passwordHash = new RecordingPasswordHash();
+        PasswordService passwordService = passwordService(passwordHash);
+        String realUserHash = passwordService.hashPassword("piotr", "Correct horse battery staple 1");
+        int verificationsBeforeAbsentAccount = passwordHash.verificationCount();
+
+        passwordService.verifyMissingUserPassword("Correct horse battery staple 1");
+
+        assertAll(
+                () -> assertEquals(
+                        verificationsBeforeAbsentAccount + 1,
+                        passwordHash.verificationCount(),
+                        "A missing account must still reach the key derivation, or timing reveals that it is missing."),
+                () -> assertTrue(
+                        passwordHash.lastVerifiedHash().startsWith("PBKDF2WithHmacSHA256:600000:"),
+                        "The absent-account hash must use the configured algorithm and iteration count."),
+                () -> assertNotEquals(
+                        realUserHash,
+                        passwordHash.lastVerifiedHash(),
+                        "The absent-account hash must not be a real account's stored hash."));
+    }
+
+    @Test
+    void absentAccountVerificationIsNotShortCircuitedByPolicyViolatingGuesses() {
+        RecordingPasswordHash passwordHash = new RecordingPasswordHash();
+        PasswordService passwordService = passwordService(passwordHash);
+
+        passwordService.verifyMissingUserPassword("short");
+        passwordService.verifyMissingUserPassword("nouppercaseordigit");
+        passwordService.verifyMissingUserPassword("a".repeat(PasswordService.MAXIMUM_PASSWORD_LENGTH));
+
+        assertEquals(
+                3,
+                passwordHash.verificationCount(),
+                "Password policy must not short-circuit the absent-account key derivation, "
+                        + "because policy-violating guesses would then be answered faster.");
+    }
+
+    @Test
     void routesJakartaSecurityHashesToJakartaPasswordHashOnly() {
         RecordingPasswordHash passwordHash = new RecordingPasswordHash();
         PasswordService passwordService = passwordService(passwordHash);
@@ -169,7 +209,7 @@ final class PasswordServiceTest {
 
         @Override
         public String generate(char[] passwordCharacters) {
-            throw new UnsupportedOperationException("Hash generation is not used by this test.");
+            return "PBKDF2WithHmacSHA256:600000:encoded-salt:encoded-hash";
         }
 
         @Override

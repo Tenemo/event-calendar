@@ -18,8 +18,8 @@ final class SecurityHeadersEndToEndIT {
     private static final String DEFAULT_APPLICATION_BASE_URL = "http://localhost:9080";
     private static final String APPLICATION_BASE_URL_PROPERTY = "app.baseUrl";
     private static final String APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE = "APP_BASE_URL";
-    private static final String E2E_VERIFICATION_HEALTH_URL_ENVIRONMENT_VARIABLE =
-            "E2E_VERIFICATION_HEALTH_URL";
+    private static final String END_TO_END_VERIFICATION_HEALTH_URL_ENVIRONMENT_VARIABLE =
+            "END_TO_END_VERIFICATION_HEALTH_URL";
     private static final String CONTENT_SECURITY_POLICY =
             "frame-ancestors 'none'; base-uri 'self'; object-src 'none'";
     private static final String PERMISSIONS_POLICY =
@@ -32,6 +32,9 @@ final class SecurityHeadersEndToEndIT {
                 .build();
         URI applicationBaseUri = resolveApplicationBaseUri();
 
+        HttpResponse<String> homeResponse = sendForBody(
+                httpClient,
+                applicationBaseUri.resolve("/"));
         HttpResponse<String> loginResponse = sendForBody(
                 httpClient,
                 applicationBaseUri.resolve("/login"));
@@ -54,13 +57,23 @@ final class SecurityHeadersEndToEndIT {
                 httpClient,
                 applicationBaseUri.resolve(
                         "/jakarta.faces.resource/app.css.xhtml?ln=css"));
+        HttpResponse<Void> compressedPrimeFacesResourceResponse = sendAcceptingGzip(
+                httpClient,
+                applicationBaseUri.resolve(
+                        "/jakarta.faces.resource/components.js.xhtml?ln=primefaces"));
         HttpResponse<Void> faviconResponse = send(
                 httpClient,
                 applicationBaseUri.resolve(
                         "/jakarta.faces.resource/images/favicon.svg.xhtml"));
+        HttpResponse<String> robotsResponse = sendForBody(
+                httpClient,
+                applicationBaseUri.resolve("/robots.txt"));
 
         assertAll(
+                () -> assertEquals(200, homeResponse.statusCode()),
                 () -> assertEquals(200, loginResponse.statusCode()),
+                () -> assertHeavyPrimeFacesBundleAbsent(homeResponse, "anonymous home page"),
+                () -> assertHeavyPrimeFacesBundleAbsent(loginResponse, "anonymous sign-in page"),
                 () -> assertTrue(
                         loginResponse.body().contains(
                                 "/jakarta.faces.resource/images/favicon.svg.xhtml"),
@@ -71,7 +84,14 @@ final class SecurityHeadersEndToEndIT {
                 () -> assertEquals(302, protectedRedirectResponse.statusCode()),
                 () -> assertEquals(302, privateHeaderRedirectResponse.statusCode()),
                 () -> assertEquals(200, staticResourceResponse.statusCode()),
+                () -> assertEquals(200, compressedPrimeFacesResourceResponse.statusCode()),
+                () -> assertEquals(
+                        "gzip",
+                        requiredHeader(compressedPrimeFacesResourceResponse, "Content-Encoding")),
                 () -> assertEquals(200, faviconResponse.statusCode()),
+                () -> assertEquals(200, robotsResponse.statusCode()),
+                () -> assertEquals("User-agent: *\nAllow: /", robotsResponse.body().trim()),
+                () -> assertSecurityHeaders(homeResponse),
                 () -> assertSecurityHeaders(loginResponse),
                 () -> assertSecurityHeaders(statefulFacesResponse),
                 () -> assertSecurityHeaders(forwardedNotFoundResponse),
@@ -79,13 +99,17 @@ final class SecurityHeadersEndToEndIT {
                 () -> assertSecurityHeaders(protectedRedirectResponse),
                 () -> assertSecurityHeaders(privateHeaderRedirectResponse),
                 () -> assertSecurityHeaders(staticResourceResponse),
+                () -> assertSecurityHeaders(compressedPrimeFacesResourceResponse),
                 () -> assertSecurityHeaders(faviconResponse),
+                () -> assertSecurityHeaders(robotsResponse),
+                () -> assertNoStore(homeResponse),
                 () -> assertNoStore(loginResponse),
                 () -> assertNoStore(statefulFacesResponse),
                 () -> assertNoStore(forwardedNotFoundResponse),
                 () -> assertNoStore(errorResponse),
                 () -> assertNoStore(protectedRedirectResponse),
                 () -> assertNoStore(privateHeaderRedirectResponse),
+                () -> assertNoStore(robotsResponse),
                 () -> assertEquals(
                         "/login",
                         requiredHeader(protectedRedirectResponse, "Location")),
@@ -95,11 +119,15 @@ final class SecurityHeadersEndToEndIT {
                         "Client-controlled Liberty private headers must not influence redirect authority."),
                 () -> assertNoContainerSavedRequestCookie(protectedRedirectResponse),
                 () -> assertNoContainerSavedRequestCookie(privateHeaderRedirectResponse),
-                () -> assertFacesCookiePolicy(loginResponse),
-                () -> assertFacesCookiePolicy(statefulFacesResponse),
+                () -> assertFacesSessionCookiePolicy(loginResponse),
+                () -> assertFacesSessionCookiePolicy(statefulFacesResponse),
+                () -> assertPrimeFacesSecureCookieConfiguration(statefulFacesResponse),
                 () -> assertFalse(
                         hasNoStore(staticResourceResponse),
                         "JSF static resources must retain their resource-handler cache policy."),
+                () -> assertFalse(
+                        hasNoStore(compressedPrimeFacesResourceResponse),
+                        "Compressed JSF resources must retain their resource-handler cache policy."),
                 () -> assertFalse(
                         hasNoStore(faviconResponse),
                         "The favicon must retain the JSF resource-handler cache policy."));
@@ -115,6 +143,16 @@ final class SecurityHeadersEndToEndIT {
     private static HttpResponse<Void> send(HttpClient httpClient, URI uri) throws Exception {
         return httpClient.send(
                 HttpRequest.newBuilder(uri).GET().build(),
+                HttpResponse.BodyHandlers.discarding());
+    }
+
+    private static HttpResponse<Void> sendAcceptingGzip(HttpClient httpClient, URI uri)
+            throws Exception {
+        return httpClient.send(
+                HttpRequest.newBuilder(uri)
+                        .header("Accept-Encoding", "gzip")
+                        .GET()
+                        .build(),
                 HttpResponse.BodyHandlers.discarding());
     }
 
@@ -189,7 +227,7 @@ final class SecurityHeadersEndToEndIT {
                 "Application admission must not create a container saved-request cookie.");
     }
 
-    private static void assertFacesCookiePolicy(HttpResponse<String> response) {
+    private static void assertFacesSessionCookiePolicy(HttpResponse<String> response) {
         List<String> cookieHeaders = response.headers().allValues("Set-Cookie");
         String sessionCookie = cookieHeaders.stream()
                 .filter(value -> value.startsWith("JSESSIONID="))
@@ -198,15 +236,30 @@ final class SecurityHeadersEndToEndIT {
         assertAll(
                 () -> assertTrue(sessionCookie.contains("Secure")),
                 () -> assertTrue(sessionCookie.contains("HttpOnly")),
-                () -> assertTrue(sessionCookie.contains("SameSite=Lax")),
-                () -> assertTrue(
-                        response.body().contains("cookiesSecure:true"),
-                        "PrimeFaces must see the application's unconditional secure-cookie policy."));
+                () -> assertTrue(sessionCookie.contains("SameSite=Lax")));
+    }
+
+    private static void assertPrimeFacesSecureCookieConfiguration(HttpResponse<String> response) {
+        assertTrue(
+                response.body().contains("cookiesSecure:true"),
+                "PrimeFaces must see the application's unconditional secure-cookie policy.");
+    }
+
+    private static void assertHeavyPrimeFacesBundleAbsent(
+            HttpResponse<String> response,
+            String pageDescription) {
+        assertAll(
+                () -> assertFalse(
+                        response.body().contains("components.js.xhtml?ln=primefaces"),
+                        "The " + pageDescription + " must not load the PrimeFaces component JavaScript bundle."),
+                () -> assertFalse(
+                        response.body().contains("components.css.xhtml?ln=primefaces"),
+                        "The " + pageDescription + " must not load the PrimeFaces component CSS bundle."));
     }
 
     private static URI resolveApplicationBaseUri() {
         String configuredBaseUrl = Optional.ofNullable(
-                        System.getenv(E2E_VERIFICATION_HEALTH_URL_ENVIRONMENT_VARIABLE))
+                        System.getenv(END_TO_END_VERIFICATION_HEALTH_URL_ENVIRONMENT_VARIABLE))
                 .filter(value -> !value.isBlank())
                 .map(value -> URI.create(value).resolve("/").toString())
                 .orElseGet(() -> resolveConfiguredApplicationBaseUrl());

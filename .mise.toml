@@ -47,17 +47,21 @@ run = [
     "mise exec -- shellcheck mvnw",
 ]
 
+[tasks.lighthouse]
+description = "Measure mobile Lighthouse scores against the production image"
+run = "mise exec -- java scripts/calendar-tool.java lighthouse"
+
 [tasks.verify-reproducible-build]
 description = "Verify that repeated WAR builds are identical"
 run = "mise exec -- java scripts/calendar-tool.java verify-reproducible-build"
 
-[tasks.e2e]
+[tasks.end-to-end]
 description = "Run isolated Playwright end-to-end tests"
-run = "mise exec -- java scripts/calendar-tool.java e2e"
+run = "mise exec -- java scripts/calendar-tool.java end-to-end"
 
-[tasks.e2e-calendar-link-throttle]
+[tasks.end-to-end-calendar-link-throttle]
 description = "Run isolated calendar-link request-throttle end-to-end tests"
-run = "mise exec -- java scripts/calendar-tool.java e2e-calendar-link-throttle"
+run = "mise exec -- java scripts/calendar-tool.java end-to-end-calendar-link-throttle"
 
 [tasks.verify-bootstrap-registration]
 description = "Verify atomic bootstrap registration against isolated PostgreSQL"

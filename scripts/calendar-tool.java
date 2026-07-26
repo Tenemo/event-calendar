@@ -38,7 +38,7 @@ final class CalendarTool extends CalendarToolProcessRunner {
         switch (invocation.command()) {
             case "help", "--help" -> printUsage();
             case "setup" -> setup();
-            case "db" -> CalendarToolPostgresql.startDatabase();
+            case "db" -> CalendarToolPostgreSql.startDatabase();
             case "dev" -> startDevelopmentServer();
             case "package" -> packageApplication();
             case "tooling-self-test" -> runToolingSelfTests();
@@ -46,12 +46,17 @@ final class CalendarTool extends CalendarToolProcessRunner {
             case "static-analysis" -> runStaticAnalysis();
             case "verify-reproducible-build" -> verifyReproducibleBuild();
             case "lint-css" -> lintCss();
-            case "e2e" -> CalendarToolVerification.runEndToEndTests();
-            case "e2e-shared" -> CalendarToolVerification.runSharedEndToEndTests();
-            case "e2e-cross-browser-smoke" -> CalendarToolVerification.runCrossBrowserSmokeEndToEndTests();
-            case "e2e-calendar-link-throttle" -> CalendarToolVerification.runIsolatedEndToEndTest(
+            case "lighthouse" -> {
+                boolean reuseImage = invocation.arguments().contains("--reuse-image");
+                CalendarToolVerification.runLighthouse(!reuseImage);
+            }
+            case "verify-preview-deployment" -> CalendarToolVerification.verifyPreviewDeployment();
+            case "end-to-end" -> CalendarToolVerification.runEndToEndTests();
+            case "end-to-end-shared" -> CalendarToolVerification.runSharedEndToEndTests();
+            case "end-to-end-cross-browser-smoke" -> CalendarToolVerification.runCrossBrowserSmokeEndToEndTests();
+            case "end-to-end-calendar-link-throttle" -> CalendarToolVerification.runIsolatedEndToEndTest(
                     "CalendarLinkRequestThrottleIT",
-                    "e2e-calendar-link-throttle");
+                    "end-to-end-calendar-link-throttle");
             case "verify-bootstrap-registration" -> {
                 boolean reuseImage = invocation.arguments().contains("--reuse-image");
                 CalendarToolVerification.verifyBootstrapRegistrationConcurrency(true, !reuseImage);
@@ -61,13 +66,13 @@ final class CalendarTool extends CalendarToolProcessRunner {
             case "docker-build" -> buildDockerImage();
             case "image-scan" -> scanDockerImage();
             case "docker-up" -> startDockerApplication();
-            case "backup-postgres" -> CalendarToolPostgresql.backupPostgres(invocation.arguments().isEmpty()
+            case "backup-postgres" -> CalendarToolPostgreSql.backupPostgres(invocation.arguments().isEmpty()
                     ? null
                     : invocation.arguments().getFirst());
-            case "restore-postgres" -> CalendarToolPostgresql.restorePostgres(
+            case "restore-postgres" -> CalendarToolPostgreSql.restorePostgres(
                     invocation.arguments().get(0),
                     invocation.arguments().get(1));
-            case "verify-backup-restore" -> CalendarToolPostgresql.verifyBackupRestore();
+            case "verify-backup-restore" -> CalendarToolPostgreSql.verifyBackupRestore();
             default -> throw new IllegalStateException("Unhandled command: " + invocation.command());
         }
     }
@@ -82,13 +87,18 @@ final class CalendarTool extends CalendarToolProcessRunner {
         int maximumArgumentCount;
         switch (command) {
             case "help", "--help", "setup", "db", "dev", "package", "tooling-self-test", "format",
-                    "static-analysis", "verify-reproducible-build", "lint-css", "e2e", "e2e-shared",
-                    "e2e-cross-browser-smoke", "e2e-calendar-link-throttle", "wait-for-app", "verify-local",
-                    "docker-build", "image-scan", "docker-up", "verify-backup-restore" -> {
+                    "static-analysis", "verify-reproducible-build", "lint-css", "end-to-end", "end-to-end-shared",
+                    "end-to-end-cross-browser-smoke", "end-to-end-calendar-link-throttle", "wait-for-app", "verify-local",
+                    "verify-preview-deployment", "docker-build", "image-scan", "docker-up",
+                    "verify-backup-restore" -> {
                 minimumArgumentCount = 0;
                 maximumArgumentCount = 0;
             }
             case "verify-bootstrap-registration" -> {
+                minimumArgumentCount = 0;
+                maximumArgumentCount = 1;
+            }
+            case "lighthouse" -> {
                 minimumArgumentCount = 0;
                 maximumArgumentCount = 1;
             }
@@ -108,6 +118,11 @@ final class CalendarTool extends CalendarToolProcessRunner {
             throw new UsageException("Invalid arguments for command '" + command + "'.");
         }
         if (command.equals("verify-bootstrap-registration")
+                && suppliedArgumentCount == 1
+                && !arguments[1].equals("--reuse-image")) {
+            throw new UsageException("Invalid arguments for command '" + command + "'.");
+        }
+        if (command.equals("lighthouse")
                 && suppliedArgumentCount == 1
                 && !arguments[1].equals("--reuse-image")) {
             throw new UsageException("Invalid arguments for command '" + command + "'.");
@@ -194,11 +209,27 @@ final class CalendarTool extends CalendarToolProcessRunner {
                 "CalendarToolTest");
         runCommand("Calendar tool exact source-launch test", sourceLauncherHelpCommand());
         runCommand("Railway configuration contract test", railwayConfigurationTestCommand());
+        runCommand("Railway preview URL contract test", railwayPreviewUrlTestCommand());
+        runCommand("Preview login argument contract test", previewLoginTestCommand());
+        runCommand("Node dependency installation", npmInstallCommand());
+        runCommand("Lighthouse browser lifecycle test", lighthouseBrowserTestCommand());
         runCommand("Build toolchain configuration contract test", buildToolchainConfigurationTestCommand());
     }
 
     static String[] railwayConfigurationTestCommand() {
         return new String[] {"node", "scripts/railway-config-test.mjs"};
+    }
+
+    static String[] railwayPreviewUrlTestCommand() {
+        return new String[] {"node", "scripts/railway-preview-url-test.mjs"};
+    }
+
+    static String[] previewLoginTestCommand() {
+        return new String[] {"node", "scripts/preview-login-test.mjs"};
+    }
+
+    static String[] lighthouseBrowserTestCommand() {
+        return new String[] {"node", "scripts/lighthouse-browser-test.mjs"};
     }
 
     static String[] sourceLauncherHelpCommand() {
@@ -336,8 +367,9 @@ final class CalendarTool extends CalendarToolProcessRunner {
         System.err.println("Usage: " + executableName + " <command> [arguments]");
         System.err.println(
                 "Commands: help, setup, db, dev, package, tooling-self-test, format, static-analysis, "
-                        + "verify-reproducible-build, lint-css, e2e, e2e-shared, e2e-cross-browser-smoke, "
-                        + "e2e-calendar-link-throttle, verify-bootstrap-registration [--reuse-image], "
+                        + "verify-reproducible-build, lint-css, end-to-end, end-to-end-shared, end-to-end-cross-browser-smoke, "
+                        + "end-to-end-calendar-link-throttle, verify-bootstrap-registration [--reuse-image], "
+                        + "lighthouse [--reuse-image], verify-preview-deployment, "
                         + "wait-for-app, verify-local, docker-build, image-scan, docker-up, "
                         + "backup-postgres [output-file], "
                         + "restore-postgres <backup-file> <confirmed-database-name>, verify-backup-restore");

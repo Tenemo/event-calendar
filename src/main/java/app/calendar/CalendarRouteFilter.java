@@ -18,8 +18,10 @@ import java.io.IOException;
 
 public class CalendarRouteFilter implements Filter {
     public static final String CALENDAR_LINK_TOKEN_REQUEST_ATTRIBUTE = "calendarLinkToken";
-    public static final String NOT_FOUND_REQUEST_ATTRIBUTE = "calendarNotFound";
+    public static final String CALENDAR_NOT_FOUND_REQUEST_ATTRIBUTE = "calendarNotFound";
     public static final String CALENDAR_REQUEST_ATTRIBUTE = "calendar";
+    public static final String ANONYMOUS_CALENDAR_POSTBACK_REQUIRED_REQUEST_ATTRIBUTE =
+            "anonymousCalendarPostbackRequired";
 
     private static final String CALENDAR_TEMPLATE_PATH = "/calendar.xhtml";
     private static final String RATE_LIMIT_MESSAGE = "Too many calendar link requests. Try again later.";
@@ -31,7 +33,7 @@ public class CalendarRouteFilter implements Filter {
     private CurrentUser currentUser;
 
     @Inject
-    private CalendarLinkRequestThrottle requestThrottle;
+    private CalendarLinkRequestThrottle calendarLinkRequestThrottle;
 
     @Inject
     private ClientRequestSourceResolver clientRequestSourceResolver;
@@ -60,9 +62,9 @@ public class CalendarRouteFilter implements Filter {
         }
 
         String sourceIdentifier = clientRequestSourceResolver.resolve(request);
-        try (CalendarLinkRequestThrottle.Admission admission = requestThrottle.tryAcquire(sourceIdentifier)) {
-            if (!admission.isAccepted()) {
-                sendRateLimitResponse(response, admission.getRetryAfterSeconds());
+        try (CalendarLinkRequestThrottle.RequestPermit requestPermit = calendarLinkRequestThrottle.tryAcquire(sourceIdentifier)) {
+            if (!requestPermit.isAccepted()) {
+                sendRateLimitResponse(response, requestPermit.getRetryAfterSeconds());
                 return;
             }
             if (!isReadOnlyRequest(request)) {
@@ -99,7 +101,7 @@ public class CalendarRouteFilter implements Filter {
             calendar = calendarAccessService.requireCalendarReadableByLinkToken(
                     currentUser.find().orElse(null), calendarLinkToken);
         } catch (NotFoundException exception) {
-            request.setAttribute(NOT_FOUND_REQUEST_ATTRIBUTE, true);
+            request.setAttribute(CALENDAR_NOT_FOUND_REQUEST_ATTRIBUTE, true);
             requestDispatcher.forward(request, new FixedStatusResponse(response, HttpServletResponse.SC_NOT_FOUND));
             return;
         }

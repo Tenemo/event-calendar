@@ -164,7 +164,8 @@ final class CrossBrowserSmokeEndToEndIT {
         page.locator("input[id$='username']").fill(username);
         page.locator("input[id$='password']").fill(TEST_PASSWORD);
         waitForPrimeFacesIdle(page);
-        page.locator("button:has-text('Sign in')").click();
+        page.locator("button:has-text('Sign in'), input[type='submit'][value='Sign in']")
+                .click();
         waitForUrlOrFail(page, "**/app/calendars", "cross-browser registration completion");
         waitForPrimeFacesIdle(page);
     }
@@ -194,7 +195,7 @@ final class CrossBrowserSmokeEndToEndIT {
 
     private void waitForPrimeFacesIdle(Page page) {
         page.waitForFunction(
-                "() => typeof PrimeFaces !== 'undefined' && (!PrimeFaces.ajax "
+                "() => (typeof PrimeFaces === 'undefined' || !PrimeFaces.ajax "
                         + "|| (PrimeFaces.ajax.Queue.isEmpty() && PrimeFaces.ajax.Queue.xhrs.length === 0)) "
                         + "&& (!document.fonts || document.fonts.status === 'loaded')");
     }
@@ -280,7 +281,7 @@ final class CrossBrowserSmokeEndToEndIT {
     }
 
     private void waitForApplicationHealth() throws InterruptedException {
-        String configuredHealthUrl = System.getenv("E2E_VERIFICATION_HEALTH_URL");
+        String configuredHealthUrl = System.getenv("END_TO_END_VERIFICATION_HEALTH_URL");
         URI healthUri = configuredHealthUrl == null || configuredHealthUrl.isBlank()
                 ? URI.create(route("/health"))
                 : URI.create(configuredHealthUrl.trim());

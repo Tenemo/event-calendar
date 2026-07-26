@@ -76,7 +76,7 @@
                     <span class="status-label #{member.active ? 'active' : 'inactive'}">#{member.active ? 'Active' : 'Inactive'}</span>
                 </p:column>
                 <p:column headerText="Action">
-                    <h:form>
+                    <h:form styleClass="row-actions table-row-actions">
                         <p:commandButton value="Remove access"
                                          action="#{calendarMembersView.removeMemberAccess(member.userId)}"
                                          ariaLabel="Remove access for #{member.displayName}"

@@ -20,7 +20,7 @@ public class DatabaseIdentityStore implements IdentityStore {
     private PasswordService passwordService;
 
     @Inject
-    private LoginAttemptThrottle loginAttemptThrottle;
+    private SignInAttemptThrottle signInAttemptThrottle;
 
     @Inject
     private HttpServletRequest request;
@@ -41,21 +41,19 @@ public class DatabaseIdentityStore implements IdentityStore {
         String username = userService.normalizeUsername(usernamePasswordCredential.getCaller());
         String password = usernamePasswordCredential.getPasswordAsString();
         String sourceIdentifier = sourceIdentifier();
-        synchronized (loginAttemptThrottle.validationLock(sourceIdentifier)) {
-            if (!loginAttemptThrottle.isAuthenticationAllowed(username, sourceIdentifier)) {
-                return CredentialValidationResult.INVALID_RESULT;
-            }
-
-            CredentialValidationResult validationResult = userService.findActiveByUsername(username)
-                    .map(user -> validatePassword(user, password))
-                    .orElseGet(() -> validateMissingUserPassword(password));
-            if (validationResult.getStatus() == CredentialValidationResult.Status.VALID) {
-                loginAttemptThrottle.clearUsernameAndSourceFailures(username, sourceIdentifier);
-            } else {
-                loginAttemptThrottle.recordFailedAuthentication(username, sourceIdentifier);
-            }
-            return validationResult;
+        if (!signInAttemptThrottle.reserveAuthenticationAttempt(username, sourceIdentifier)) {
+            return CredentialValidationResult.INVALID_RESULT;
         }
+
+        // Reserving first means the key derivation below runs without holding the throttle, so one
+        // slow verification cannot delay unrelated sign-ins.
+        CredentialValidationResult validationResult = userService.findActiveByUsername(username)
+                .map(user -> validatePassword(user, password))
+                .orElseGet(() -> validateMissingUserPassword(password));
+        if (validationResult.getStatus() == CredentialValidationResult.Status.VALID) {
+            signInAttemptThrottle.releaseSuccessfulAttempt(username, sourceIdentifier);
+        }
+        return validationResult;
     }
 
     private CredentialValidationResult validatePassword(ApplicationUser user, String password) {

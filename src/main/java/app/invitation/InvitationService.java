@@ -20,8 +20,6 @@ import jakarta.persistence.LockModeType;
 import jakarta.persistence.NoResultException;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.TypedQuery;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -31,8 +29,6 @@ import java.util.Optional;
 public class InvitationService {
     static final int MAXIMUM_INVITATIONS_PER_PAGE = 50;
 
-    private static final int MAXIMUM_TOKEN_GENERATION_ATTEMPTS = 10;
-    private static final String BOOTSTRAP_INVITATION_TOKEN_ENVIRONMENT_VARIABLE = "APP_BOOTSTRAP_INVITE_TOKEN";
     private static final String VISIBLE_INVITATION_PREDICATE =
             "invitation.createdByUser.id = :actingUserId "
                     + "or exists ("
@@ -65,7 +61,8 @@ public class InvitationService {
     @Inject
     private AuditService auditService;
 
-    private String bootstrapInvitationToken = System.getenv(BOOTSTRAP_INVITATION_TOKEN_ENVIRONMENT_VARIABLE);
+    @Inject
+    private RegistrationInvitationConfiguration registrationInvitationConfiguration;
 
     public Invitation createRegistrationInvitation(ApplicationUser actingUser) {
         requireActiveUser(actingUser);
@@ -95,15 +92,20 @@ public class InvitationService {
                 .getSingleResult();
     }
 
-    public List<Invitation> listInvitations(
+    public List<InvitationSummary> listInvitations(
             ApplicationUser actingUser,
             int firstResult,
-            int maximumResults) {
+            int maximumResults,
+            OffsetDateTime currentTime) {
         requireActiveUser(actingUser);
         requireValidInvitationPage(firstResult, maximumResults);
+        if (currentTime == null) {
+            throw new IllegalArgumentException("Current time is required.");
+        }
         List<Object[]> invitationRows = bindInvitationVisibility(
                         entityManager.createQuery(
-                                "select invitation, case when invitation.acceptedAt is null "
+                                "select invitation, "
+                                        + "case when invitation.acceptedAt is null "
                                         + "and invitation.revokedAt is null "
                                         + "and invitation.expiresAt > :currentTime "
                                         + "then 0 else 1 end as availabilityOrder "
@@ -114,24 +116,26 @@ public class InvitationService {
                                         + "invitation.createdAt desc, invitation.id desc",
                                 Object[].class),
                         actingUser)
-                .setParameter("currentTime", OffsetDateTime.now(ZoneOffset.UTC))
+                .setParameter("currentTime", currentTime)
                 .setFirstResult(firstResult)
                 .setMaxResults(maximumResults)
                 .getResultList();
         return invitationRows.stream()
-                .map(invitationRow -> {
-                    if (invitationRow.length < 2
-                            || !(invitationRow[0] instanceof Invitation invitation)) {
-                        throw new IllegalStateException("Invitation query returned an invalid row.");
-                    }
-                    Calendar invitationCalendar = invitation.getCalendar();
-                    if (invitationCalendar != null && invitationCalendar.getName() == null) {
-                        throw new IllegalStateException(
-                                "Invitation query returned a calendar without a name.");
-                    }
-                    return invitation;
-                })
+                .map(invitationRow -> toInvitationSummary((Invitation) invitationRow[0]))
                 .toList();
+    }
+
+    private InvitationSummary toInvitationSummary(Invitation invitation) {
+        return new InvitationSummary(
+                invitation.getId(),
+                invitation.getInvitationToken(),
+                invitation.getCalendar() == null
+                        ? null
+                        : invitation.getCalendar().getName(),
+                invitation.getRevokedAt(),
+                invitation.getAcceptedAt(),
+                invitation.getExpiresAt(),
+                invitation.getCreatedAt());
     }
 
     public void revokeInvitation(ApplicationUser actingUser, Long invitationId) {
@@ -217,7 +221,7 @@ public class InvitationService {
 
         Invitation invitation = new Invitation();
         invitation.setCalendar(calendar);
-        invitation.setInvitationToken(generateUniqueInvitationToken());
+        invitation.setInvitationToken(generateInvitationToken());
         invitation.setRole(role);
         invitation.setCreatedByUser(actingUser);
         OffsetDateTime createdAt = OffsetDateTime.now(ZoneOffset.UTC);
@@ -230,7 +234,7 @@ public class InvitationService {
 
     private RegistrationAdmission admissionForInvitation(Invitation invitation) {
         try {
-            invitationPolicy.requireOpen(
+            invitationPolicy.requireAvailable(
                     invitation.getRevokedAt(),
                     invitation.getAcceptedAt(),
                     invitation.getExpiresAt(),
@@ -394,32 +398,17 @@ public class InvitationService {
         }
     }
 
-    private String generateUniqueInvitationToken() {
-        for (int attempt = 0; attempt < MAXIMUM_TOKEN_GENERATION_ATTEMPTS; attempt++) {
-            String token = tokenService.generateInvitationToken();
-            Long existingCount = entityManager
-                    .createQuery(
-                            "select count(invitation) from Invitation invitation "
-                                    + "where invitation.invitationToken = :token",
-                            Long.class)
-                    .setParameter("token", token)
-                    .getSingleResult();
-            if (existingCount == 0) {
-                return token;
-            }
-        }
-        throw new IllegalStateException("Could not generate a unique invitation token.");
+    /**
+     * Uniqueness is guaranteed by the unique {@code app_invitation.invite_token} constraint, not by
+     * reading the column first: a read cannot see a token another transaction is about to insert,
+     * so a pre-check would still leave the constraint as the only real guarantee.
+     */
+    private String generateInvitationToken() {
+        return tokenService.generateInvitationToken();
     }
 
     private boolean matchesBootstrapInvitationToken(String invitationToken) {
-        String configuredBootstrapInvitationToken = InvitationToken.normalize(bootstrapInvitationToken);
-        if (!InvitationToken.isValidCandidate(configuredBootstrapInvitationToken)) {
-            return false;
-        }
-
-        return MessageDigest.isEqual(
-                configuredBootstrapInvitationToken.getBytes(StandardCharsets.UTF_8),
-                invitationToken.getBytes(StandardCharsets.UTF_8));
+        return registrationInvitationConfiguration.matchesBootstrapInvitationToken(invitationToken);
     }
 
     private ValidationException invalidInvitationException() {

@@ -18,6 +18,10 @@
                   host="*"
                   httpPort="${PORT}"
                   httpsPort="${HTTPS_PORT}">
+        <compression serverPreferredAlgorithm="gzip">
+            <types>+application/*</types>
+            <types>+image/svg+xml</types>
+        </compression>
         <headers>
             <setIfMissing>Content-Security-Policy:frame-ancestors 'none'; base-uri 'self'; object-src 'none'</setIfMissing>
             <setIfMissing>X-Frame-Options:DENY</setIfMissing>
@@ -28,8 +32,9 @@
         </headers>
     </httpEndpoint>
 
-    <httpDispatcher trustedHeaderOrigin="none"/>
-    <webContainer redirectToRelativeUrl="true"/>
+    <httpDispatcher trustedHeaderOrigin="100.*.*.*"/>
+    <webContainer redirectToRelativeUrl="true"
+                  httpsIndicatorHeader="X-Railway-Edge"/>
     <ltpa keysPassword="${APP_LTPA_KEYS_PASSWORD}"/>
     <webAppSecurity httpOnlyCookies="true"
                     sameSiteCookie="Lax"

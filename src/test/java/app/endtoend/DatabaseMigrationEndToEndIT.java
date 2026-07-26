@@ -46,7 +46,7 @@ final class DatabaseMigrationEndToEndIT {
     }
 
     @Test
-    void versionFiveNormalizesRealPostgresqlBoundariesWithoutTouchingOtherRows()
+    void versionFiveNormalizesRealPostgreSqlBoundariesWithoutTouchingOtherRows()
             throws Exception {
         try (Connection connection = databaseConnection()) {
             connection.setAutoCommit(false);

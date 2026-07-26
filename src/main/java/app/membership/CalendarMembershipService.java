@@ -129,7 +129,7 @@ public class CalendarMembershipService {
         return member;
     }
 
-    public void disableMembership(ApplicationUser actingUser, Long calendarId, Long targetUserId) {
+    public void deactivateMembership(ApplicationUser actingUser, Long calendarId, Long targetUserId) {
         calendarAccessService.requireCanAdminister(actingUser, calendarId);
         requireLockedCalendarForMembershipChange(calendarId);
         List<CalendarMembership> lockedMembers = lockMembershipsForCalendar(calendarId);

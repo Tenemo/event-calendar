@@ -1,5 +1,6 @@
 package app.security;
 
+import app.config.ApplicationEnvironmentVariables;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.InetAddress;
@@ -11,17 +12,15 @@ import java.util.Optional;
 
 @ApplicationScoped
 public class ClientRequestSourceResolver {
-    static final String RAILWAY_ENVIRONMENT_ID_ENVIRONMENT_VARIABLE = "RAILWAY_ENVIRONMENT_ID";
-
     private static final String RAILWAY_REAL_IP_HEADER = "X-Real-IP";
     private static final String UNKNOWN_SOURCE = "<unknown-source>";
     private static final int MAXIMUM_REAL_IP_HEADER_LENGTH = 64;
-    private static final String RAILWAY_INGRESS_ADDRESS_PREFIX = "100.";
+    private static final int RAILWAY_INGRESS_FIRST_ADDRESS_PART = 100;
 
     private final boolean railwayEnvironment;
 
     public ClientRequestSourceResolver() {
-        this(System.getenv(RAILWAY_ENVIRONMENT_ID_ENVIRONMENT_VARIABLE));
+        this(System.getenv(ApplicationEnvironmentVariables.RAILWAY_ENVIRONMENT_ID));
     }
 
     public ClientRequestSourceResolver(String railwayEnvironmentId) {
@@ -34,7 +33,7 @@ public class ClientRequestSourceResolver {
         }
 
         String connectedSource = normalizeAddress(request.getRemoteAddr()).orElse(UNKNOWN_SOURCE);
-        if (!railwayEnvironment || !connectedSource.startsWith(RAILWAY_INGRESS_ADDRESS_PREFIX)) {
+        if (!railwayEnvironment || !isRailwayIngressAddress(connectedSource)) {
             return connectedSource;
         }
 
@@ -50,6 +49,15 @@ public class ClientRequestSourceResolver {
         }
 
         return normalizeAddress(realIpHeader).orElse(connectedSource);
+    }
+
+    private boolean isRailwayIngressAddress(String address) {
+        String[] addressParts = address.split("\\.", -1);
+        if (addressParts.length != 4) {
+            return false;
+        }
+        int firstAddressPart = Integer.parseInt(addressParts[0]);
+        return firstAddressPart == RAILWAY_INGRESS_FIRST_ADDRESS_PART;
     }
 
     private Optional<String> normalizeAddress(String address) {

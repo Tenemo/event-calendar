@@ -29,25 +29,25 @@ final class CalendarLinkRequestThrottleTest {
         for (int requestNumber = 0;
                 requestNumber < CalendarLinkRequestThrottle.MAXIMUM_REQUESTS_PER_SOURCE;
                 requestNumber++) {
-            try (CalendarLinkRequestThrottle.Admission admission = throttle.tryAcquire("192.0.2.10")) {
-                assertTrue(admission.isAccepted());
+            try (CalendarLinkRequestThrottle.RequestPermit requestPermit = throttle.tryAcquire("192.0.2.10")) {
+                assertTrue(requestPermit.isAccepted());
             }
         }
         assertFalse(throttle.tryAcquire("192.0.2.10").isAccepted());
 
-        List<CalendarLinkRequestThrottle.Admission> admissions = new ArrayList<>();
+        List<CalendarLinkRequestThrottle.RequestPermit> requestPermits = new ArrayList<>();
         try {
             for (int sourceNumber = 0;
                     sourceNumber < CalendarLinkRequestThrottle.MAXIMUM_CONCURRENT_REQUESTS;
                     sourceNumber++) {
-                CalendarLinkRequestThrottle.Admission admission =
+                CalendarLinkRequestThrottle.RequestPermit requestPermit =
                         throttle.tryAcquire("198.51.100." + sourceNumber);
-                admissions.add(admission);
-                assertTrue(admission.isAccepted());
+                requestPermits.add(requestPermit);
+                assertTrue(requestPermit.isAccepted());
             }
             assertFalse(throttle.tryAcquire("203.0.113.20").isAccepted());
         } finally {
-            admissions.forEach(CalendarLinkRequestThrottle.Admission::close);
+            requestPermits.forEach(CalendarLinkRequestThrottle.RequestPermit::close);
         }
     }
 
@@ -56,13 +56,13 @@ final class CalendarLinkRequestThrottleTest {
         MutableClock clock = new MutableClock(TEST_START);
         CalendarLinkRequestThrottle throttle = throttle(clock, 2, 10, 2);
 
-        try (CalendarLinkRequestThrottle.Admission first = throttle.tryAcquire("192.0.2.10");
-                CalendarLinkRequestThrottle.Admission second = throttle.tryAcquire("192.0.2.10")) {
+        try (CalendarLinkRequestThrottle.RequestPermit first = throttle.tryAcquire("192.0.2.10");
+                CalendarLinkRequestThrottle.RequestPermit second = throttle.tryAcquire("192.0.2.10")) {
             assertTrue(first.isAccepted());
             assertTrue(second.isAccepted());
         }
-        CalendarLinkRequestThrottle.Admission rejected = throttle.tryAcquire("192.0.2.10");
-        CalendarLinkRequestThrottle.Admission differentSource = throttle.tryAcquire("198.51.100.20");
+        CalendarLinkRequestThrottle.RequestPermit rejected = throttle.tryAcquire("192.0.2.10");
+        CalendarLinkRequestThrottle.RequestPermit differentSource = throttle.tryAcquire("198.51.100.20");
 
         assertAll(
                 () -> assertFalse(rejected.isAccepted()),
@@ -71,7 +71,7 @@ final class CalendarLinkRequestThrottleTest {
         differentSource.close();
 
         clock.advance(Duration.ofMinutes(1));
-        try (CalendarLinkRequestThrottle.Admission afterWindow = throttle.tryAcquire("192.0.2.10")) {
+        try (CalendarLinkRequestThrottle.RequestPermit afterWindow = throttle.tryAcquire("192.0.2.10")) {
             assertTrue(afterWindow.isAccepted());
         }
     }
@@ -81,9 +81,9 @@ final class CalendarLinkRequestThrottleTest {
         CalendarLinkRequestThrottle throttle = throttle(
                 Clock.fixed(TEST_START, ZoneOffset.UTC), 100, 10, 2);
 
-        CalendarLinkRequestThrottle.Admission first = throttle.tryAcquire("192.0.2.10");
-        CalendarLinkRequestThrottle.Admission second = throttle.tryAcquire("192.0.2.11");
-        CalendarLinkRequestThrottle.Admission rejected = throttle.tryAcquire("192.0.2.12");
+        CalendarLinkRequestThrottle.RequestPermit first = throttle.tryAcquire("192.0.2.10");
+        CalendarLinkRequestThrottle.RequestPermit second = throttle.tryAcquire("192.0.2.11");
+        CalendarLinkRequestThrottle.RequestPermit rejected = throttle.tryAcquire("192.0.2.12");
 
         assertAll(
                 () -> assertTrue(first.isAccepted()),
@@ -95,7 +95,7 @@ final class CalendarLinkRequestThrottleTest {
         first.close();
         first.close();
         assertEquals(1, throttle.availableConcurrentRequestPermits());
-        try (CalendarLinkRequestThrottle.Admission replacement = throttle.tryAcquire("192.0.2.13")) {
+        try (CalendarLinkRequestThrottle.RequestPermit replacement = throttle.tryAcquire("192.0.2.13")) {
             assertTrue(replacement.isAccepted());
         }
         second.close();
@@ -106,7 +106,7 @@ final class CalendarLinkRequestThrottleTest {
     void concurrentCloseCallsReleaseCapacityExactlyOnce() throws Exception {
         CalendarLinkRequestThrottle throttle = throttle(
                 Clock.fixed(TEST_START, ZoneOffset.UTC), 100, 10, 1);
-        CalendarLinkRequestThrottle.Admission admission = throttle.tryAcquire("192.0.2.10");
+        CalendarLinkRequestThrottle.RequestPermit requestPermit = throttle.tryAcquire("192.0.2.10");
         int concurrentCloserCount = 64;
         CountDownLatch closersReady = new CountDownLatch(concurrentCloserCount);
         CountDownLatch startClosing = new CountDownLatch(1);
@@ -117,7 +117,7 @@ final class CalendarLinkRequestThrottleTest {
                 closeResults.add(executorService.submit(() -> {
                     closersReady.countDown();
                     startClosing.await();
-                    admission.close();
+                    requestPermit.close();
                     return null;
                 }));
             }
@@ -129,7 +129,7 @@ final class CalendarLinkRequestThrottleTest {
             }
         } finally {
             startClosing.countDown();
-            admission.close();
+            requestPermit.close();
         }
 
         assertEquals(1, throttle.availableConcurrentRequestPermits());
@@ -141,15 +141,15 @@ final class CalendarLinkRequestThrottleTest {
                 Clock.fixed(TEST_START, ZoneOffset.UTC), 100, 3, 1);
 
         for (int sourceIndex = 0; sourceIndex < 100; sourceIndex++) {
-            try (CalendarLinkRequestThrottle.Admission ignored =
+            try (CalendarLinkRequestThrottle.RequestPermit ignored =
                     throttle.tryAcquire("203.0.113." + sourceIndex)) {
                 assertTrue(ignored.isAccepted());
             }
         }
-        try (CalendarLinkRequestThrottle.Admission firstOversized = throttle.tryAcquire("a".repeat(129))) {
+        try (CalendarLinkRequestThrottle.RequestPermit firstOversized = throttle.tryAcquire("a".repeat(129))) {
             assertTrue(firstOversized.isAccepted());
         }
-        try (CalendarLinkRequestThrottle.Admission secondOversized = throttle.tryAcquire("b".repeat(256))) {
+        try (CalendarLinkRequestThrottle.RequestPermit secondOversized = throttle.tryAcquire("b".repeat(256))) {
             assertTrue(secondOversized.isAccepted());
         }
 

@@ -1,7 +1,9 @@
 package app.security;
 
+import static app.testsupport.ProxyReturnValues.defaultValue;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -16,7 +18,9 @@ import java.io.StringWriter;
 import java.lang.reflect.Proxy;
 import java.security.Principal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -206,7 +210,7 @@ final class SessionCookieRefreshFilterTest {
     }
 
     @Test
-    void invalidatesStaleApplicationAndCalendarPostbackSessionsWithTheFixedLoginRedirect()
+    void invalidatesStaleApplicationAndCalendarPostbackSessionsWithTheFixedSignInRedirect()
             throws Exception {
         for (String requestUri : List.of("/app/calendars", "/calendar.xhtml")) {
             StaleSessionCleanup sessionCleanup = new StaleSessionCleanup();
@@ -300,6 +304,94 @@ final class SessionCookieRefreshFilterTest {
         }
     }
 
+    @Test
+    void discardsServerSideStateCreatedWhileRenderingAnAnonymousCanonicalCalendar() throws Exception {
+        AnonymousCalendarRequest requestState = anonymousCalendarRequest("GET", true);
+
+        new SessionCookieRefreshFilter(currentUser(false))
+                .doFilter(
+                        requestState.request(),
+                        response(new ArrayList<>(), false),
+                        (servletRequest, servletResponse) -> requestState.sessionCreated().set(true));
+
+        assertAll(
+                () -> assertTrue(requestState.sessionInvalidated().get()),
+                () -> assertEquals(1, requestState.sessionLookups().get()));
+    }
+
+    @Test
+    void retainsAnonymousCanonicalCalendarStateWhileLoadMoreNeedsAPostback() throws Exception {
+        AnonymousCalendarRequest requestState = anonymousCalendarRequest("GET", true);
+
+        new SessionCookieRefreshFilter(currentUser(false))
+                .doFilter(
+                        requestState.request(),
+                        response(new ArrayList<>(), false),
+                        (servletRequest, servletResponse) -> {
+                            requestState.sessionCreated().set(true);
+                            requestState.request().setAttribute(
+                                    CalendarRouteFilter.ANONYMOUS_CALENDAR_POSTBACK_REQUIRED_REQUEST_ATTRIBUTE,
+                                    true);
+                        });
+
+        assertAll(
+                () -> assertFalse(requestState.sessionInvalidated().get()),
+                () -> assertEquals(0, requestState.sessionLookups().get()));
+    }
+
+    @Test
+    void discardsAnonymousCalendarStateAfterTheFinalPaginationPostback() throws Exception {
+        AnonymousCalendarRequest requestState = anonymousCalendarRequest("POST", false);
+
+        new SessionCookieRefreshFilter(currentUser(false))
+                .doFilter(
+                        requestState.request(),
+                        response(new ArrayList<>(), false),
+                        (servletRequest, servletResponse) -> {
+                            requestState.sessionCreated().set(true);
+                            requestState.request().setAttribute(
+                                    CalendarRouteFilter.ANONYMOUS_CALENDAR_POSTBACK_REQUIRED_REQUEST_ATTRIBUTE,
+                                    false);
+                        });
+
+        assertAll(
+                () -> assertTrue(requestState.sessionInvalidated().get()),
+                () -> assertEquals(1, requestState.sessionLookups().get()));
+    }
+
+    @Test
+    void retainsAuthenticatedCanonicalCalendarSessions() throws Exception {
+        AtomicInteger sessionLookups = new AtomicInteger();
+        HttpServletRequest request = (HttpServletRequest) Proxy.newProxyInstance(
+                HttpServletRequest.class.getClassLoader(),
+                new Class<?>[] {HttpServletRequest.class},
+                (proxy, method, arguments) -> switch (method.getName()) {
+                    case "getMethod" -> "GET";
+                    case "getContextPath" -> "";
+                    case "getRequestURI" -> "/calendar.xhtml";
+                    case "getAttribute" ->
+                            CalendarRouteFilter.CALENDAR_LINK_TOKEN_REQUEST_ATTRIBUTE.equals(arguments[0])
+                                    ? "Abc_123-xY0"
+                                    : null;
+                    case "getUserPrincipal" -> (Principal) () -> "piotr";
+                    case "getCookies" -> null;
+                    case "getSession" -> {
+                        sessionLookups.incrementAndGet();
+                        yield null;
+                    }
+                    case "isRequestedSessionIdValid" -> false;
+                    default -> defaultValue(method.getReturnType());
+                });
+
+        new SessionCookieRefreshFilter(currentUser(true))
+                .doFilter(
+                        request,
+                        response(new ArrayList<>(), false),
+                        filterChain(new AtomicInteger()));
+
+        assertEquals(0, sessionLookups.get());
+    }
+
     private void assertExpiredSessionCookie(List<Cookie> responseCookies) {
         assertEquals(2, responseCookies.size());
         assertAll(
@@ -322,6 +414,55 @@ final class SessionCookieRefreshFilterTest {
                 return signedIn;
             }
         };
+    }
+
+    private AnonymousCalendarRequest anonymousCalendarRequest(
+            String requestMethod,
+            boolean canonicalCalendarRequest) {
+        AtomicBoolean sessionCreated = new AtomicBoolean();
+        AtomicBoolean sessionInvalidated = new AtomicBoolean();
+        AtomicInteger sessionLookups = new AtomicInteger();
+        Map<String, Object> requestAttributes = new HashMap<>();
+        if (canonicalCalendarRequest) {
+            requestAttributes.put(
+                    CalendarRouteFilter.CALENDAR_LINK_TOKEN_REQUEST_ATTRIBUTE,
+                    "Abc_123-xY0");
+        }
+        HttpSession anonymousSession = (HttpSession) Proxy.newProxyInstance(
+                HttpSession.class.getClassLoader(),
+                new Class<?>[] {HttpSession.class},
+                (proxy, method, arguments) -> {
+                    if (method.getName().equals("invalidate")) {
+                        sessionInvalidated.set(true);
+                        return null;
+                    }
+                    return defaultValue(method.getReturnType());
+                });
+        HttpServletRequest request = (HttpServletRequest) Proxy.newProxyInstance(
+                HttpServletRequest.class.getClassLoader(),
+                new Class<?>[] {HttpServletRequest.class},
+                (proxy, method, arguments) -> switch (method.getName()) {
+                    case "getMethod" -> requestMethod;
+                    case "getContextPath" -> "";
+                    case "getRequestURI" -> "/calendar.xhtml";
+                    case "getAttribute" -> requestAttributes.get((String) arguments[0]);
+                    case "setAttribute" -> {
+                        requestAttributes.put((String) arguments[0], arguments[1]);
+                        yield null;
+                    }
+                    case "getUserPrincipal" -> null;
+                    case "getCookies" -> null;
+                    case "getSession" -> {
+                        sessionLookups.incrementAndGet();
+                        yield sessionCreated.get() ? anonymousSession : null;
+                    }
+                    default -> defaultValue(method.getReturnType());
+                });
+        return new AnonymousCalendarRequest(
+                request,
+                sessionCreated,
+                sessionInvalidated,
+                sessionLookups);
     }
 
     private HttpServletRequest request(
@@ -529,19 +670,6 @@ final class SessionCookieRefreshFilterTest {
         return (request, response) -> calls.incrementAndGet();
     }
 
-    private Object defaultValue(Class<?> returnType) {
-        if (!returnType.isPrimitive()) {
-            return null;
-        }
-        if (returnType == boolean.class) {
-            return false;
-        }
-        if (returnType == char.class) {
-            return '\0';
-        }
-        return 0;
-    }
-
     private record TestCase(CurrentUser currentUser, HttpServletRequest request) {
     }
 
@@ -549,6 +677,13 @@ final class SessionCookieRefreshFilterTest {
             String requestUri,
             String forwardedCalendarLinkToken,
             String requestMethod) {
+    }
+
+    private record AnonymousCalendarRequest(
+            HttpServletRequest request,
+            AtomicBoolean sessionCreated,
+            AtomicBoolean sessionInvalidated,
+            AtomicInteger sessionLookups) {
     }
 
     private static final class StaleSessionCleanup {

@@ -14,6 +14,7 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpServletResponseWrapper;
+import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.security.Principal;
@@ -54,24 +55,46 @@ public class SessionCookieRefreshFilter implements Filter {
             if (clearStaleAuthenticatedSession(request, response)) {
                 if (isReadOnlyCanonicalCalendarRequest(request)) {
                     filterChain.doFilter(servletRequest, servletResponse);
+                    discardAnonymousCanonicalCalendarSession(request);
                 } else {
                     RelativeRedirect.send(
                             request,
                             response,
                             request.getContextPath(),
-                            ExpiredLoginViewExceptionHandler.RECOVERY_ROUTE);
+                            ExpiredSignInViewExceptionHandler.RECOVERY_ROUTE);
                 }
                 return;
             }
             SessionCookieRefreshResponse responseWrapper =
                     new SessionCookieRefreshResponse(request, response);
             filterChain.doFilter(servletRequest, responseWrapper);
+            discardAnonymousCanonicalCalendarSession(request);
             if (!responseWrapper.isCommitted()) {
                 responseWrapper.refreshSessionCookie();
             }
             return;
         }
         filterChain.doFilter(servletRequest, servletResponse);
+    }
+
+    private void discardAnonymousCanonicalCalendarSession(HttpServletRequest request) {
+        if (request.getUserPrincipal() != null
+                || currentUser.isSignedIn()) {
+            return;
+        }
+
+        Object anonymousCalendarPostbackRequired = request.getAttribute(
+                CalendarRouteFilter.ANONYMOUS_CALENDAR_POSTBACK_REQUIRED_REQUEST_ATTRIBUTE);
+        if (Boolean.TRUE.equals(anonymousCalendarPostbackRequired)
+                || (!isReadOnlyCanonicalCalendarRequest(request)
+                        && !Boolean.FALSE.equals(anonymousCalendarPostbackRequired))) {
+            return;
+        }
+
+        HttpSession anonymousSession = request.getSession(false);
+        if (anonymousSession != null) {
+            anonymousSession.invalidate();
+        }
     }
 
     private boolean clearStaleAuthenticatedSession(

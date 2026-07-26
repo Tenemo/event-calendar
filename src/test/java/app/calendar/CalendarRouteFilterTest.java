@@ -1,5 +1,6 @@
 package app.calendar;
 
+import static app.testsupport.ProxyReturnValues.defaultValue;
 import static app.testsupport.ServiceTestSupport.setEntityId;
 import static app.testsupport.ServiceTestSupport.setField;
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -73,7 +74,7 @@ final class CalendarRouteFilterTest {
     }
 
     @Test
-    void keepsValidNonGetCanonicalRequestsInsideAdmissionUntilDownstreamWorkCompletes() throws Exception {
+    void keepsValidNonGetCanonicalRequestsInsideRequestPermitUntilDownstreamWorkCompletes() throws Exception {
         CalendarLinkRequestThrottle throttle = throttle(1, 10);
         CalendarRouteFilter filter = filter(new CalendarAccessService(), null, throttle);
         AtomicInteger filterChainCalls = new AtomicInteger();
@@ -226,7 +227,7 @@ final class CalendarRouteFilterTest {
                         CALENDAR_LINK_TOKEN,
                         requestAttributes.get(CalendarRouteFilter.CALENDAR_LINK_TOKEN_REQUEST_ATTRIBUTE)),
                 () -> assertTrue(Boolean.TRUE.equals(
-                        requestAttributes.get(CalendarRouteFilter.NOT_FOUND_REQUEST_ATTRIBUTE))),
+                        requestAttributes.get(CalendarRouteFilter.CALENDAR_NOT_FOUND_REQUEST_ATTRIBUTE))),
                 () -> assertNull(requestAttributes.get(CalendarRouteFilter.CALENDAR_REQUEST_ATTRIBUTE)),
                 () -> assertEquals(HttpServletResponse.SC_NOT_FOUND, responseState.status.get()));
     }
@@ -339,7 +340,7 @@ final class CalendarRouteFilterTest {
         CalendarRouteFilter filter = new CalendarRouteFilter();
         setField(filter, "calendarAccessService", calendarAccessService);
         setField(filter, "currentUser", currentUser);
-        setField(filter, "requestThrottle", throttle);
+        setField(filter, "calendarLinkRequestThrottle", throttle);
         setField(filter, "clientRequestSourceResolver", clientRequestSourceResolver);
         return filter;
     }
@@ -453,37 +454,6 @@ final class CalendarRouteFilterTest {
         user.setDisplayName("Editor");
         user.setActive(true);
         return user;
-    }
-
-    private static Object defaultValue(Class<?> returnType) {
-        if (!returnType.isPrimitive()) {
-            return null;
-        }
-        if (returnType == boolean.class) {
-            return false;
-        }
-        if (returnType == int.class) {
-            return 0;
-        }
-        if (returnType == long.class) {
-            return 0L;
-        }
-        if (returnType == double.class) {
-            return 0D;
-        }
-        if (returnType == float.class) {
-            return 0F;
-        }
-        if (returnType == short.class) {
-            return (short) 0;
-        }
-        if (returnType == byte.class) {
-            return (byte) 0;
-        }
-        if (returnType == char.class) {
-            return '\0';
-        }
-        return null;
     }
 
     private static final class FixedCurrentUser extends CurrentUser {

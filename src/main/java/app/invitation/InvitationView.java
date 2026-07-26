@@ -7,6 +7,7 @@ import app.user.ApplicationUser;
 import app.util.AuthorizationException;
 import app.util.NotFoundException;
 import app.util.ValidationException;
+import app.web.ViewParameterParser;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.faces.application.FacesMessage;
@@ -93,21 +94,8 @@ public class InvitationView {
     }
 
     static Long parseInvitationId(String submittedInvitationId) {
-        if (submittedInvitationId == null
-                || submittedInvitationId.isBlank()
-                || submittedInvitationId.length() > 19
-                || !submittedInvitationId.chars().allMatch(Character::isDigit)) {
-            throw new ValidationException("Invitation is invalid.");
-        }
-        try {
-            long invitationId = Long.parseLong(submittedInvitationId);
-            if (invitationId < 1) {
-                throw new ValidationException("Invitation is invalid.");
-            }
-            return invitationId;
-        } catch (NumberFormatException exception) {
-            throw new ValidationException("Invitation is invalid.");
-        }
+        return ViewParameterParser.positiveLong(submittedInvitationId)
+                .orElseThrow(() -> new ValidationException("Invitation is invalid."));
     }
 
     public Long getSelectedCalendarId() {
@@ -138,26 +126,26 @@ public class InvitationView {
         return generatedInvitationLink != null && !generatedInvitationLink.isBlank();
     }
 
-    private InvitationRow toRow(Invitation invitation, OffsetDateTime currentTime) {
+    private InvitationRow toRow(InvitationSummary invitation, OffsetDateTime currentTime) {
         InvitationStatus status = invitationPolicy.status(
-                invitation.getRevokedAt(),
-                invitation.getAcceptedAt(),
-                invitation.getExpiresAt(),
+                invitation.revokedAt(),
+                invitation.acceptedAt(),
+                invitation.expiresAt(),
                 currentTime);
         return new InvitationRow(
-                invitation.getId(),
-                invitationLink(invitation.getInvitationToken()),
+                invitation.id(),
+                invitationLink(invitation.invitationToken()),
                 invitationScope(invitation),
                 invitationStatus(status),
-                invitation.getCreatedAt(),
+                invitation.createdAt(),
                 status.isRevocable());
     }
 
-    private String invitationScope(Invitation invitation) {
-        if (invitation.getCalendar() == null) {
+    private String invitationScope(InvitationSummary invitation) {
+        if (invitation.calendarName() == null) {
             return "Registration invitation";
         }
-        return "Editor: " + invitation.getCalendar().getName();
+        return "Editor: " + invitation.calendarName();
     }
 
     private String invitationStatus(InvitationStatus status) {
@@ -196,7 +184,9 @@ public class InvitationView {
                 Map<String, SortMeta> sortMetadata,
                 Map<String, FilterMeta> filterMetadata) {
             OffsetDateTime currentTime = OffsetDateTime.now(ZoneOffset.UTC);
-            return invitationService.listInvitations(actingUser, firstResult, pageSize).stream()
+            return invitationService
+                    .listInvitations(actingUser, firstResult, pageSize, currentTime)
+                    .stream()
                     .map(invitation -> toRow(invitation, currentTime))
                     .toList();
         }

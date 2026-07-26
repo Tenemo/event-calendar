@@ -35,16 +35,16 @@ final class InvitationPolicyTest {
         OffsetDateTime now = OffsetDateTime.parse("2026-07-08T12:00:00Z");
 
         assertAll(
-                () -> assertDoesNotThrow(() -> invitationPolicy.requireOpen(null, null, now.plusMinutes(1), now)),
-                () -> assertThrows(ValidationException.class, () -> invitationPolicy.requireOpen(null, null, null, now)),
+                () -> assertDoesNotThrow(() -> invitationPolicy.requireAvailable(null, null, now.plusMinutes(1), now)),
+                () -> assertThrows(ValidationException.class, () -> invitationPolicy.requireAvailable(null, null, null, now)),
                 () -> assertThrows(
                         ValidationException.class,
-                        () -> invitationPolicy.requireOpen(now.minusHours(1), null, now.plusMinutes(1), now)),
+                        () -> invitationPolicy.requireAvailable(now.minusHours(1), null, now.plusMinutes(1), now)),
                 () -> assertThrows(
                         ValidationException.class,
-                        () -> invitationPolicy.requireOpen(null, now.minusHours(1), now.plusMinutes(1), now)),
-                () -> assertThrows(ValidationException.class, () -> invitationPolicy.requireOpen(null, null, now, now)),
-                () -> assertThrows(ValidationException.class, () -> invitationPolicy.requireOpen(null, null, now.minusSeconds(1), now)));
+                        () -> invitationPolicy.requireAvailable(null, now.minusHours(1), now.plusMinutes(1), now)),
+                () -> assertThrows(ValidationException.class, () -> invitationPolicy.requireAvailable(null, null, now, now)),
+                () -> assertThrows(ValidationException.class, () -> invitationPolicy.requireAvailable(null, null, now.minusSeconds(1), now)));
     }
 
     @Test

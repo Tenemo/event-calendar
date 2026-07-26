@@ -1,5 +1,6 @@
 package app.security;
 
+import static app.testsupport.XmlTestDocuments.parseXml;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -9,8 +10,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import javax.xml.XMLConstants;
-import javax.xml.parsers.DocumentBuilderFactory;
 import org.junit.jupiter.api.Test;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -108,6 +107,9 @@ final class WebAccessControlConfigurationContractTest {
                         mappings),
                 () -> assertTrue(Files.isRegularFile(errorPagePath)),
                 () -> assertTrue(errorPageContents.contains("<h1>Something went wrong</h1>")),
+                () -> assertTrue(errorPageContents.contains("<a href=\"/\">Return to the home page</a>")),
+                () -> assertTrue(errorPageContents.contains("name=\"viewport\"")),
+                () -> assertTrue(errorPageContents.contains("@media (forced-colors: active)")),
                 () -> assertFalse(errorPageContents.contains("#{")));
     }
 
@@ -117,16 +119,6 @@ final class WebAccessControlConfigurationContractTest {
             return requestPath.startsWith(pathPrefix);
         }
         return pattern.equals(requestPath);
-    }
-
-    private static Document parseXml(Path path) throws Exception {
-        DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
-        documentBuilderFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-        documentBuilderFactory.setFeature("http://xml.org/sax/features/external-general-entities", false);
-        documentBuilderFactory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
-        documentBuilderFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
-        documentBuilderFactory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
-        return documentBuilderFactory.newDocumentBuilder().parse(path.toFile());
     }
 
     private static List<String> textValues(Element parent, String tagName) {

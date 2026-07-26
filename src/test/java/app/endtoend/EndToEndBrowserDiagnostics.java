@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
 final class EndToEndBrowserDiagnostics {
-    private static final String ARTIFACTS_DIRECTORY_ENVIRONMENT_VARIABLE = "E2E_ARTIFACTS_DIRECTORY";
+    private static final String ARTIFACTS_DIRECTORY_ENVIRONMENT_VARIABLE = "END_TO_END_ARTIFACTS_DIRECTORY";
 
     private final String testClassName;
     private Path currentTestDirectory;

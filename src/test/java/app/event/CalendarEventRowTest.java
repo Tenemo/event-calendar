@@ -26,10 +26,10 @@ final class CalendarEventRowTest {
                 () -> assertEquals(LocalDate.parse("2026-07-24"), row.getInclusiveEndDate()),
                 () -> assertEquals(
                         "All day from Wed, Jul 22, 2026 to Fri, Jul 24, 2026",
-                        row.getTimeLabel()),
+                        row.getScheduleLabel()),
                 () -> assertEquals(
                         "All day from Wed, Jul 22, 2026 to Fri, Jul 24, 2026 at North landing",
-                        row.getDetailLabel()));
+                        row.getScheduleAndLocationLabel()));
     }
 
     @Test
@@ -44,8 +44,8 @@ final class CalendarEventRowTest {
 
         assertAll(
                 () -> assertEquals(LocalDate.parse("2026-07-22"), row.getInclusiveEndDate()),
-                () -> assertEquals("All day", row.getTimeLabel()),
-                () -> assertEquals("All day", row.getDetailLabel()));
+                () -> assertEquals("All day", row.getScheduleLabel()),
+                () -> assertEquals("All day", row.getScheduleAndLocationLabel()));
     }
 
     @Test
@@ -60,7 +60,7 @@ final class CalendarEventRowTest {
 
         assertAll(
                 () -> assertEquals(LocalDate.parse("2011-12-29"), row.getInclusiveEndDate()),
-                () -> assertEquals("All day", row.getTimeLabel()));
+                () -> assertEquals("All day", row.getScheduleLabel()));
     }
 
     @Test
@@ -76,10 +76,10 @@ final class CalendarEventRowTest {
         assertAll(
                 () -> assertEquals(
                         "Mon, Jul 20, 2026 at 10:00 to Mon, Jul 20, 2026 at 12:00",
-                        row.getTimeLabel()),
+                        row.getScheduleLabel()),
                 () -> assertEquals(
                         "Mon, Jul 20, 2026 at 10:00 to Mon, Jul 20, 2026 at 12:00 at River bank",
-                        row.getDetailLabel()));
+                        row.getScheduleAndLocationLabel()));
     }
 
     private CalendarEvent event(String startTime, String endTime, boolean allDay, String location) {

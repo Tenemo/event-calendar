@@ -1,5 +1,6 @@
 package db.migration;
 
+import static app.testsupport.ProxyReturnValues.defaultValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -115,16 +116,4 @@ final class V12__validate_calendar_time_zonesTest {
                 });
     }
 
-    private static Object defaultValue(Class<?> returnType) {
-        if (!returnType.isPrimitive()) {
-            return null;
-        }
-        if (returnType == boolean.class) {
-            return false;
-        }
-        if (returnType == char.class) {
-            return '\0';
-        }
-        return 0;
-    }
 }

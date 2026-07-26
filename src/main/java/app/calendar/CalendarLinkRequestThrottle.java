@@ -1,5 +1,6 @@
 package app.calendar;
 
+import app.security.ClientSourceKey;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.time.Clock;
 import java.time.Duration;
@@ -16,10 +17,6 @@ public class CalendarLinkRequestThrottle {
     static final Duration REQUEST_WINDOW = Duration.ofMinutes(1);
     static final int MAXIMUM_TRACKED_SOURCES = 10_000;
     static final int MAXIMUM_CONCURRENT_REQUESTS = 16;
-
-    private static final int MAXIMUM_SOURCE_IDENTIFIER_LENGTH = 128;
-    private static final String UNKNOWN_SOURCE_KEY = "<unknown-source>";
-    private static final String OVERSIZED_SOURCE_KEY = "<oversized-source>";
 
     private final Clock clock;
     private final int maximumRequestsPerSource;
@@ -55,15 +52,15 @@ public class CalendarLinkRequestThrottle {
         this.concurrentRequestPermits = new Semaphore(maximumConcurrentRequests, true);
     }
 
-    public Admission tryAcquire(String sourceIdentifier) {
+    public RequestPermit tryAcquire(String sourceIdentifier) {
         int retryAfterSeconds = recordAndCheckSourceRequest(sourceIdentifier);
         if (retryAfterSeconds > 0) {
-            return Admission.rejected(retryAfterSeconds);
+            return RequestPermit.rejected(retryAfterSeconds);
         }
         if (!concurrentRequestPermits.tryAcquire()) {
-            return Admission.rejected(1);
+            return RequestPermit.rejected(1);
         }
-        return Admission.accepted(concurrentRequestPermits);
+        return RequestPermit.accepted(concurrentRequestPermits);
     }
 
     synchronized int trackedSourceCount() {
@@ -76,7 +73,7 @@ public class CalendarLinkRequestThrottle {
 
     private synchronized int recordAndCheckSourceRequest(String sourceIdentifier) {
         Instant now = clock.instant();
-        String sourceKey = sourceKey(sourceIdentifier);
+        String sourceKey = ClientSourceKey.of(sourceIdentifier);
         RequestWindow existingWindow = sourceRequestWindows.get(sourceKey);
         if (existingWindow != null && existingWindow.hasExpired(now, requestWindow)) {
             sourceRequestWindows.remove(sourceKey);
@@ -119,17 +116,6 @@ public class CalendarLinkRequestThrottle {
         }
     }
 
-    private String sourceKey(String sourceIdentifier) {
-        if (sourceIdentifier == null || sourceIdentifier.isBlank()) {
-            return UNKNOWN_SOURCE_KEY;
-        }
-        String normalizedSourceIdentifier = sourceIdentifier.trim();
-        if (normalizedSourceIdentifier.length() > MAXIMUM_SOURCE_IDENTIFIER_LENGTH) {
-            return OVERSIZED_SOURCE_KEY;
-        }
-        return normalizedSourceIdentifier;
-    }
-
     private static void requirePositive(int value, String valueName) {
         if (value < 1) {
             throw new IllegalArgumentException(valueName + " must be positive.");
@@ -155,23 +141,23 @@ public class CalendarLinkRequestThrottle {
         }
     }
 
-    public static final class Admission implements AutoCloseable {
+    public static final class RequestPermit implements AutoCloseable {
         private final Semaphore concurrentRequestPermits;
         private final int retryAfterSeconds;
         private final Object releaseLock = new Object();
         private boolean released;
 
-        private Admission(Semaphore concurrentRequestPermits, int retryAfterSeconds) {
+        private RequestPermit(Semaphore concurrentRequestPermits, int retryAfterSeconds) {
             this.concurrentRequestPermits = concurrentRequestPermits;
             this.retryAfterSeconds = retryAfterSeconds;
         }
 
-        private static Admission accepted(Semaphore concurrentRequestPermits) {
-            return new Admission(concurrentRequestPermits, 0);
+        private static RequestPermit accepted(Semaphore concurrentRequestPermits) {
+            return new RequestPermit(concurrentRequestPermits, 0);
         }
 
-        private static Admission rejected(int retryAfterSeconds) {
-            return new Admission(null, retryAfterSeconds);
+        private static RequestPermit rejected(int retryAfterSeconds) {
+            return new RequestPermit(null, retryAfterSeconds);
         }
 
         public boolean isAccepted() {

@@ -1,5 +1,6 @@
 package app.security;
 
+import static app.testsupport.ProxyReturnValues.defaultValue;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -247,16 +248,4 @@ final class AuthenticatedSessionSecurityTest {
                 });
     }
 
-    private Object defaultValue(Class<?> returnType) {
-        if (!returnType.isPrimitive()) {
-            return null;
-        }
-        if (returnType == boolean.class) {
-            return false;
-        }
-        if (returnType == char.class) {
-            return '\0';
-        }
-        return 0;
-    }
 }

@@ -1,22 +1,21 @@
 package app.calendar;
 
 import app.audit.AuditService;
-import app.config.CalendarConfiguration;
+import app.config.NewCalendarDefaults;
 import app.event.CalendarEvent;
 import app.membership.CalendarAccessService;
 import app.membership.CalendarMembership;
 import app.membership.CalendarRole;
 import app.security.TokenService;
 import app.user.ApplicationUser;
-import app.util.ConflictException;
 import app.util.NotFoundException;
+import app.util.OptimisticLockConflicts;
 import app.util.TextNormalizer;
 import app.util.ValidationException;
 import jakarta.ejb.Stateless;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
-import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PersistenceContext;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -27,7 +26,8 @@ import java.util.List;
 public class CalendarService {
     private static final int MAXIMUM_CALENDAR_NAME_LENGTH = 160;
     private static final int MAXIMUM_TIME_ZONE_LENGTH = 80;
-    private static final int MAXIMUM_LINK_TOKEN_GENERATION_ATTEMPTS = 10;
+    private static final String CALENDAR_CONFLICT_MESSAGE =
+            "This calendar changed after you opened it. Reload the page and try again.";
 
     @PersistenceContext(unitName = "calendarPersistenceUnit")
     private EntityManager entityManager;
@@ -45,7 +45,7 @@ public class CalendarService {
     private CalendarTimeService calendarTimeService;
 
     @Inject
-    private CalendarConfiguration calendarConfiguration;
+    private NewCalendarDefaults newCalendarDefaults;
 
     public Calendar createCalendar(ApplicationUser creator, String name) {
         if (creator == null || creator.getId() == null || !creator.isActive()) {
@@ -66,8 +66,8 @@ public class CalendarService {
         Calendar calendar = new Calendar();
         calendar.setName(normalizedName);
         calendar.setDescription(null);
-        calendar.setCalendarLinkToken(generateUniqueCalendarLinkToken());
-        calendar.setTimeZone(calendarConfiguration.getDefaultTimeZone());
+        calendar.setCalendarLinkToken(generateCalendarLinkToken());
+        calendar.setTimeZone(newCalendarDefaults.getDefaultTimeZone());
         calendar.setPublicAccessEnabled(true);
         calendar.setActive(true);
         calendar.setCreatedByUser(managedCreator);
@@ -130,9 +130,11 @@ public class CalendarService {
     public Calendar regenerateCalendarLink(ApplicationUser actingUser, Long calendarId, Integer expectedVersion) {
         calendarAccessService.requireCanEdit(actingUser, calendarId);
         Calendar calendar = requireActiveCalendar(calendarId, LockModeType.PESSIMISTIC_WRITE);
+        // Deliberate second check: the acting user's role can be revoked between the first check and
+        // the lock, so authorization is confirmed again once the calendar row is held.
         calendarAccessService.requireCanEdit(actingUser, calendarId);
         requireExpectedVersion(calendar, expectedVersion);
-        calendar.setCalendarLinkToken(generateUniqueCalendarLinkToken());
+        calendar.setCalendarLinkToken(generateCalendarLinkToken());
         calendar.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
         auditService.record(
                 actingUser,
@@ -155,6 +157,8 @@ public class CalendarService {
             Integer expectedVersion) {
         calendarAccessService.requireCanAdminister(actingUser, calendarId);
         Calendar calendar = requireActiveCalendar(calendarId, LockModeType.PESSIMISTIC_WRITE);
+        // Deliberate second check: the acting user's role can be revoked between the first check and
+        // the lock, so authorization is confirmed again once the calendar row is held.
         calendarAccessService.requireCanAdminister(actingUser, calendarId);
         requireExpectedVersion(calendar, expectedVersion);
         calendar.setName(TextNormalizer.normalizeRequiredText(
@@ -208,44 +212,32 @@ public class CalendarService {
 
     private Calendar requireActiveCalendar(Long calendarId, LockModeType lockMode) {
         Calendar calendar = entityManager.find(Calendar.class, calendarId, lockMode);
-        if (calendar == null || !calendar.isActive()) {
+        if (calendar == null) {
+            throw new NotFoundException("Calendar was not found.");
+        }
+        entityManager.refresh(calendar);
+        if (!calendar.isActive()) {
             throw new NotFoundException("Calendar was not found.");
         }
         return calendar;
     }
 
     private void requireExpectedVersion(Calendar calendar, Integer expectedVersion) {
-        if (expectedVersion != null && calendar.getVersion() != expectedVersion) {
-            throw calendarConflictException();
-        }
+        OptimisticLockConflicts.requireExpectedVersion(
+                calendar.getVersion(), expectedVersion, CALENDAR_CONFLICT_MESSAGE);
     }
 
     private void flushWithConflictMessage() {
-        try {
-            entityManager.flush();
-        } catch (OptimisticLockException exception) {
-            throw calendarConflictException();
-        }
+        OptimisticLockConflicts.flushOrConflict(entityManager, CALENDAR_CONFLICT_MESSAGE);
     }
 
-    private ConflictException calendarConflictException() {
-        return new ConflictException("This calendar changed after you opened it. Reload the page and try again.");
-    }
-
-    private String generateUniqueCalendarLinkToken() {
-        for (int attempt = 0; attempt < MAXIMUM_LINK_TOKEN_GENERATION_ATTEMPTS; attempt++) {
-            String token = tokenService.generateCalendarLinkToken();
-            Long existingCount = entityManager
-                    .createQuery(
-                            "select count(calendarEntity) from Calendar calendarEntity where calendarEntity.calendarLinkToken = :token",
-                            Long.class)
-                    .setParameter("token", token)
-                    .getSingleResult();
-            if (existingCount == 0) {
-                return token;
-            }
-        }
-        throw new IllegalStateException("Could not generate a unique calendar link token.");
+    /**
+     * Uniqueness is guaranteed by the unique {@code calendar.public_token} constraint, not by
+     * reading the column first: a read cannot see a token another transaction is about to insert,
+     * so a pre-check would still leave the constraint as the only real guarantee.
+     */
+    private String generateCalendarLinkToken() {
+        return tokenService.generateCalendarLinkToken();
     }
 
 }
