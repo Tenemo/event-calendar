@@ -210,6 +210,7 @@ final class CalendarTool extends CalendarToolProcessRunner {
         runCommand("Calendar tool exact source-launch test", sourceLauncherHelpCommand());
         runCommand("Railway configuration contract test", railwayConfigurationTestCommand());
         runCommand("Railway preview URL contract test", railwayPreviewUrlTestCommand());
+        runCommand("Node dependency installation", npmInstallCommand());
         runCommand("Lighthouse browser lifecycle test", lighthouseBrowserTestCommand());
         runCommand("Build toolchain configuration contract test", buildToolchainConfigurationTestCommand());
     }
