@@ -1,17 +1,17 @@
--- Migration 10 shortened calendar link tokens and added calendar_public_token_check, but its
--- constraint was later tightened from '^[A-Za-z0-9_-]{11}$' to the canonical form below. Migration
--- 10 is a Java migration without a checksum, so Flyway could not detect that edit and never
--- re-applied it: every database migrated before the edit still carries the loose constraint, which
--- accepts 11-character tokens whose final character cannot occur when encoding exactly eight bytes.
--- This migration re-applies the canonical constraint as a forward step so already-migrated
--- databases converge with newly created ones.
+-- The committed form of migration 10 has always installed the canonical constraint below. A local
+-- development database could nevertheless have run an earlier, uncommitted form of that Java
+-- migration. Because migration 10 does not provide a checksum, Flyway would not detect a later edit
+-- to it. Migrations 13 through 15 therefore re-apply the canonical constraint as defensive forward
+-- steps. They are a no-op for the constraint semantics of databases built only from committed
+-- revisions. This first step skips the table scan and commits the short ACCESS EXCLUSIVE lock before
+-- migration 14 validates existing rows under the weaker SHARE UPDATE EXCLUSIVE lock. Migration 15
+-- then performs only the short constraint-name swap.
 --
 -- No data repair is needed. Migration 10 regenerated every token with the canonical generator, and
 -- every token created since comes from the same generator, so no stored token can violate this.
 
-alter table calendar
-    drop constraint if exists calendar_public_token_check;
+set local lock_timeout = '10s';
 
 alter table calendar
-    add constraint calendar_public_token_check
-        check (public_token ~ '^[A-Za-z0-9_-]{10}[AEIMQUYcgkosw048]$');
+    add constraint calendar_public_token_check_v13
+        check (public_token ~ '^[A-Za-z0-9_-]{10}[AEIMQUYcgkosw048]$') not valid;

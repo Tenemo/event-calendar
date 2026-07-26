@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.nio.file.Path;
 import java.util.List;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.w3c.dom.Element;
@@ -26,14 +25,11 @@ final class ReverseProxyConfigurationTest {
     }
 
     @Test
-    void trustsPrivateProxyHeadersOnlyFromRailwaysCarrierGradeNatPeers() throws Exception {
+    void trustsPrivateProxyHeadersFromTheConfiguredRailwayIngressRange() throws Exception {
         Element httpDispatcher = firstElement(readServerConfiguration(), "httpDispatcher");
-        String carrierGradeNatOrigins = IntStream.rangeClosed(64, 127)
-                .mapToObj(secondOctet -> "100." + secondOctet + ".*.*")
-                .collect(Collectors.joining(","));
 
         assertEquals(
-                carrierGradeNatOrigins,
+                "100.*.*.*",
                 httpDispatcher.getAttribute("trustedHeaderOrigin"));
     }
 

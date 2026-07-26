@@ -62,6 +62,12 @@ final class RegistrationInvitationConfigurationTest {
                         () -> validate("a".repeat(42) + " ")),
                 () -> assertThrows(
                         IllegalStateException.class,
+                        () -> validate("é" + "a".repeat(42))),
+                () -> assertThrows(
+                        IllegalStateException.class,
+                        () -> validate("٣" + "a".repeat(42))),
+                () -> assertThrows(
+                        IllegalStateException.class,
                         () -> validate("a".repeat(81))));
     }
 

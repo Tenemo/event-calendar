@@ -78,9 +78,16 @@ public class SessionCookieRefreshFilter implements Filter {
     }
 
     private void discardAnonymousCanonicalCalendarSession(HttpServletRequest request) {
-        if (!isReadOnlyCanonicalCalendarRequest(request)
-                || request.getUserPrincipal() != null
+        if (request.getUserPrincipal() != null
                 || currentUser.isSignedIn()) {
+            return;
+        }
+
+        Object anonymousCalendarPostbackRequired = request.getAttribute(
+                CalendarRouteFilter.ANONYMOUS_CALENDAR_POSTBACK_REQUIRED_REQUEST_ATTRIBUTE);
+        if (Boolean.TRUE.equals(anonymousCalendarPostbackRequired)
+                || (!isReadOnlyCanonicalCalendarRequest(request)
+                        && !Boolean.FALSE.equals(anonymousCalendarPostbackRequired))) {
             return;
         }
 

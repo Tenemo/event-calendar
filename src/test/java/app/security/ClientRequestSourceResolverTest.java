@@ -50,24 +50,24 @@ final class ClientRequestSourceResolverTest {
                         "198.51.100.90",
                         resolver.resolve(request("198.51.100.90", "203.0.113.77"))),
                 () -> assertEquals(
-                        "100.63.255.255",
-                        resolver.resolve(request("100.63.255.255", "203.0.113.77"))),
+                        "99.255.255.255",
+                        resolver.resolve(request("99.255.255.255", "203.0.113.77"))),
                 () -> assertEquals(
-                        "100.128.0.0",
-                        resolver.resolve(request("100.128.0.0", "203.0.113.77"))));
+                        "101.0.0.0",
+                        resolver.resolve(request("101.0.0.0", "203.0.113.77"))));
     }
 
     @Test
-    void acceptsBothBoundariesOfRailwaysCarrierGradeNatRange() {
+    void acceptsBothBoundariesOfTheConfiguredRailwayIngressRange() {
         ClientRequestSourceResolver resolver = new ClientRequestSourceResolver("production-environment-id");
 
         assertAll(
                 () -> assertEquals(
-                        "198.51.100.64",
-                        resolver.resolve(request("100.64.0.0", "198.51.100.64"))),
+                        "198.51.100.1",
+                        resolver.resolve(request("100.0.0.0", "198.51.100.1"))),
                 () -> assertEquals(
-                        "198.51.100.127",
-                        resolver.resolve(request("100.127.255.255", "198.51.100.127"))));
+                        "198.51.100.254",
+                        resolver.resolve(request("100.255.255.255", "198.51.100.254"))));
     }
 
     @Test

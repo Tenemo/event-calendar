@@ -44,7 +44,7 @@ final class CalendarToolPostgreSql extends CalendarToolProcessRunner {
     private static final String RESTORE_VERIFICATION_DATABASE_NAME = "calendar_restore";
     private static final String RESTORE_VERIFICATION_DATABASE_USER = "calendar_restore";
     private static final String RESTORE_VERIFICATION_PROFILE = "restore-verification";
-    private static final String EXPECTED_FLYWAY_VERSION = "13";
+    private static final String EXPECTED_FLYWAY_VERSION = "15";
     private static final DateTimeFormatter BACKUP_TIMESTAMP_FORMAT =
             DateTimeFormatter.ofPattern("uuuuMMdd-HHmmss").withZone(ZoneOffset.UTC);
     private static final Duration DATABASE_READY_TIMEOUT = Duration.ofSeconds(60);

@@ -92,6 +92,31 @@ final class SignInAttemptThrottleConcurrencyTest {
     }
 
     @Test
+    void concurrentProvenSourceReservationsCannotBypassLimitsWhenPrimaryTrackingIsSaturated()
+            throws Exception {
+        SignInAttemptThrottle throttle = throttle(5, 5, 1, 1);
+        String provenSource = "192.0.2.50";
+        assertTrue(throttle.reserveAuthenticationAttempt("piotr", provenSource));
+        throttle.releaseSuccessfulAttempt("piotr", provenSource);
+        for (int failureIndex = 0; failureIndex < 5; failureIndex++) {
+            throttle.recordFailedAuthentication("intruder", "198.51.100.10");
+        }
+        List<Boolean> reservations = synchronizedResults();
+
+        runConcurrently(32, taskIndex ->
+                reservations.add(throttle.reserveAuthenticationAttempt("target", provenSource)));
+
+        assertAll(
+                () -> assertEquals(
+                        5,
+                        reservations.stream().filter(Boolean::booleanValue).count(),
+                        "Only reservations recorded in the bounded proven-source pool may be admitted."),
+                () -> assertFalse(throttle.isAuthenticationAllowed("target", provenSource)),
+                () -> assertEquals(1, throttle.reservedProvenUsernameAndSourceCount()),
+                () -> assertEquals(1, throttle.reservedProvenSourceCount()));
+    }
+
+    @Test
     void releasingASuccessfulAttemptLeavesNoTrackedStateBehind() {
         SignInAttemptThrottle throttle = throttle(5, 25, 100, 100);
 

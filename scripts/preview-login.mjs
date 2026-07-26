@@ -3,10 +3,10 @@ import process from "node:process";
 import { requirePullRequestNumber, resolveRailwayPreviewUrl } from "./railway-preview-url.mjs";
 
 try {
-    const pullRequestNumber = requirePullRequestNumber(process.argv[2]);
     if (process.argv.length !== 3) {
         throw new Error("Usage: node scripts/preview-login.mjs <pull-request-number>");
     }
+    const pullRequestNumber = requirePullRequestNumber(process.argv[2]);
 
     const repository = process.env.GITHUB_REPOSITORY?.trim() || "Tenemo/event-calendar";
     if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) {

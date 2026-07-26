@@ -8,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -219,6 +221,49 @@ final class CalendarAndEventEndToEndIT extends SharedCalendarEndToEndSupport {
                 assertBodyContains(currentLinkPage, "Read-only");
                 assertNoBrowserMessages(currentLinkBrowserMessages);
             }
+            assertNoBrowserMessages(browserMessages);
+        }
+    }
+
+    @Test
+    void anonymousReadersCanLoadEveryEventPageWithoutLosingTheirFacesView() throws SQLException {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "pagination-owner-" + uniqueSuffix;
+        String calendarName = "Pagination calendar " + uniqueSuffix;
+        String eventTitlePrefix = "Paginated event " + uniqueSuffix + " ";
+        seedUser(ownerUsername);
+        long calendarId;
+        String calendarLink;
+
+        try (BrowserContext ownerContext = browser.newContext()) {
+            Page ownerPage = ownerContext.newPage();
+            signIn(ownerPage, ownerUsername, TEST_PASSWORD);
+            createCalendar(ownerPage, calendarName);
+            openCalendar(ownerPage, calendarName);
+            calendarId = findCalendarId(calendarName);
+            calendarLink = ownerPage.url();
+        }
+        insertCalendarEvents(calendarId, eventTitlePrefix, 51);
+
+        List<String> browserMessages = new ArrayList<>();
+        try (BrowserContext publicContext = browser.newContext()) {
+            Page publicPage = newPage(publicContext, browserMessages);
+            com.microsoft.playwright.Response response = navigateToBearerLink(publicPage, calendarLink);
+            assertEquals(200, response.status());
+            assertAnonymousSessionCookie(response);
+            assertEquals(50, publicPage.locator("article").count());
+            assertEquals(1, publicPage.locator("button:has-text('Load more events')").count());
+            assertEquals(0, publicPage.locator(
+                    "article",
+                    new Page.LocatorOptions().setHasText(eventTitlePrefix + "051")).count());
+
+            publicPage.locator("button:has-text('Load more events')").click();
+            waitForPageResources(publicPage);
+
+            assertEquals(51, publicPage.locator("article").count());
+            assertBodyContains(publicPage, eventTitlePrefix + "051");
+            assertEquals(0, publicPage.locator("button:has-text('Load more events')").count());
+            assertEquals(calendarLink, publicPage.url());
             assertNoBrowserMessages(browserMessages);
         }
     }
@@ -508,6 +553,38 @@ final class CalendarAndEventEndToEndIT extends SharedCalendarEndToEndSupport {
             Page legacyRoutePage = newPage(browserContext, legacyRouteBrowserMessages);
             assertEquals(404, navigateToBearerLink(legacyRoutePage, route("/calendar/AAAAAAAAAAA")).status());
             assertOnlyExpectedNotFoundNavigationMessage(legacyRouteBrowserMessages);
+        }
+    }
+
+    private void insertCalendarEvents(
+            long calendarId,
+            String eventTitlePrefix,
+            int eventCount) throws SQLException {
+        try (Connection connection = openDatabaseConnection();
+                PreparedStatement statement = connection.prepareStatement("""
+                        insert into calendar_event (
+                            calendar_id,
+                            title,
+                            start_at,
+                            end_at,
+                            created_by_user_id,
+                            updated_by_user_id)
+                        select calendar.id,
+                               ? || lpad(event_number::text, 3, '0'),
+                               timestamptz '2027-01-01 08:00:00+00'
+                                   + event_number * interval '1 day',
+                               timestamptz '2027-01-01 09:00:00+00'
+                                   + event_number * interval '1 day',
+                               calendar.created_by_user_id,
+                               calendar.created_by_user_id
+                        from calendar
+                        cross join generate_series(1, ?) as event_number
+                        where calendar.id = ?
+                        """)) {
+            statement.setString(1, eventTitlePrefix);
+            statement.setInt(2, eventCount);
+            statement.setLong(3, calendarId);
+            assertEquals(eventCount, statement.executeUpdate());
         }
     }
 

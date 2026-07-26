@@ -196,15 +196,75 @@ final class SignInAttemptThrottleTest {
             }
         }
 
+        assertFalse(
+                throttle.reserveAuthenticationAttempt("unseen-person", "203.0.113.99"),
+                "An unknown source is shed while the tracker is saturated.");
+        for (int failureIndex = 0; failureIndex < 5; failureIndex++) {
+            assertTrue(
+                    throttle.reserveAuthenticationAttempt("piotr", "192.0.2.50"),
+                    "Reserved capacity must keep a proven source available without bypassing its limit.");
+        }
+
         assertAll(
                 () -> assertFalse(
-                        throttle.isAuthenticationAllowed("unseen-person", "203.0.113.99"),
-                        "An unknown source is shed while the tracker is saturated."),
-                () -> assertTrue(
-                        throttle.isAuthenticationAllowed("piotr", "192.0.2.50"),
-                        "A source that proved credentials must keep signing in during saturation, "
-                                + "otherwise cheaply obtained sources deny sign-in to everyone."),
+                        throttle.reserveAuthenticationAttempt("piotr", "192.0.2.50"),
+                        "A proven source must stop at the configured username and source limit."),
+                () -> assertEquals(1, throttle.reservedProvenUsernameAndSourceCount()),
+                () -> assertEquals(1, throttle.reservedProvenSourceCount()),
                 () -> assertEquals(1, throttle.provenSourceCount()));
+    }
+
+    @Test
+    void provenSourceReservationsStillEnforceTheSourceLimitDuringSaturation() {
+        MutableClock clock = new MutableClock(TEST_START);
+        SignInAttemptThrottle throttle = throttle(clock, 5, 25, 5, 1);
+        String provenSource = "192.0.2.50";
+
+        assertTrue(throttle.reserveAuthenticationAttempt("piotr", provenSource));
+        throttle.releaseSuccessfulAttempt("piotr", provenSource);
+        for (int usernameIndex = 0; usernameIndex < 5; usernameIndex++) {
+            for (int failureIndex = 0; failureIndex < 5; failureIndex++) {
+                throttle.recordFailedAuthentication(
+                        "intruder-" + usernameIndex,
+                        "198.51.100.10");
+            }
+        }
+
+        for (int failureIndex = 0; failureIndex < 25; failureIndex++) {
+            assertTrue(throttle.reserveAuthenticationAttempt("person-" + failureIndex, provenSource));
+        }
+
+        assertAll(
+                () -> assertFalse(
+                        throttle.reserveAuthenticationAttempt("one-more-person", provenSource),
+                        "Reserved tracking must enforce the source-wide 25-attempt protection."),
+                () -> assertEquals(25, throttle.reservedProvenUsernameAndSourceCount()),
+                () -> assertEquals(1, throttle.reservedProvenSourceCount()));
+    }
+
+    @Test
+    void provenSourcesFailClosedWhenTheirReservedTrackingCapacityIsAlsoSaturated() {
+        MutableClock clock = new MutableClock(TEST_START);
+        SignInAttemptThrottle throttle = throttle(clock, 1, 1, 1, 1);
+        String firstProvenSource = "192.0.2.50";
+        String secondProvenSource = "192.0.2.51";
+
+        for (String provenSource : new String[] {firstProvenSource, secondProvenSource}) {
+            assertTrue(throttle.reserveAuthenticationAttempt("piotr", provenSource));
+            throttle.releaseSuccessfulAttempt("piotr", provenSource);
+        }
+        throttle.recordFailedAuthentication("intruder", "198.51.100.10");
+
+        assertTrue(throttle.reserveAuthenticationAttempt("first-person", firstProvenSource));
+
+        assertAll(
+                () -> assertFalse(
+                        throttle.reserveAuthenticationAttempt("second-person", secondProvenSource),
+                        "Admission must fail when neither bounded tracking pool can record it."),
+                () -> assertEquals(1, throttle.reservedProvenUsernameAndSourceCount()),
+                () -> assertEquals(1, throttle.reservedProvenSourceCount()),
+                () -> assertEquals(2, throttle.trackedUsernameAndSourceCount()),
+                () -> assertEquals(2, throttle.trackedSourceCount()));
     }
 
     @Test

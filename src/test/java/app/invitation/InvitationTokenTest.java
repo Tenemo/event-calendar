@@ -34,4 +34,22 @@ final class InvitationTokenTest {
                 () -> assertFalse(InvitationToken.isValidCandidate("token\r\nsuffix")),
                 () -> assertFalse(InvitationToken.isValidCandidate("token\u0085suffix")));
     }
+
+    @Test
+    void bootstrapSecretsUseOnlyAsciiBase64UrlCharactersWithinTheConfiguredBounds() {
+        String minimumLengthToken = "A".repeat(40) + "0-_";
+        String maximumLengthToken = "z".repeat(InvitationToken.MAXIMUM_LENGTH);
+
+        assertAll(
+                () -> assertTrue(InvitationToken.isValidBootstrapSecret(minimumLengthToken)),
+                () -> assertTrue(InvitationToken.isValidBootstrapSecret(maximumLengthToken)),
+                () -> assertFalse(InvitationToken.isValidBootstrapSecret(null)),
+                () -> assertFalse(InvitationToken.isValidBootstrapSecret("a".repeat(42))),
+                () -> assertFalse(InvitationToken.isValidBootstrapSecret("a".repeat(81))),
+                () -> assertFalse(InvitationToken.isValidBootstrapSecret("é" + "a".repeat(42))),
+                () -> assertFalse(InvitationToken.isValidBootstrapSecret("٣" + "a".repeat(42))),
+                () -> assertFalse(InvitationToken.isValidBootstrapSecret("a".repeat(42) + "+")),
+                () -> assertFalse(InvitationToken.isValidBootstrapSecret("a".repeat(42) + "/")),
+                () -> assertFalse(InvitationToken.isValidBootstrapSecret("a".repeat(42) + "=")));
+    }
 }

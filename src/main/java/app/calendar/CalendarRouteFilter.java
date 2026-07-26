@@ -20,6 +20,8 @@ public class CalendarRouteFilter implements Filter {
     public static final String CALENDAR_LINK_TOKEN_REQUEST_ATTRIBUTE = "calendarLinkToken";
     public static final String CALENDAR_NOT_FOUND_REQUEST_ATTRIBUTE = "calendarNotFound";
     public static final String CALENDAR_REQUEST_ATTRIBUTE = "calendar";
+    public static final String ANONYMOUS_CALENDAR_POSTBACK_REQUIRED_REQUEST_ATTRIBUTE =
+            "anonymousCalendarPostbackRequired";
 
     private static final String CALENDAR_TEMPLATE_PATH = "/calendar.xhtml";
     private static final String RATE_LIMIT_MESSAGE = "Too many calendar link requests. Try again later.";

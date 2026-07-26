@@ -89,6 +89,7 @@ public class CalendarView implements Serializable {
                     : calendarAccessService.findActiveRole(actingUser, calendarId).orElse(null);
             available = true;
             reloadEvents(actingUser);
+            markAnonymousCalendarPostbackRequirement(actingUser);
             resetEventForm();
         } catch (AuthorizationException | NotFoundException exception) {
             markNotFound();
@@ -196,8 +197,8 @@ public class CalendarView implements Serializable {
     }
 
     public void loadMoreEvents() {
+        ApplicationUser actingUser = currentUser.find().orElse(null);
         try {
-            ApplicationUser actingUser = currentUser.find().orElse(null);
             CalendarEventPage eventPage = loadEventPage(actingUser, events.size());
             List<CalendarEventRow> expandedEvents = new ArrayList<>(events);
             expandedEvents.addAll(toEventRows(eventPage.events()));
@@ -205,6 +206,8 @@ public class CalendarView implements Serializable {
             moreEventsAvailable = eventPage.hasMore();
         } catch (AuthorizationException | NotFoundException exception) {
             markNotFound();
+        } finally {
+            markAnonymousCalendarPostbackRequirement(actingUser);
         }
     }
 
@@ -239,6 +242,21 @@ public class CalendarView implements Serializable {
                         calendarId,
                         firstResult,
                         EVENT_PAGE_SIZE);
+    }
+
+    private void markAnonymousCalendarPostbackRequirement(ApplicationUser actingUser) {
+        if (actingUser != null) {
+            return;
+        }
+        HttpServletRequest request = (HttpServletRequest) FacesContext.getCurrentInstance()
+                .getExternalContext()
+                .getRequest();
+        boolean postbackRequired = !"HEAD".equalsIgnoreCase(request.getMethod())
+                && available
+                && moreEventsAvailable;
+        request.setAttribute(
+                CalendarRouteFilter.ANONYMOUS_CALENDAR_POSTBACK_REQUIRED_REQUEST_ATTRIBUTE,
+                postbackRequired);
     }
 
     private List<CalendarEventRow> toEventRows(List<CalendarEvent> loadedEvents) {

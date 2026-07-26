@@ -25,7 +25,9 @@ public final class InvitationToken {
                 && normalizedInvitationToken.length() >= MINIMUM_BOOTSTRAP_SECRET_LENGTH
                 && normalizedInvitationToken.length() <= MAXIMUM_LENGTH
                 && normalizedInvitationToken.chars()
-                        .allMatch(character -> Character.isLetterOrDigit(character)
+                        .allMatch(character -> (character >= 'A' && character <= 'Z')
+                                || (character >= 'a' && character <= 'z')
+                                || (character >= '0' && character <= '9')
                                 || character == '-'
                                 || character == '_');
     }

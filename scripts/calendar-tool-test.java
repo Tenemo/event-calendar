@@ -205,6 +205,10 @@ final class CalendarToolTest {
                 CalendarTool.railwayPreviewUrlTestCommand(),
                 "Railway preview URL contract test command");
         assertArrayEquals(
+                new String[] {"node", "scripts/preview-login-test.mjs"},
+                CalendarTool.previewLoginTestCommand(),
+                "Preview login argument contract test command");
+        assertArrayEquals(
                 new String[] {"node", "scripts/lighthouse-browser-test.mjs"},
                 CalendarTool.lighthouseBrowserTestCommand(),
                 "Lighthouse browser lifecycle test command");

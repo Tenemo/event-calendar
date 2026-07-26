@@ -210,6 +210,7 @@ final class CalendarTool extends CalendarToolProcessRunner {
         runCommand("Calendar tool exact source-launch test", sourceLauncherHelpCommand());
         runCommand("Railway configuration contract test", railwayConfigurationTestCommand());
         runCommand("Railway preview URL contract test", railwayPreviewUrlTestCommand());
+        runCommand("Preview login argument contract test", previewLoginTestCommand());
         runCommand("Node dependency installation", npmInstallCommand());
         runCommand("Lighthouse browser lifecycle test", lighthouseBrowserTestCommand());
         runCommand("Build toolchain configuration contract test", buildToolchainConfigurationTestCommand());
@@ -221,6 +222,10 @@ final class CalendarTool extends CalendarToolProcessRunner {
 
     static String[] railwayPreviewUrlTestCommand() {
         return new String[] {"node", "scripts/railway-preview-url-test.mjs"};
+    }
+
+    static String[] previewLoginTestCommand() {
+        return new String[] {"node", "scripts/preview-login-test.mjs"};
     }
 
     static String[] lighthouseBrowserTestCommand() {

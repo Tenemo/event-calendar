@@ -37,8 +37,9 @@ public class SignInAttemptThrottle {
      * in: saturation re-arms on every attempt for as long as the tracker sits at capacity with every
      * entry blocked, so the refusal really lasts until those per-identity blocks expire. This exempt
      * set is what breaks that. A source only joins it by presenting correct credentials, which an
-     * attacker filling the tracker with distinct sources cannot do, and membership waives only the
-     * saturation gate — the source's own blocks still apply, and no active block is ever forgotten.
+     * attacker filling the tracker with distinct sources cannot do. Membership permits the attempt
+     * to use separately bounded reserved tracking capacity, while the source's own limits and blocks
+     * still apply and no active block is ever forgotten.
      */
     static final Duration PROVEN_SOURCE_RETENTION = Duration.ofDays(1);
 
@@ -54,8 +55,12 @@ public class SignInAttemptThrottle {
     private final Duration blockDuration;
     private final int maximumTrackedUsernameAndSourceCombinations;
     private final int maximumTrackedSources;
+    private final int maximumReservedProvenUsernameAndSourceCombinations;
+    private final int maximumReservedProvenSources;
     private final Map<UsernameAndSourceKey, FailedSignInState> usernameAndSourceFailures;
     private final Map<String, FailedSignInState> sourceFailures;
+    private final Map<UsernameAndSourceKey, FailedSignInState> reservedProvenUsernameAndSourceFailures;
+    private final Map<String, FailedSignInState> reservedProvenSourceFailures;
     private final Map<String, Instant> provenSources;
     private Instant saturationBlockedUntil;
 
@@ -92,8 +97,16 @@ public class SignInAttemptThrottle {
         this.blockDuration = blockDuration;
         this.maximumTrackedUsernameAndSourceCombinations = maximumTrackedUsernameAndSourceCombinations;
         this.maximumTrackedSources = maximumTrackedSources;
+        // One source can create at most its source-wide attempt limit in distinct username states
+        // before being blocked, so this bounded product preserves both throttle dimensions.
+        this.maximumReservedProvenSources = Math.min(maximumTrackedSources, MAXIMUM_PROVEN_SOURCES);
+        this.maximumReservedProvenUsernameAndSourceCombinations = saturatedProduct(
+                maximumReservedProvenSources,
+                maximumFailedAttemptsPerSource);
         this.usernameAndSourceFailures = new LinkedHashMap<>(16, 0.75f, true);
         this.sourceFailures = new LinkedHashMap<>(16, 0.75f, true);
+        this.reservedProvenUsernameAndSourceFailures = new LinkedHashMap<>(16, 0.75f, true);
+        this.reservedProvenSourceFailures = new LinkedHashMap<>(16, 0.75f, true);
         this.provenSources = new LinkedHashMap<>(16, 0.75f, true);
     }
 
@@ -106,25 +119,17 @@ public class SignInAttemptThrottle {
         if (!provenSource && isSaturationBlockActive(now)) {
             return false;
         }
-        if (cannotTrackNewState(
-                        sourceFailures,
-                        normalizedSourceKey,
-                        maximumTrackedSources,
-                        now)
-                || cannotTrackNewState(
-                        usernameAndSourceFailures,
+        if (!isAuthenticationAllowed(sourceFailures, normalizedSourceKey, now)
+                || !isAuthenticationAllowed(reservedProvenSourceFailures, normalizedSourceKey, now)
+                || !isAuthenticationAllowed(usernameAndSourceFailures, usernameAndSourceKey, now)
+                || !isAuthenticationAllowed(
+                        reservedProvenUsernameAndSourceFailures,
                         usernameAndSourceKey,
-                        maximumTrackedUsernameAndSourceCombinations,
                         now)) {
-            saturationBlockedUntil = now.plus(saturationBlockDuration());
-            if (!provenSource) {
-                return false;
-            }
-        }
-        if (!isAuthenticationAllowed(sourceFailures, normalizedSourceKey, now)) {
             return false;
         }
-        return isAuthenticationAllowed(usernameAndSourceFailures, usernameAndSourceKey, now);
+
+        return trackingTargets(usernameAndSourceKey, normalizedSourceKey, provenSource, now) != null;
     }
 
     synchronized void recordFailedAuthentication(String normalizedUsername, String sourceIdentifier) {
@@ -132,21 +137,11 @@ public class SignInAttemptThrottle {
         String normalizedSourceKey = ClientSourceKey.of(sourceIdentifier);
         UsernameAndSourceKey usernameAndSourceKey = new UsernameAndSourceKey(
                 usernameKey(normalizedUsername), normalizedSourceKey);
-        boolean usernameAndSourceFailureRecorded = recordFailedAuthentication(
-                usernameAndSourceFailures,
+        recordFailedAuthentication(
                 usernameAndSourceKey,
-                maximumFailedAttemptsPerUsernameAndSource,
-                maximumTrackedUsernameAndSourceCombinations,
-                now);
-        boolean sourceFailureRecorded = recordFailedAuthentication(
-                sourceFailures,
                 normalizedSourceKey,
-                maximumFailedAttemptsPerSource,
-                maximumTrackedSources,
+                isProvenSource(normalizedSourceKey, now),
                 now);
-        if (!usernameAndSourceFailureRecorded || !sourceFailureRecorded) {
-            saturationBlockedUntil = now.plus(saturationBlockDuration());
-        }
     }
 
     /**
@@ -159,11 +154,22 @@ public class SignInAttemptThrottle {
      * abandoned by an exception therefore stays counted, which fails closed.
      */
     synchronized boolean reserveAuthenticationAttempt(String normalizedUsername, String sourceIdentifier) {
-        if (!isAuthenticationAllowed(normalizedUsername, sourceIdentifier)) {
+        Instant now = clock.instant();
+        String normalizedSourceKey = ClientSourceKey.of(sourceIdentifier);
+        UsernameAndSourceKey usernameAndSourceKey = new UsernameAndSourceKey(
+                usernameKey(normalizedUsername), normalizedSourceKey);
+        boolean provenSource = isProvenSource(normalizedSourceKey, now);
+        if ((!provenSource && isSaturationBlockActive(now))
+                || !isAuthenticationAllowed(sourceFailures, normalizedSourceKey, now)
+                || !isAuthenticationAllowed(reservedProvenSourceFailures, normalizedSourceKey, now)
+                || !isAuthenticationAllowed(usernameAndSourceFailures, usernameAndSourceKey, now)
+                || !isAuthenticationAllowed(
+                        reservedProvenUsernameAndSourceFailures,
+                        usernameAndSourceKey,
+                        now)) {
             return false;
         }
-        recordFailedAuthentication(normalizedUsername, sourceIdentifier);
-        return true;
+        return recordFailedAuthentication(usernameAndSourceKey, normalizedSourceKey, provenSource, now);
     }
 
     /** Withdraws the reservation taken by {@link #reserveAuthenticationAttempt} after a correct password. */
@@ -171,27 +177,154 @@ public class SignInAttemptThrottle {
         clearUsernameAndSourceFailures(normalizedUsername, sourceIdentifier);
         String normalizedSourceKey = ClientSourceKey.of(sourceIdentifier);
         recordProvenSource(normalizedSourceKey, clock.instant());
-        FailedSignInState sourceState = sourceFailures.get(normalizedSourceKey);
+        withdrawSourceReservation(sourceFailures, normalizedSourceKey);
+        withdrawSourceReservation(reservedProvenSourceFailures, normalizedSourceKey);
+    }
+
+    synchronized void clearUsernameAndSourceFailures(String normalizedUsername, String sourceIdentifier) {
+        String normalizedSourceKey = ClientSourceKey.of(sourceIdentifier);
+        UsernameAndSourceKey usernameAndSourceKey = new UsernameAndSourceKey(
+                usernameKey(normalizedUsername), normalizedSourceKey);
+        usernameAndSourceFailures.remove(usernameAndSourceKey);
+        reservedProvenUsernameAndSourceFailures.remove(usernameAndSourceKey);
+    }
+
+    synchronized int trackedUsernameAndSourceCount() {
+        return usernameAndSourceFailures.size() + reservedProvenUsernameAndSourceFailures.size();
+    }
+
+    synchronized int trackedSourceCount() {
+        return sourceFailures.size() + reservedProvenSourceFailures.size();
+    }
+
+    synchronized int reservedProvenUsernameAndSourceCount() {
+        return reservedProvenUsernameAndSourceFailures.size();
+    }
+
+    synchronized int reservedProvenSourceCount() {
+        return reservedProvenSourceFailures.size();
+    }
+
+    private boolean recordFailedAuthentication(
+            UsernameAndSourceKey usernameAndSourceKey,
+            String normalizedSourceKey,
+            boolean provenSource,
+            Instant now) {
+        AuthenticationTrackingTargets trackingTargets =
+                trackingTargets(usernameAndSourceKey, normalizedSourceKey, provenSource, now);
+        if (trackingTargets == null) {
+            return false;
+        }
+
+        boolean usernameAndSourceFailureRecorded = recordFailedAuthentication(
+                trackingTargets.usernameAndSourceFailures(),
+                usernameAndSourceKey,
+                maximumFailedAttemptsPerUsernameAndSource,
+                trackingTargets.maximumTrackedUsernameAndSourceCombinations(),
+                now);
+        boolean sourceFailureRecorded = recordFailedAuthentication(
+                trackingTargets.sourceFailures(),
+                normalizedSourceKey,
+                maximumFailedAttemptsPerSource,
+                trackingTargets.maximumTrackedSources(),
+                now);
+        if (!usernameAndSourceFailureRecorded || !sourceFailureRecorded) {
+            saturationBlockedUntil = now.plus(saturationBlockDuration());
+            return false;
+        }
+        return true;
+    }
+
+    private AuthenticationTrackingTargets trackingTargets(
+            UsernameAndSourceKey usernameAndSourceKey,
+            String normalizedSourceKey,
+            boolean provenSource,
+            Instant now) {
+        boolean primaryUsernameAndSourceCapacityUnavailable = cannotTrackNewState(
+                usernameAndSourceFailures,
+                usernameAndSourceKey,
+                maximumTrackedUsernameAndSourceCombinations,
+                now);
+        boolean primarySourceCapacityUnavailable = cannotTrackNewState(
+                sourceFailures,
+                normalizedSourceKey,
+                maximumTrackedSources,
+                now);
+        if (primaryUsernameAndSourceCapacityUnavailable || primarySourceCapacityUnavailable) {
+            saturationBlockedUntil = now.plus(saturationBlockDuration());
+        }
+
+        Map<UsernameAndSourceKey, FailedSignInState> usernameAndSourceTrackingMap = trackingMap(
+                usernameAndSourceFailures,
+                maximumTrackedUsernameAndSourceCombinations,
+                reservedProvenUsernameAndSourceFailures,
+                maximumReservedProvenUsernameAndSourceCombinations,
+                usernameAndSourceKey,
+                provenSource,
+                now);
+        Map<String, FailedSignInState> sourceTrackingMap = trackingMap(
+                sourceFailures,
+                maximumTrackedSources,
+                reservedProvenSourceFailures,
+                maximumReservedProvenSources,
+                normalizedSourceKey,
+                provenSource,
+                now);
+        if (usernameAndSourceTrackingMap == null || sourceTrackingMap == null) {
+            return null;
+        }
+
+        return new AuthenticationTrackingTargets(
+                usernameAndSourceTrackingMap,
+                sourceTrackingMap,
+                usernameAndSourceTrackingMap == usernameAndSourceFailures
+                        ? maximumTrackedUsernameAndSourceCombinations
+                        : maximumReservedProvenUsernameAndSourceCombinations,
+                sourceTrackingMap == sourceFailures
+                        ? maximumTrackedSources
+                        : maximumReservedProvenSources);
+    }
+
+    private <KeyType> Map<KeyType, FailedSignInState> trackingMap(
+            Map<KeyType, FailedSignInState> primaryFailures,
+            int maximumPrimaryTrackedKeys,
+            Map<KeyType, FailedSignInState> reservedProvenFailures,
+            int maximumReservedProvenTrackedKeys,
+            KeyType signInKey,
+            boolean provenSource,
+            Instant now) {
+        removeExpiredStates(primaryFailures, now);
+        removeExpiredStates(reservedProvenFailures, now);
+        if (primaryFailures.containsKey(signInKey)) {
+            return primaryFailures;
+        }
+        if (reservedProvenFailures.containsKey(signInKey)) {
+            return reservedProvenFailures;
+        }
+        if (hasRoomForNewState(primaryFailures, maximumPrimaryTrackedKeys, now)) {
+            return primaryFailures;
+        }
+        if (provenSource
+                && hasRoomForNewState(
+                        reservedProvenFailures,
+                        maximumReservedProvenTrackedKeys,
+                        now)) {
+            return reservedProvenFailures;
+        }
+        return null;
+    }
+
+    private void withdrawSourceReservation(
+            Map<String, FailedSignInState> trackedSourceFailures,
+            String normalizedSourceKey) {
+        FailedSignInState sourceState = trackedSourceFailures.get(normalizedSourceKey);
         if (sourceState == null) {
             return;
         }
         sourceState.withdrawAttempt(maximumFailedAttemptsPerSource);
         if (sourceState.failedAttemptCount == 0) {
-            sourceFailures.remove(normalizedSourceKey);
+            trackedSourceFailures.remove(normalizedSourceKey);
         }
-    }
-
-    synchronized void clearUsernameAndSourceFailures(String normalizedUsername, String sourceIdentifier) {
-        String normalizedSourceKey = ClientSourceKey.of(sourceIdentifier);
-        usernameAndSourceFailures.remove(new UsernameAndSourceKey(usernameKey(normalizedUsername), normalizedSourceKey));
-    }
-
-    synchronized int trackedUsernameAndSourceCount() {
-        return usernameAndSourceFailures.size();
-    }
-
-    synchronized int trackedSourceCount() {
-        return sourceFailures.size();
     }
 
     private <KeyType> boolean isAuthenticationAllowed(
@@ -293,6 +426,17 @@ public class SignInAttemptThrottle {
         return failedSignIns.values().stream().allMatch(failedSignInState -> failedSignInState.isActivelyBlocked(now));
     }
 
+    private <KeyType> boolean hasRoomForNewState(
+            Map<KeyType, FailedSignInState> failedSignIns,
+            int maximumTrackedKeys,
+            Instant now) {
+        if (failedSignIns.size() < maximumTrackedKeys) {
+            return true;
+        }
+        return failedSignIns.values().stream()
+                .anyMatch(failedSignInState -> !failedSignInState.isActivelyBlocked(now));
+    }
+
     private <KeyType> boolean makeRoomForNewState(
             Map<KeyType, FailedSignInState> failedSignIns,
             int maximumTrackedKeys,
@@ -342,6 +486,18 @@ public class SignInAttemptThrottle {
         if (value == null || value.isZero() || value.isNegative()) {
             throw new IllegalArgumentException(valueName + " must be positive.");
         }
+    }
+
+    private static int saturatedProduct(int firstFactor, int secondFactor) {
+        long product = (long) firstFactor * secondFactor;
+        return product >= Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) product;
+    }
+
+    private record AuthenticationTrackingTargets(
+            Map<UsernameAndSourceKey, FailedSignInState> usernameAndSourceFailures,
+            Map<String, FailedSignInState> sourceFailures,
+            int maximumTrackedUsernameAndSourceCombinations,
+            int maximumTrackedSources) {
     }
 
     private record UsernameAndSourceKey(String username, String sourceIdentifier) {

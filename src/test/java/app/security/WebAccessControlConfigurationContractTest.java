@@ -107,6 +107,7 @@ final class WebAccessControlConfigurationContractTest {
                         mappings),
                 () -> assertTrue(Files.isRegularFile(errorPagePath)),
                 () -> assertTrue(errorPageContents.contains("<h1>Something went wrong</h1>")),
+                () -> assertTrue(errorPageContents.contains("<a href=\"/\">Return to the home page</a>")),
                 () -> assertTrue(errorPageContents.contains("name=\"viewport\"")),
                 () -> assertTrue(errorPageContents.contains("@media (forced-colors: active)")),
                 () -> assertFalse(errorPageContents.contains("#{")));
