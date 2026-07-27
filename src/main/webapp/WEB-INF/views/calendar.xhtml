@@ -15,17 +15,8 @@
     </ui:define>
 
     <ui:define name="content">
-        <h:panelGroup id="eventPaginationLiveRegion"
-                      layout="block"
-                      styleClass="visually-hidden"
-                      pt:role="status"
-                      pt:aria-live="polite"
-                      pt:aria-atomic="true">
-            <h:outputText id="eventPaginationAnnouncement"
-                          value="#{calendarView.eventPaginationAnnouncement}"
-                          pt:data-first-new-event-id="#{calendarView.firstNewlyLoadedEventId}"/>
-        </h:panelGroup>
-        <h:panelGroup id="calendarContent" layout="block" styleClass="page-section" rendered="#{calendarView.available}">
+        <h:panelGroup id="calendarPage" layout="block">
+        <h:panelGroup layout="block" styleClass="page-section" rendered="#{calendarView.available}">
             <div class="section-header compact-heading">
                 <div>
                     <div class="heading-meta">
@@ -86,7 +77,7 @@
                                              action="#{calendarView.resetEventForm}"
                                              ajax="true"
                                              process="@this"
-                                             update=":messages :calendarContent"
+                                             update=":messages :calendarPage"
                                              oncomplete="focusElementByIdSuffix('eventTitle');"
                                              styleClass="ui-button-outlined"/>
                         </h:form>
@@ -95,14 +86,14 @@
                     <h:panelGroup layout="block" styleClass="event-board" rendered="#{not empty calendarView.events}">
                         <ui:repeat value="#{calendarView.events}" var="event">
                             <article id="event-#{event.id}"
-                                     class="event-item event-row"
+                                     class="event-item"
                                      tabindex="-1">
                                 <span class="event-date">#{event.dateLabel}</span>
                                 <div class="event-copy">
                                     <h3>#{event.title}</h3>
                                     <p>#{event.scheduleAndLocationLabel}</p>
                                     <h:panelGroup layout="block"
-                                                  styleClass="event-description description-text"
+                                                  styleClass="description-text"
                                                   rendered="#{not empty event.description}">#{event.description}</h:panelGroup>
                                 </div>
                                 <h:panelGroup layout="block" styleClass="row-actions" rendered="#{calendarView.editable}">
@@ -112,7 +103,7 @@
                                                          ariaLabel="Edit #{event.title}"
                                                          ajax="true"
                                                          process="@this"
-                                                         update=":messages :calendarContent"
+                                                         update=":messages :calendarPage"
                                                          oncomplete="focusAfterSuccessfulAjax(args, 'eventTitle');"
                                                          styleClass="ui-button-outlined"/>
                                     </h:form>
@@ -122,7 +113,7 @@
                                                          ariaLabel="Delete #{event.title}"
                                                          ajax="true"
                                                          process="@this"
-                                                         update=":messages :calendarContent"
+                                                         update=":messages :calendarPage"
                                                          oncomplete="focusAfterSuccessfulAjax(args, 'events-heading');"
                                                          styleClass="ui-button-danger ui-button-outlined">
                                             <p:confirm header="Delete event"
@@ -139,15 +130,6 @@
                         </ui:repeat>
                     </h:panelGroup>
                     <h:panelGroup layout="block" styleClass="empty-state" rendered="#{empty calendarView.events}">No events yet.</h:panelGroup>
-                    <h:form rendered="#{calendarView.moreEventsAvailable}" styleClass="event-pagination">
-                        <p:commandButton value="Load more events"
-                                         action="#{calendarView.loadMoreEvents}"
-                                         ajax="true"
-                                         process="@this"
-                                         update=":messages :calendarContent :eventPaginationAnnouncement"
-                                         oncomplete="focusAfterLoadingEvents();"
-                                         styleClass="ui-button-outlined"/>
-                    </h:form>
                 </section>
 
                 <p:panel styleClass="surface-panel event-editor"
@@ -231,21 +213,21 @@
                                              action="#{calendarView.updateEvent}"
                                              ajax="true"
                                              process="@form"
-                                             update=":messages :calendarContent"
+                                             update=":messages :calendarPage"
                                              oncomplete="focusAfterSuccessfulAjax(args, 'events-heading');"
                                              rendered="#{calendarView.editingEvent}"/>
                             <p:commandButton value="Create event"
                                              action="#{calendarView.createEvent}"
                                              ajax="true"
                                              process="@form"
-                                             update=":messages :calendarContent"
+                                             update=":messages :calendarPage"
                                              oncomplete="focusAfterSuccessfulAjax(args, 'events-heading');"
                                              rendered="#{not calendarView.editingEvent}"/>
                             <p:commandButton value="Cancel edit"
                                              action="#{calendarView.resetEventForm}"
                                              ajax="true"
                                              process="@this"
-                                             update=":messages :calendarContent"
+                                             update=":messages :calendarPage"
                                              oncomplete="focusElementByIdSuffix('newEventButton');"
                                              styleClass="ui-button-secondary ui-button-outlined"
                                              rendered="#{calendarView.editingEvent}"/>
@@ -274,6 +256,7 @@
             <h:outputLink value="#{request.contextPath}/app/calendars"
                           styleClass="button-link primary-link"
                           rendered="#{currentUser.signedIn}">My calendars</h:outputLink>
+        </h:panelGroup>
         </h:panelGroup>
     </ui:define>
 </ui:composition>

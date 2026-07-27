@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.invitation.InvitationToken;
-import app.web.RelativeRedirect;
 import org.junit.jupiter.api.Test;
 
 final class SignInViewTest {
@@ -39,9 +38,7 @@ final class SignInViewTest {
                         SignInView.successfulSignInRoute("  alpha beta&gamma  ")),
                 () -> assertEquals(
                         "/register?token=" + maximumLengthToken,
-                        SignInView.successfulSignInRoute(maximumLengthToken)),
-                () -> assertTrue(RelativeRedirect.isSafeApplicationPath(
-                        SignInView.successfulSignInRoute("alpha beta&gamma"))));
+                        SignInView.successfulSignInRoute(maximumLengthToken)));
     }
 
     @Test

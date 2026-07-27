@@ -7,7 +7,7 @@
     <variable name="PORT" defaultValue="9080"/>
     <variable name="HTTPS_PORT" defaultValue="9443"/>
     <variable name="HTTP_HOST" defaultValue="127.0.0.1"/>
-    <variable name="APP_LTPA_KEYS_PASSWORD" defaultValue="local-development-only"/>
+    <variable name="APP_LTPA_KEYS_PASSWORD" value="${env.APP_LTPA_KEYS_PASSWORD}"/>
 
     <variable name="PGHOST" defaultValue="localhost"/>
     <variable name="PGPORT" defaultValue="5432"/>

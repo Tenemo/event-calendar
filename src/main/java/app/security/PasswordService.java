@@ -57,10 +57,6 @@ public class PasswordService {
         }
     }
 
-    public int getMaximumPasswordLength() {
-        return MAXIMUM_PASSWORD_LENGTH;
-    }
-
     public int getMaximumPasswordTransportLength() {
         return MAXIMUM_PASSWORD_TRANSPORT_LENGTH;
     }

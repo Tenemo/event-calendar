@@ -1,6 +1,5 @@
 package app.user;
 
-import app.audit.AuditService;
 import app.security.PasswordService;
 import app.util.AuthorizationException;
 import app.util.ValidationException;
@@ -12,8 +11,6 @@ import jakarta.persistence.NoResultException;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.PersistenceException;
 import java.sql.SQLException;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -27,9 +24,6 @@ public class UserService {
 
     @Inject
     private PasswordService passwordService;
-
-    @Inject
-    private AuditService auditService;
 
     public ApplicationUser createUser(String username, String displayName, String password) {
         String normalizedUsername = normalizeUsername(username);
@@ -47,15 +41,11 @@ public class UserService {
             throw new ValidationException("Username is already registered.");
         }
 
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         ApplicationUser user = new ApplicationUser();
         user.setUsername(normalizedUsername);
         user.setDisplayName(normalizedDisplayName);
         user.setPasswordHash(passwordService.hashPassword(normalizedUsername, password));
         user.setPasswordVersion(0);
-        user.setActive(true);
-        user.setCreatedAt(now);
-        user.setUpdatedAt(now);
         try {
             entityManager.persist(user);
             entityManager.flush();
@@ -73,7 +63,7 @@ public class UserService {
             String currentPassword,
             String newPassword,
             String newPasswordConfirmation) {
-        ApplicationUser user = requireActiveUserForPasswordChange(actingUser);
+        ApplicationUser user = requireUserForPasswordChange(actingUser);
         if (!passwordService.verifyPassword(currentPassword, user.getPasswordHash())) {
             throw new ValidationException("Current password is incorrect.");
         }
@@ -86,12 +76,10 @@ public class UserService {
 
         user.setPasswordHash(passwordService.hashPassword(user.getUsername(), newPassword));
         user.setPasswordVersion(Math.incrementExact(user.getPasswordVersion()));
-        user.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
-        auditService.record(user, null, "app_user", user.getId(), "password_changed", "Password changed.");
         entityManager.flush();
     }
 
-    private Optional<ApplicationUser> findByUsername(String username) {
+    public Optional<ApplicationUser> findByUsername(String username) {
         String normalizedUsername = normalizeUsername(username);
         if (normalizedUsername.isBlank()) {
             return Optional.empty();
@@ -108,11 +96,7 @@ public class UserService {
         }
     }
 
-    public Optional<ApplicationUser> findActiveByUsername(String username) {
-        return findByUsername(username).filter(ApplicationUser::isActive);
-    }
-
-    private ApplicationUser requireActiveUserForPasswordChange(ApplicationUser actingUser) {
+    private ApplicationUser requireUserForPasswordChange(ApplicationUser actingUser) {
         if (actingUser == null || actingUser.getId() == null) {
             throw new AuthorizationException("Sign-in is required.");
         }
@@ -124,9 +108,6 @@ public class UserService {
                     .setParameter("userId", actingUser.getId())
                     .setLockMode(LockModeType.PESSIMISTIC_WRITE)
                     .getSingleResult();
-            if (!user.isActive()) {
-                throw new AuthorizationException("Sign-in is required.");
-            }
             return user;
         } catch (NoResultException exception) {
             throw new AuthorizationException("Sign-in is required.");

@@ -74,7 +74,7 @@ final class AuthenticatedApplicationFilterTest {
                 () -> assertEquals("text/xml;charset=UTF-8", response.contentType),
                 () -> assertEquals(
                         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-                                + "<partial-response><redirect url=\"/shared/login?reauthenticationRequired=true\"/>"
+                                + "<partial-response><redirect url=\"/shared/login\"/>"
                                 + "</partial-response>",
                         response.body.toString()));
     }

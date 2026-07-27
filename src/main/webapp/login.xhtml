@@ -5,8 +5,6 @@
                 xmlns:pt="jakarta.faces.passthrough"
                 template="/WEB-INF/templates/main.xhtml">
     <f:metadata>
-        <!-- Keep the previous continuation parameter readable while new links use token. -->
-        <f:viewParam name="invite" value="#{signInView.invitationToken}"/>
         <f:viewParam name="token" value="#{signInView.invitationToken}"/>
         <f:viewParam name="passwordChanged" value="#{signInView.passwordChangedParameter}"/>
         <f:viewParam name="reauthenticationRequired" value="#{signInView.reauthenticationRequiredParameter}"/>
@@ -33,7 +31,7 @@
                 Your session is no longer valid. Sign in again.
             </h:panelGroup>
             <h:panelGroup layout="block"
-                          styleClass="surface-panel form-panel lightweight-panel"
+                          styleClass="surface-panel lightweight-panel"
                           pt:aria-labelledby="signInHeading">
                 <h:form styleClass="stacked-form">
                     <h:inputHidden id="invitationToken" value="#{signInView.invitationToken}"/>

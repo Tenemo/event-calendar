@@ -7,7 +7,7 @@ import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
 
 @Entity
-@Table(name = "app_registration_bootstrap")
+@Table(name = "registration_bootstrap")
 public class RegistrationBootstrapState {
     public static final short SINGLETON_ID = 1;
 

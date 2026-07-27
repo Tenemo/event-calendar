@@ -5,9 +5,7 @@ import app.invitation.InvitationAdmissionPreview;
 import app.invitation.InvitationService;
 import app.invitation.InvitationToken;
 import app.security.AuthenticatedSessionSecurity;
-import app.security.AuthenticationAuditService;
 import app.security.CurrentUser;
-import app.security.PasswordValidationState;
 import app.util.AuthorizationException;
 import app.util.ValidationException;
 import app.web.RelativeRedirect;
@@ -24,11 +22,9 @@ import jakarta.security.enterprise.credential.UsernamePasswordCredential;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
-import java.util.OptionalLong;
 
 @Named
 @RequestScoped
@@ -48,12 +44,6 @@ public class RegistrationView {
     @Inject
     private InvitationService invitationService;
 
-    @Inject
-    private PasswordValidationState passwordValidationState;
-
-    @Inject
-    private AuthenticationAuditService authenticationAuditService;
-
     private String username;
     private String displayName;
     private String calendarName;
@@ -63,16 +53,16 @@ public class RegistrationView {
     private boolean invitationTokenRequestParametersInspected;
     private InvitationAdmissionPreview invitationPreview;
 
-    public void register() throws IOException, ServletException {
+    public void register() throws ServletException {
         try {
-            registrationService.register(
+            ApplicationUser registeredUser = registrationService.register(
                     invitationToken(),
                     username,
                     displayName,
                     password,
                     passwordConfirmation,
                     calendarName);
-            authenticateAndRedirect();
+            authenticateAndRedirect(registeredUser.getPasswordVersion());
         } catch (ValidationException exception) {
             FacesContext.getCurrentInstance().addMessage(
                     null,
@@ -80,7 +70,7 @@ public class RegistrationView {
         }
     }
 
-    public void acceptInvitation() throws IOException {
+    public void acceptInvitation() {
         try {
             Invitation invitation = invitationService.acceptInvitation(invitationToken(), currentUser.require());
             String route = invitation.getCalendar() == null
@@ -190,7 +180,6 @@ public class RegistrationView {
         if (!invitationTokenRequestParametersInspected && facesContext != null) {
             invitationToken = ViewParameterParser.invitationToken(
                             facesContext.getExternalContext().getRequestParameterValuesMap(),
-                            false,
                             facesContext.isPostback())
                     .orElse("");
             invitationTokenRequestParametersInspected = true;
@@ -201,7 +190,7 @@ public class RegistrationView {
         return invitationToken;
     }
 
-    private void authenticateAndRedirect() throws IOException, ServletException {
+    private void authenticateAndRedirect(long passwordVersion) throws ServletException {
         FacesContext facesContext = FacesContext.getCurrentInstance();
         HttpServletRequest request = (HttpServletRequest) facesContext.getExternalContext().getRequest();
         HttpServletResponse response = (HttpServletResponse) facesContext.getExternalContext().getResponse();
@@ -214,17 +203,7 @@ public class RegistrationView {
                         .newAuthentication(true));
 
         if (status == AuthenticationStatus.SUCCESS) {
-            OptionalLong validatedPasswordVersion = passwordValidationState.consumeValidatedPasswordVersion(
-                    securityContext.getCallerPrincipal());
-            if (validatedPasswordVersion.isEmpty()) {
-                AuthenticatedSessionSecurity.invalidateSessionAndLogout(request);
-                authenticationAuditService.recordForcedSessionInvalidation();
-                redirectToLoginAfterRegistration(facesContext);
-                return;
-            }
-            AuthenticatedSessionSecurity.establishAuthenticatedSession(
-                    request,
-                    validatedPasswordVersion.getAsLong());
+            AuthenticatedSessionSecurity.establishAuthenticatedSession(request, passwordVersion);
             RelativeRedirect.send(facesContext, "/app/calendars");
         } else if (status == AuthenticationStatus.SEND_CONTINUE) {
             facesContext.responseComplete();
@@ -233,7 +212,7 @@ public class RegistrationView {
         }
     }
 
-    private void redirectToLoginAfterRegistration(FacesContext facesContext) throws IOException {
+    private void redirectToLoginAfterRegistration(FacesContext facesContext) {
         facesContext.addMessage(
                 null,
                 new FacesMessage(FacesMessage.SEVERITY_INFO, "Registration succeeded.", "Sign in with the new account."));

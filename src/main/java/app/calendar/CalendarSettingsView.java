@@ -7,8 +7,8 @@ import app.util.AuthorizationException;
 import app.util.ConflictException;
 import app.util.NotFoundException;
 import app.util.ValidationException;
-import app.web.ViewParameterParser;
 import app.web.FacesMessages;
+import app.web.ViewParameterParser;
 import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
 import jakarta.faces.view.ViewScoped;
@@ -103,7 +103,10 @@ public class CalendarSettingsView implements Serializable {
 
     private void markNotFound() {
         available = false;
-        FacesContext.getCurrentInstance().getExternalContext().setResponseStatus(HttpServletResponse.SC_NOT_FOUND);
+        FacesContext facesContext = FacesContext.getCurrentInstance();
+        if (!facesContext.isPostback()) {
+            facesContext.getExternalContext().setResponseStatus(HttpServletResponse.SC_NOT_FOUND);
+        }
     }
 
     private void addMessage(FacesMessage.Severity severity, String summary, String detail) {

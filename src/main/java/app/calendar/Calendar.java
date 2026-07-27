@@ -1,17 +1,12 @@
 package app.calendar;
 
-import app.user.ApplicationUser;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
-import java.time.OffsetDateTime;
 
 @Entity
 @Table(name = "calendar")
@@ -25,31 +20,18 @@ public class Calendar {
 
     private String description;
 
-    @Column(name = "public_token", nullable = false, unique = true, length = CalendarLinkToken.ENCODED_LENGTH)
+    @Column(name = "calendar_link_token", nullable = false, unique = true, length = CalendarLinkToken.ENCODED_LENGTH)
     private String calendarLinkToken;
 
-    @Column(name = "timezone", nullable = false, length = 80)
+    @Column(name = "time_zone", nullable = false, length = 80)
     private String timeZone = "Europe/Warsaw";
 
     @Column(name = "public_access_enabled", nullable = false)
     private boolean publicAccessEnabled = true;
 
-    @Column(nullable = false)
-    private boolean active = true;
-
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "created_by_user_id", nullable = false)
-    private ApplicationUser createdByUser;
-
     @Version
     @Column(nullable = false)
     private int version;
-
-    @Column(name = "created_at", nullable = false)
-    private OffsetDateTime createdAt;
-
-    @Column(name = "updated_at", nullable = false)
-    private OffsetDateTime updatedAt;
 
     public Long getId() {
         return id;
@@ -95,35 +77,8 @@ public class Calendar {
         this.publicAccessEnabled = publicAccessEnabled;
     }
 
-    public boolean isActive() {
-        return active;
-    }
-
-    public void setActive(boolean active) {
-        this.active = active;
-    }
-
-    public void setCreatedByUser(ApplicationUser createdByUser) {
-        this.createdByUser = createdByUser;
-    }
-
     public int getVersion() {
         return version;
     }
 
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(OffsetDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public OffsetDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(OffsetDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
 }

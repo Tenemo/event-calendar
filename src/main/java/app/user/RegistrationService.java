@@ -1,7 +1,5 @@
 package app.user;
 
-import app.audit.AuditService;
-import app.calendar.Calendar;
 import app.calendar.CalendarService;
 import app.invitation.InvitationService;
 import app.util.ValidationException;
@@ -15,9 +13,6 @@ public class RegistrationService {
 
     @Inject
     private CalendarService calendarService;
-
-    @Inject
-    private AuditService auditService;
 
     @Inject
     private InvitationService invitationService;
@@ -36,9 +31,8 @@ public class RegistrationService {
                 calendarService.normalizeAndValidateCalendarName(initialCalendarName);
         RegistrationAdmission admission = invitationService.claimRegistrationAdmission(invitationToken);
         ApplicationUser user = userService.createUser(username, displayName, password);
-        Calendar calendar = calendarService.createCalendar(user, normalizedInitialCalendarName);
+        calendarService.createCalendar(user, normalizedInitialCalendarName);
         invitationService.acceptAdmission(admission, user);
-        auditService.record(user, calendar, "app_user", user.getId(), "registered", "User registered.");
         return user;
     }
 }

@@ -21,16 +21,6 @@
     </filter>
 
     <filter>
-        <filter-name>Session cookie refresh filter</filter-name>
-        <filter-class>app.security.SessionCookieRefreshFilter</filter-class>
-    </filter>
-
-    <filter>
-        <filter-name>Request body security filter</filter-name>
-        <filter-class>app.security.RequestBodySecurityFilter</filter-class>
-    </filter>
-
-    <filter>
         <filter-name>Calendar route filter</filter-name>
         <filter-class>app.calendar.CalendarRouteFilter</filter-class>
     </filter>
@@ -49,22 +39,9 @@
     </filter-mapping>
 
     <filter-mapping>
-        <filter-name>Request body security filter</filter-name>
-        <url-pattern>/*</url-pattern>
-        <dispatcher>REQUEST</dispatcher>
-    </filter-mapping>
-
-    <filter-mapping>
         <filter-name>Calendar route filter</filter-name>
         <url-pattern>/*</url-pattern>
         <dispatcher>REQUEST</dispatcher>
-    </filter-mapping>
-
-    <filter-mapping>
-        <filter-name>Session cookie refresh filter</filter-name>
-        <url-pattern>/*</url-pattern>
-        <dispatcher>REQUEST</dispatcher>
-        <dispatcher>FORWARD</dispatcher>
     </filter-mapping>
 
     <filter-mapping>

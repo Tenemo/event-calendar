@@ -13,7 +13,8 @@
     <ui:define name="title">Calendar settings - Shared calendar</ui:define>
 
     <ui:define name="content">
-        <h:panelGroup id="settingsContent" layout="block" styleClass="page-section" rendered="#{calendarSettingsView.available}">
+        <h:panelGroup id="settingsPage" layout="block">
+        <h:panelGroup layout="block" styleClass="page-section" rendered="#{calendarSettingsView.available}">
             <div class="section-header compact-heading">
                 <div>
                     <p class="eyebrow">Calendar administration</p>
@@ -59,7 +60,7 @@
                                          action="#{calendarSettingsView.save}"
                                          ajax="true"
                                          process="@form"
-                                         update=":messages :settingsContent"
+                                         update=":messages :settingsPage"
                                          oncomplete="focusAfterSuccessfulAjax(args, 'settingsHeading');"/>
                     </h:form>
                 </p:panel>
@@ -81,6 +82,7 @@
         <h:panelGroup layout="block" styleClass="narrow-section not-found-state" rendered="#{not calendarSettingsView.available}">
             <h1>Calendar not found</h1>
             <p>The calendar does not exist or you do not have admin access.</p>
+        </h:panelGroup>
         </h:panelGroup>
     </ui:define>
 </ui:composition>

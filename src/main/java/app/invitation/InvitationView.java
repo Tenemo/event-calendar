@@ -7,6 +7,7 @@ import app.user.ApplicationUser;
 import app.util.AuthorizationException;
 import app.util.NotFoundException;
 import app.util.ValidationException;
+import app.web.FacesMessages;
 import app.web.ViewParameterParser;
 import jakarta.annotation.PostConstruct;
 import jakarta.faces.application.FacesMessage;
@@ -16,12 +17,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import java.io.Serializable;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Map;
-import org.primefaces.model.FilterMeta;
-import org.primefaces.model.LazyDataModel;
-import org.primefaces.model.SortMeta;
 
 @Named
 @ViewScoped
@@ -38,48 +34,50 @@ public class InvitationView implements Serializable {
     @Inject
     private ApplicationUrlService applicationUrlService;
 
-    @Inject
-    private InvitationPolicy invitationPolicy;
-
     private Long selectedCalendarId;
     private List<EditableCalendarOption> editableCalendars = List.of();
-    private LazyDataModel<InvitationRow> invitations;
+    private List<InvitationRow> invitations = List.of();
     private String generatedInvitationLink;
-    private long snapshotMaximumInvitationId;
 
     @PostConstruct
     public void load() {
         ApplicationUser actingUser = currentUser.require();
         editableCalendars = calendarService.findCalendarsForUser(actingUser).stream()
-                .map(calendar -> new EditableCalendarOption(calendar.getCalendarId(), calendar.getCalendarName()))
+                .map(calendar -> new EditableCalendarOption(
+                        calendar.getCalendarId(), calendar.getCalendarName()))
                 .toList();
-        refreshInvitationSnapshot(actingUser);
+        refreshInvitations(actingUser);
     }
 
     public void createRegistrationInvitation() {
-        try {
-            ApplicationUser actingUser = currentUser.require();
-            Invitation invitation = invitationService.createRegistrationInvitation(actingUser);
-            generatedInvitationLink = invitationLink(invitation.getInvitationToken());
-            refreshInvitationSnapshot(actingUser);
-            addMessage(FacesMessage.SEVERITY_INFO, "Registration invitation created.", "Share the generated link directly.");
-        } catch (AuthorizationException | ValidationException exception) {
-            addMessage(FacesMessage.SEVERITY_ERROR, "Invitation failed.", exception.getMessage());
-        }
+        createInvitation(null);
     }
 
     public void createEditorInvitation() {
+        if (selectedCalendarId == null) {
+            FacesMessages.add(
+                    FacesMessage.SEVERITY_ERROR,
+                    "Invitation failed.",
+                    "Calendar is required.");
+            return;
+        }
+        createInvitation(selectedCalendarId);
+    }
+
+    private void createInvitation(Long calendarId) {
         try {
-            if (selectedCalendarId == null) {
-                throw new ValidationException("Calendar is required.");
-            }
             ApplicationUser actingUser = currentUser.require();
-            Invitation invitation = invitationService.createCalendarEditorInvitation(actingUser, selectedCalendarId);
+            Invitation invitation = calendarId == null
+                    ? invitationService.createRegistrationInvitation(actingUser)
+                    : invitationService.createCalendarEditorInvitation(actingUser, calendarId);
             generatedInvitationLink = invitationLink(invitation.getInvitationToken());
-            refreshInvitationSnapshot(actingUser);
-            addMessage(FacesMessage.SEVERITY_INFO, "Editor invitation created.", "Share the generated link directly.");
+            refreshInvitations(actingUser);
+            FacesMessages.add(
+                    FacesMessage.SEVERITY_INFO,
+                    "Invitation created.",
+                    "Share the generated link directly.");
         } catch (AuthorizationException | NotFoundException | ValidationException exception) {
-            addMessage(FacesMessage.SEVERITY_ERROR, "Invitation failed.", exception.getMessage());
+            FacesMessages.add(FacesMessage.SEVERITY_ERROR, "Invitation failed.", exception.getMessage());
         }
     }
 
@@ -91,15 +89,36 @@ public class InvitationView implements Serializable {
                     .getRequestParameterMap()
                     .get("invitationId"));
             invitationService.revokeInvitation(actingUser, invitationId);
-            addMessage(FacesMessage.SEVERITY_INFO, "Invitation revoked.", "The link can no longer be used.");
+            refreshInvitations(actingUser);
+            FacesMessages.add(
+                    FacesMessage.SEVERITY_INFO,
+                    "Invitation revoked.",
+                    "The link can no longer be used.");
         } catch (AuthorizationException | NotFoundException | ValidationException exception) {
-            addMessage(FacesMessage.SEVERITY_ERROR, "Revoke failed.", exception.getMessage());
+            FacesMessages.add(FacesMessage.SEVERITY_ERROR, "Revoke failed.", exception.getMessage());
         }
     }
 
     static Long parseInvitationId(String submittedInvitationId) {
         return ViewParameterParser.positiveLong(submittedInvitationId)
                 .orElseThrow(() -> new ValidationException("Invitation is invalid."));
+    }
+
+    private void refreshInvitations(ApplicationUser actingUser) {
+        invitations = invitationService.listOutstandingInvitations(actingUser).stream()
+                .map(invitation -> new InvitationRow(
+                        invitation.id(),
+                        invitationLink(invitation.invitationToken()),
+                        invitation.calendarName() == null
+                                ? "Registration invitation"
+                                : "Editor: " + invitation.calendarName(),
+                        invitation.createdAt(),
+                        invitation.expiresAt()))
+                .toList();
+    }
+
+    private String invitationLink(String invitationToken) {
+        return applicationUrlService.linkTo("/register?token=" + invitationToken);
     }
 
     public Long getSelectedCalendarId() {
@@ -118,7 +137,7 @@ public class InvitationView implements Serializable {
         return !editableCalendars.isEmpty();
     }
 
-    public LazyDataModel<InvitationRow> getInvitations() {
+    public List<InvitationRow> getInvitations() {
         return invitations;
     }
 
@@ -128,81 +147,6 @@ public class InvitationView implements Serializable {
 
     public boolean hasGeneratedInvitationLink() {
         return generatedInvitationLink != null && !generatedInvitationLink.isBlank();
-    }
-
-    private InvitationRow toRow(InvitationSummary invitation, OffsetDateTime currentTime) {
-        InvitationStatus status = invitationPolicy.status(
-                invitation.revokedAt(),
-                invitation.acceptedAt(),
-                invitation.expiresAt(),
-                currentTime);
-        String statusLabel = status == InvitationStatus.AVAILABLE && !invitation.admissionAvailable()
-                ? "Unavailable"
-                : invitationStatus(status);
-        return new InvitationRow(
-                invitation.id(),
-                invitationLink(invitation.invitationToken()),
-                invitationScope(invitation),
-                statusLabel,
-                invitation.createdAt(),
-                status.isRevocable());
-    }
-
-    private String invitationScope(InvitationSummary invitation) {
-        if (invitation.calendarName() == null) {
-            return "Registration invitation";
-        }
-        return "Editor: " + invitation.calendarName();
-    }
-
-    private String invitationStatus(InvitationStatus status) {
-        return switch (status) {
-            case AVAILABLE -> "Available";
-            case ACCEPTED -> "Accepted";
-            case REVOKED -> "Revoked";
-            case EXPIRED -> "Expired";
-        };
-    }
-
-    private String invitationLink(String invitationToken) {
-        return applicationUrlService.linkTo("/register?token=" + invitationToken);
-    }
-
-    private void addMessage(FacesMessage.Severity severity, String summary, String detail) {
-        FacesContext.getCurrentInstance().addMessage(null, new FacesMessage(severity, summary, detail));
-    }
-
-    private void refreshInvitationSnapshot(ApplicationUser actingUser) {
-        snapshotMaximumInvitationId = invitationService.captureInvitationSnapshot(actingUser);
-        invitations = new InvitationLazyDataModel();
-    }
-
-    private final class InvitationLazyDataModel extends LazyDataModel<InvitationRow> {
-        @Override
-        public int count(Map<String, FilterMeta> filterMetadata) {
-            return Math.toIntExact(invitationService.countInvitations(
-                    currentUser.require(),
-                    snapshotMaximumInvitationId));
-        }
-
-        @Override
-        public List<InvitationRow> load(
-                int firstResult,
-                int pageSize,
-                Map<String, SortMeta> sortMetadata,
-                Map<String, FilterMeta> filterMetadata) {
-            OffsetDateTime currentTime = OffsetDateTime.now(ZoneOffset.UTC);
-            return invitationService
-                    .listInvitations(
-                            currentUser.require(),
-                            snapshotMaximumInvitationId,
-                            firstResult,
-                            pageSize,
-                            currentTime)
-                    .stream()
-                    .map(invitation -> toRow(invitation, currentTime))
-                    .toList();
-        }
     }
 
     public static final class EditableCalendarOption implements Serializable {
@@ -227,23 +171,20 @@ public class InvitationView implements Serializable {
         private final Long id;
         private final String invitationLink;
         private final String scope;
-        private final String status;
         private final OffsetDateTime createdAt;
-        private final boolean revocable;
+        private final OffsetDateTime expiresAt;
 
         private InvitationRow(
                 Long id,
                 String invitationLink,
                 String scope,
-                String status,
                 OffsetDateTime createdAt,
-                boolean revocable) {
+                OffsetDateTime expiresAt) {
             this.id = id;
             this.invitationLink = invitationLink;
             this.scope = scope;
-            this.status = status;
             this.createdAt = createdAt;
-            this.revocable = revocable;
+            this.expiresAt = expiresAt;
         }
 
         public Long getId() {
@@ -258,16 +199,12 @@ public class InvitationView implements Serializable {
             return scope;
         }
 
-        public String getStatus() {
-            return status;
-        }
-
         public OffsetDateTime getCreatedAt() {
             return createdAt;
         }
 
-        public boolean isRevocable() {
-            return revocable;
+        public OffsetDateTime getExpiresAt() {
+            return expiresAt;
         }
     }
 }

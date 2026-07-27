@@ -1,9 +1,6 @@
 package app.calendar;
 
 import app.event.CalendarEvent;
-import app.event.CalendarEventCursor;
-import app.event.CalendarEventPage;
-import app.event.CalendarEventRevision;
 import app.event.CalendarEventRow;
 import app.event.CalendarEventService;
 import app.event.EventFormState;
@@ -24,20 +21,14 @@ import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import java.io.IOException;
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 @Named
 @ViewScoped
 public class CalendarView implements Serializable {
-    private static final int EVENT_PAGE_SIZE = 50;
-    private static final int MAXIMUM_EVENT_PAGE_RESTARTS = 3;
     private static final String MEMBER_CALENDARS_ROUTE = "/app/calendars";
 
     @Inject
@@ -65,28 +56,25 @@ public class CalendarView implements Serializable {
     private boolean publicAccessEnabled;
     private boolean available;
     private List<CalendarEventRow> events = List.of();
-    private boolean moreEventsAvailable;
-    private CalendarEventCursor eventCursor;
-    private CalendarEventRevision eventRevision;
-    private Long firstNewlyLoadedEventId;
-    private String eventPaginationAnnouncement;
-
     private final EventFormState eventForm = new EventFormState();
 
     public void load() {
         try {
             FacesContext facesContext = FacesContext.getCurrentInstance();
             HttpServletRequest request = (HttpServletRequest) facesContext.getExternalContext().getRequest();
-            if (Boolean.TRUE.equals(request.getAttribute(CalendarRouteFilter.CALENDAR_NOT_FOUND_REQUEST_ATTRIBUTE))) {
+            if (Boolean.TRUE.equals(request.getAttribute(
+                    CalendarRouteFilter.CALENDAR_NOT_FOUND_REQUEST_ATTRIBUTE))) {
                 throw new NotFoundException("Calendar was not found.");
             }
 
             calendarLinkToken = (String) request.getAttribute(
                     CalendarRouteFilter.CALENDAR_LINK_TOKEN_REQUEST_ATTRIBUTE);
             ApplicationUser actingUser = currentUser.find().orElse(null);
-            Calendar calendar = (Calendar) request.getAttribute(CalendarRouteFilter.CALENDAR_REQUEST_ATTRIBUTE);
+            Calendar calendar = (Calendar) request.getAttribute(
+                    CalendarRouteFilter.CALENDAR_REQUEST_ATTRIBUTE);
             if (calendar == null) {
-                calendar = calendarAccessService.requireCalendarReadableByLinkToken(actingUser, calendarLinkToken);
+                calendar = calendarAccessService.requireCalendarReadableByLinkToken(
+                        actingUser, calendarLinkToken);
             }
             calendarId = calendar.getId();
             calendarVersion = calendar.getVersion();
@@ -96,22 +84,16 @@ public class CalendarView implements Serializable {
             publicAccessEnabled = calendar.isPublicAccessEnabled();
             role = actingUser == null
                     ? null
-                    : calendarAccessService.findActiveRole(actingUser, calendarId).orElse(null);
+                    : calendarAccessService.findRole(actingUser, calendarId).orElse(null);
             available = true;
-            if (!reloadEvents(actingUser)) {
-                addMessage(
-                        FacesMessage.SEVERITY_WARN,
-                        "Events could not be loaded.",
-                        "Events kept changing while they were loading. Reload the page to try again.");
-            }
-            markAnonymousCalendarPostbackRequirement(actingUser);
+            reloadEvents(actingUser);
             resetEventForm();
         } catch (AuthorizationException | NotFoundException exception) {
             markNotFound();
         }
     }
 
-    public void regenerateCalendarLink() throws IOException {
+    public void regenerateCalendarLink() {
         ApplicationUser actingUser = null;
         try {
             actingUser = currentUser.require();
@@ -119,27 +101,26 @@ public class CalendarView implements Serializable {
                     actingUser, calendarId, calendarVersion);
             calendarLinkToken = calendar.getCalendarLinkToken();
             calendarVersion = calendar.getVersion();
-            FacesContext facesContext = FacesContext.getCurrentInstance();
-            RelativeRedirect.send(facesContext, "/" + calendarLinkToken);
+            RelativeRedirect.send(FacesContext.getCurrentInstance(), "/" + calendarLinkToken);
         } catch (AuthorizationException | ConflictException | NotFoundException exception) {
-            FacesContext facesContext = FacesContext.getCurrentInstance();
-            addMessage(FacesMessage.SEVERITY_ERROR, "Calendar link could not be regenerated.", exception.getMessage());
+            FacesMessages.add(
+                    FacesMessage.SEVERITY_ERROR,
+                    "Calendar link could not be regenerated.",
+                    exception.getMessage());
             RelativeRedirect.sendKeepingMessages(
-                    facesContext,
-                    currentMemberCalendarRoute(actingUser));
+                    FacesContext.getCurrentInstance(), currentMemberCalendarRoute(actingUser));
         }
     }
 
-    String currentMemberCalendarRoute(ApplicationUser actingUser) {
+    private String currentMemberCalendarRoute(ApplicationUser actingUser) {
         if (actingUser == null || calendarId == null) {
             return MEMBER_CALENDARS_ROUTE;
         }
         return calendarService.findCalendarsForUser(actingUser).stream()
-                .filter(calendarMembership ->
-                        calendarId.equals(calendarMembership.getCalendarId()))
+                .filter(membership -> calendarId.equals(membership.getCalendarId()))
                 .map(CalendarMembershipSummary::getCalendarLinkToken)
                 .filter(CalendarLinkToken::isValid)
-                .map(calendarToken -> "/" + calendarToken)
+                .map(token -> "/" + token)
                 .findFirst()
                 .orElse(MEMBER_CALENDARS_ROUTE);
     }
@@ -159,35 +140,32 @@ public class CalendarView implements Serializable {
                     calendarVersion,
                     timeZone);
         } catch (AuthorizationException | ConflictException | NotFoundException | ValidationException exception) {
-            addMessage(FacesMessage.SEVERITY_ERROR, "Event could not be created.", exception.getMessage());
+            FacesMessages.add(
+                    FacesMessage.SEVERITY_ERROR, "Event could not be created.", exception.getMessage());
             return;
         }
 
         resetEventForm();
-        addMessage(FacesMessage.SEVERITY_INFO, "Event created.", "The event is now on the calendar.");
-        reloadEventsAfterCommittedChange(actingUser);
+        FacesMessages.add(FacesMessage.SEVERITY_INFO, "Event created.", "The event is now on the calendar.");
+        reloadEventsAfterChange(actingUser);
     }
 
     public void selectEvent(Long eventId) {
-        CalendarEventRow event = events.stream()
-                .filter(candidate -> candidate.getId().equals(eventId))
+        events.stream()
+                .filter(event -> event.getId().equals(eventId))
                 .findFirst()
-                .orElse(null);
-        if (event == null) {
-            addMessage(
-                    FacesMessage.SEVERITY_ERROR,
-                    "Event could not be selected.",
-                    "The event is no longer available. Reload the page and try again.");
-            return;
-        }
-        eventForm.select(event);
+                .ifPresentOrElse(
+                        eventForm::select,
+                        () -> FacesMessages.add(
+                                FacesMessage.SEVERITY_ERROR,
+                                "Event could not be selected.",
+                                "The event is no longer available. Reload the page and try again."));
     }
 
     public void updateEvent() {
         ApplicationUser actingUser;
         try {
-            if (eventForm.getSelectedEventId() == null
-                    || eventForm.getSelectedEventVersion() == null) {
+            if (eventForm.getSelectedEventId() == null || eventForm.getSelectedEventVersion() == null) {
                 throw new ValidationException("Select an event to edit.");
             }
             eventForm.applyAllDaySelection(timeZone);
@@ -203,13 +181,14 @@ public class CalendarView implements Serializable {
                     calendarVersion,
                     timeZone);
         } catch (AuthorizationException | ConflictException | NotFoundException | ValidationException exception) {
-            addMessage(FacesMessage.SEVERITY_ERROR, "Event could not be updated.", exception.getMessage());
+            FacesMessages.add(
+                    FacesMessage.SEVERITY_ERROR, "Event could not be updated.", exception.getMessage());
             return;
         }
 
         resetEventForm();
-        addMessage(FacesMessage.SEVERITY_INFO, "Event updated.", "Your changes were saved.");
-        reloadEventsAfterCommittedChange(actingUser);
+        FacesMessages.add(FacesMessage.SEVERITY_INFO, "Event updated.", "Your changes were saved.");
+        reloadEventsAfterChange(actingUser);
     }
 
     public void deleteEvent(Long eventId, Integer eventVersion) {
@@ -218,54 +197,16 @@ public class CalendarView implements Serializable {
             actingUser = currentUser.require();
             calendarEventService.deleteEvent(actingUser, eventId, eventVersion);
         } catch (AuthorizationException | ConflictException | NotFoundException exception) {
-            addMessage(FacesMessage.SEVERITY_ERROR, "Event could not be deleted.", exception.getMessage());
+            FacesMessages.add(
+                    FacesMessage.SEVERITY_ERROR, "Event could not be deleted.", exception.getMessage());
             return;
         }
 
         if (eventId != null && eventId.equals(eventForm.getSelectedEventId())) {
             resetEventForm();
         }
-        addMessage(FacesMessage.SEVERITY_INFO, "Event deleted.", "The event was removed.");
-        reloadEventsAfterCommittedChange(actingUser);
-    }
-
-    public void loadMoreEvents() {
-        ApplicationUser actingUser = currentUser.find().orElse(null);
-        List<CalendarEventRow> previouslyLoadedEvents = events;
-        firstNewlyLoadedEventId = null;
-        eventPaginationAnnouncement = null;
-        try {
-            CalendarEventPage eventPage = loadEventPage(
-                    actingUser,
-                    eventCursor,
-                    eventRevision);
-            if (eventPage.restartRequired()) {
-                if (!reloadEvents(
-                        actingUser,
-                        previouslyLoadedEvents.size() + EVENT_PAGE_SIZE)) {
-                    eventPaginationAnnouncement =
-                            "Events kept changing and could not be refreshed. Try again.";
-                    addMessage(
-                            FacesMessage.SEVERITY_WARN,
-                            "Events could not be refreshed.",
-                            "Events kept changing while they were loading. Try again.");
-                    return;
-                }
-                describePaginationResult(previouslyLoadedEvents, true);
-                return;
-            }
-            List<CalendarEventRow> expandedEvents = new ArrayList<>(events);
-            expandedEvents.addAll(toEventRows(eventPage.events()));
-            events = List.copyOf(expandedEvents);
-            moreEventsAvailable = eventPage.hasMore();
-            eventCursor = eventPage.nextCursor();
-            eventRevision = eventPage.revision();
-            describePaginationResult(previouslyLoadedEvents, false);
-        } catch (AuthorizationException | NotFoundException exception) {
-            markNotFound();
-        } finally {
-            markAnonymousCalendarPostbackRequirement(actingUser);
-        }
+        FacesMessages.add(FacesMessage.SEVERITY_INFO, "Event deleted.", "The event was removed.");
+        reloadEventsAfterChange(actingUser);
     }
 
     public void resetEventForm() {
@@ -276,124 +217,21 @@ public class CalendarView implements Serializable {
         eventForm.changeAllDayMode(timeZone);
     }
 
-    private boolean reloadEvents(ApplicationUser actingUser) {
-        return reloadEvents(actingUser, Math.max(EVENT_PAGE_SIZE, events.size()));
-    }
-
-    private boolean reloadEvents(ApplicationUser actingUser, int minimumNumberOfEvents) {
-        int eventsToReload = Math.max(EVENT_PAGE_SIZE, minimumNumberOfEvents);
-        for (int restartCount = 0;
-                restartCount < MAXIMUM_EVENT_PAGE_RESTARTS;
-                restartCount++) {
-            List<CalendarEventRow> reloadedEvents = new ArrayList<>();
-            CalendarEventCursor reloadCursor = null;
-            CalendarEventRevision reloadRevision = null;
-            CalendarEventPage eventPage;
-            boolean restartRequired = false;
-            do {
-                eventPage = loadEventPage(
-                        actingUser,
-                        reloadCursor,
-                        reloadRevision);
-                if (eventPage.restartRequired()) {
-                    restartRequired = true;
-                    break;
-                }
-                reloadRevision = eventPage.revision();
-                reloadedEvents.addAll(toEventRows(eventPage.events()));
-                reloadCursor = eventPage.nextCursor();
-            } while (eventPage.hasMore() && reloadedEvents.size() < eventsToReload);
-            if (restartRequired) {
-                continue;
-            }
-
-            events = List.copyOf(reloadedEvents);
-            moreEventsAvailable = eventPage.hasMore();
-            eventCursor = reloadCursor;
-            eventRevision = reloadRevision;
-            return true;
-        }
-        return false;
-    }
-
-    private CalendarEventPage loadEventPage(
-            ApplicationUser actingUser,
-            CalendarEventCursor afterCursor,
-            CalendarEventRevision expectedRevision) {
-        return role == null
-                ? calendarEventService.findPublicEvents(
-                        calendarLinkToken,
-                        afterCursor,
-                        expectedRevision,
-                        EVENT_PAGE_SIZE)
-                : calendarEventService.findEventsForMember(
-                        actingUser,
-                        calendarId,
-                        afterCursor,
-                        expectedRevision,
-                        EVENT_PAGE_SIZE);
-    }
-
-    void describePaginationResult(
-            List<CalendarEventRow> previouslyLoadedEvents,
-            boolean refreshed) {
-        Set<Long> previouslyLoadedEventIds = new HashSet<>();
-        previouslyLoadedEvents.forEach(event -> previouslyLoadedEventIds.add(event.getId()));
-        List<CalendarEventRow> newlyVisibleEvents = events.stream()
-                .filter(event -> !previouslyLoadedEventIds.contains(event.getId()))
-                .toList();
-        firstNewlyLoadedEventId = newlyVisibleEvents.isEmpty()
-                ? null
-                : newlyVisibleEvents.getFirst().getId();
-        if (refreshed) {
-            eventPaginationAnnouncement = newlyVisibleEvents.isEmpty()
-                    ? "Events changed, so the list was refreshed. "
-                            + "Total events shown: " + events.size() + "."
-                    : "Events changed, so the list was refreshed. "
-                            + "New events shown: " + newlyVisibleEvents.size() + ". "
-                            + "Total events shown: " + events.size() + ".";
-            return;
-        }
-        eventPaginationAnnouncement = "Loaded "
-                + newlyVisibleEvents.size()
-                + " more events. "
-                + "Total events shown: "
-                + events.size()
-                + ".";
-    }
-
-    private void markAnonymousCalendarPostbackRequirement(ApplicationUser actingUser) {
-        if (actingUser != null) {
-            return;
-        }
-        HttpServletRequest request = (HttpServletRequest) FacesContext.getCurrentInstance()
-                .getExternalContext()
-                .getRequest();
-        boolean postbackRequired = !"HEAD".equalsIgnoreCase(request.getMethod())
-                && available
-                && moreEventsAvailable;
-        request.setAttribute(
-                CalendarRouteFilter.ANONYMOUS_CALENDAR_POSTBACK_REQUIRED_REQUEST_ATTRIBUTE,
-                postbackRequired);
-    }
-
-    private List<CalendarEventRow> toEventRows(List<CalendarEvent> loadedEvents) {
-        return loadedEvents.stream()
+    private void reloadEvents(ApplicationUser actingUser) {
+        List<CalendarEvent> loadedEvents = role == null
+                ? calendarEventService.findPublicEvents(calendarLinkToken)
+                : calendarEventService.findEventsForMember(actingUser, calendarId);
+        events = loadedEvents.stream()
                 .map(event -> CalendarEventRow.from(event, timeZone, calendarTimeService))
                 .toList();
     }
 
-    private void reloadEventsAfterCommittedChange(ApplicationUser actingUser) {
+    private void reloadEventsAfterChange(ApplicationUser actingUser) {
         try {
-            if (!reloadEvents(actingUser)) {
-                addMessage(
-                        FacesMessage.SEVERITY_WARN,
-                        "The change was saved, but the page could not be refreshed.",
-                        "Events kept changing while they were loading. Open the calendar again to see its current events.");
-            }
+            reloadEvents(actingUser);
         } catch (AuthorizationException | NotFoundException exception) {
             markNotFound();
-            addMessage(
+            FacesMessages.add(
                     FacesMessage.SEVERITY_WARN,
                     "The change was saved, but the page could not be refreshed.",
                     "Open the calendar again to see its current events.");
@@ -403,11 +241,9 @@ public class CalendarView implements Serializable {
     private void markNotFound() {
         available = false;
         FacesContext facesContext = FacesContext.getCurrentInstance();
-        facesContext.getExternalContext().setResponseStatus(HttpServletResponse.SC_NOT_FOUND);
-    }
-
-    private void addMessage(FacesMessage.Severity severity, String summary, String detail) {
-        FacesMessages.add(severity, summary, detail);
+        if (!facesContext.isPostback()) {
+            facesContext.getExternalContext().setResponseStatus(HttpServletResponse.SC_NOT_FOUND);
+        }
     }
 
     public Long getCalendarId() { return calendarId; }
@@ -420,9 +256,6 @@ public class CalendarView implements Serializable {
     public boolean isEditable() { return role != null; }
     public boolean isAdmin() { return role == CalendarRole.ADMIN; }
     public List<CalendarEventRow> getEvents() { return events; }
-    public boolean isMoreEventsAvailable() { return moreEventsAvailable; }
-    public Long getFirstNewlyLoadedEventId() { return firstNewlyLoadedEventId; }
-    public String getEventPaginationAnnouncement() { return eventPaginationAnnouncement; }
     public boolean isEditingEvent() { return eventForm.isEditing(); }
     public String getEventTitle() { return eventForm.getTitle(); }
     public void setEventTitle(String eventTitle) { eventForm.setTitle(eventTitle); }
@@ -440,7 +273,5 @@ public class CalendarView implements Serializable {
     public void setEventLastDay(LocalDate eventLastDay) { eventForm.setLastDay(eventLastDay); }
     public boolean isEventAllDay() { return eventForm.isAllDay(); }
     public boolean isEventAllDaySelection() { return eventForm.isAllDaySelection(); }
-    public void setEventAllDaySelection(boolean eventAllDaySelection) {
-        eventForm.setAllDaySelection(eventAllDaySelection);
-    }
+    public void setEventAllDaySelection(boolean selected) { eventForm.setAllDaySelection(selected); }
 }

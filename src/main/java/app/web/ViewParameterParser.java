@@ -28,7 +28,6 @@ public final class ViewParameterParser {
 
     public static Optional<String> invitationToken(
             Map<String, String[]> requestParameters,
-            boolean acceptLegacyInviteParameter,
             boolean acceptSubmittedComponentParameterNames) {
         if (requestParameters == null || requestParameters.isEmpty()) {
             return Optional.empty();
@@ -38,9 +37,7 @@ public final class ViewParameterParser {
         int invitationTokenValueCount = 0;
         for (Map.Entry<String, String[]> requestParameter : requestParameters.entrySet()) {
             if (!isInvitationTokenParameter(
-                    requestParameter.getKey(),
-                    acceptLegacyInviteParameter,
-                    acceptSubmittedComponentParameterNames)) {
+                    requestParameter.getKey(), acceptSubmittedComponentParameterNames)) {
                 continue;
             }
             String[] submittedValues = requestParameter.getValue();
@@ -64,10 +61,8 @@ public final class ViewParameterParser {
 
     private static boolean isInvitationTokenParameter(
             String parameterName,
-            boolean acceptLegacyInviteParameter,
             boolean acceptSubmittedComponentParameterNames) {
         return "token".equals(parameterName)
-                || (acceptLegacyInviteParameter && "invite".equals(parameterName))
                 || (acceptSubmittedComponentParameterNames
                         && ("invitationToken".equals(parameterName)
                                 || (parameterName != null

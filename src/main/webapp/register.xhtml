@@ -15,7 +15,7 @@
         <section class="narrow-section">
             <h:panelGroup layout="block" rendered="#{not registrationView.invitationAvailable}">
                 <h1 id="unavailableInvitationHeading">Invitation unavailable</h1>
-                <p:panel styleClass="surface-panel form-panel" pt:aria-labelledby="unavailableInvitationHeading">
+                <p:panel styleClass="surface-panel" pt:aria-labelledby="unavailableInvitationHeading">
                     <p>Invitation is invalid or no longer available.</p>
                     <h:outputLink value="#{request.contextPath}/">Return to the home page</h:outputLink>
                 </p:panel>
@@ -24,10 +24,7 @@
             <h:panelGroup layout="block"
                           rendered="#{registrationView.invitationAvailable and registrationView.signedIn and registrationView.calendarEditorInvitation}">
                 <h1 id="acceptInvitationHeading">Accept invitation</h1>
-                <p:panel
-                         styleClass="surface-panel form-panel"
-                         pt:aria-labelledby="acceptInvitationHeading"
-                         rendered="#{registrationView.invitationAvailable and registrationView.signedIn and registrationView.calendarEditorInvitation}">
+                <p:panel styleClass="surface-panel" pt:aria-labelledby="acceptInvitationHeading">
                     <h:form styleClass="stacked-form">
                         <h:inputHidden id="invitationToken" value="#{registrationView.invitationToken}"/>
                         <p>
@@ -48,7 +45,7 @@
             <h:panelGroup layout="block"
                           rendered="#{registrationView.invitationAvailable and registrationView.signedIn and registrationView.registrationInvitation}">
                 <h1 id="registrationInvitationHeading">Registration invitation</h1>
-                <p:panel styleClass="surface-panel form-panel" pt:aria-labelledby="registrationInvitationHeading">
+                <p:panel styleClass="surface-panel" pt:aria-labelledby="registrationInvitationHeading">
                     <p>This invitation only creates a new account and cannot be applied to an account that is already signed in.</p>
                     <ui:fragment rendered="#{registrationView.hasInvitationExpiration()}">
                         <p class="field-help">This invitation expires <h:outputText value="#{registrationView.invitationExpiration}"/>.</p>
@@ -60,9 +57,7 @@
             <h:panelGroup layout="block"
                           rendered="#{registrationView.invitationAvailable and not registrationView.signedIn}">
                 <h1 id="createAccountHeading">Create your calendar</h1>
-                <p:panel
-                         styleClass="surface-panel form-panel"
-                         pt:aria-labelledby="createAccountHeading">
+                <p:panel styleClass="surface-panel" pt:aria-labelledby="createAccountHeading">
                     <ui:fragment rendered="#{registrationView.registrationInvitation}">
                         <p>This registration invitation creates a new account and its first calendar.</p>
                     </ui:fragment>
@@ -78,49 +73,49 @@
                     <h:form styleClass="stacked-form">
                         <h:inputHidden id="invitationToken" value="#{registrationView.invitationToken}"/>
 
-                    <p:outputLabel for="username" value="Username"/>
-                    <p:inputText id="username"
-                                 value="#{registrationView.username}"
-                                 autocomplete="username"
-                                 pt:maxlength="80"
-                                 required="true"
-                                 requiredMessage="Username is required."/>
+                        <p:outputLabel for="username" value="Username"/>
+                        <p:inputText id="username"
+                                     value="#{registrationView.username}"
+                                     autocomplete="username"
+                                     pt:maxlength="80"
+                                     required="true"
+                                     requiredMessage="Username is required."/>
 
-                    <p:outputLabel for="displayName" value="Display name"/>
-                    <p:inputText id="displayName"
-                                 value="#{registrationView.displayName}"
-                                 autocomplete="name"
-                                 pt:maxlength="160"
-                                 required="true"
-                                 requiredMessage="Display name is required."/>
+                        <p:outputLabel for="displayName" value="Display name"/>
+                        <p:inputText id="displayName"
+                                     value="#{registrationView.displayName}"
+                                     autocomplete="name"
+                                     pt:maxlength="160"
+                                     required="true"
+                                     requiredMessage="Display name is required."/>
 
-                    <p:outputLabel for="calendarName" value="Calendar name"/>
-                    <p:inputText id="calendarName"
-                                 value="#{registrationView.calendarName}"
-                                 pt:maxlength="160"
-                                 required="true"
-                                 requiredMessage="Calendar name is required."/>
+                        <p:outputLabel for="calendarName" value="Calendar name"/>
+                        <p:inputText id="calendarName"
+                                     value="#{registrationView.calendarName}"
+                                     pt:maxlength="160"
+                                     required="true"
+                                     requiredMessage="Calendar name is required."/>
 
-                    <p:outputLabel for="password" value="Password"/>
-                    <p:password id="password"
-                                value="#{registrationView.password}"
-                                autocomplete="new-password"
-                                pt:aria-describedby="passwordRequirements"
-                                feedback="false"
-                                maxlength="#{passwordService.maximumPasswordTransportLength}"
-                                required="true"
-                                requiredMessage="Password is required."/>
-                    <small id="passwordRequirements" class="field-help">Use at least 15 characters.</small>
+                        <p:outputLabel for="password" value="Password"/>
+                        <p:password id="password"
+                                    value="#{registrationView.password}"
+                                    autocomplete="new-password"
+                                    pt:aria-describedby="passwordRequirements"
+                                    feedback="false"
+                                    maxlength="#{passwordService.maximumPasswordTransportLength}"
+                                    required="true"
+                                    requiredMessage="Password is required."/>
+                        <small id="passwordRequirements" class="field-help">Use at least 15 characters.</small>
 
-                    <p:outputLabel for="passwordConfirmation" value="Confirm password"/>
-                    <p:password id="passwordConfirmation"
-                                value="#{registrationView.passwordConfirmation}"
-                                autocomplete="new-password"
-                                pt:aria-describedby="passwordRequirements"
-                                feedback="false"
-                                maxlength="#{passwordService.maximumPasswordTransportLength}"
-                                required="true"
-                                requiredMessage="Password confirmation is required."/>
+                        <p:outputLabel for="passwordConfirmation" value="Confirm password"/>
+                        <p:password id="passwordConfirmation"
+                                    value="#{registrationView.passwordConfirmation}"
+                                    autocomplete="new-password"
+                                    pt:aria-describedby="passwordRequirements"
+                                    feedback="false"
+                                    maxlength="#{passwordService.maximumPasswordTransportLength}"
+                                    required="true"
+                                    requiredMessage="Password confirmation is required."/>
 
                         <p:commandButton value="Register" action="#{registrationView.register}" ajax="false"/>
                     </h:form>

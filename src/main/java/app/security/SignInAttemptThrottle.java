@@ -10,177 +10,72 @@ import java.util.Objects;
 
 @ApplicationScoped
 public class SignInAttemptThrottle {
-    static final int MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE = 5;
-    static final int MAXIMUM_FAILED_ATTEMPTS_PER_SOURCE = 25;
+    static final int MAXIMUM_FAILED_ATTEMPTS = 5;
     static final Duration FAILURE_WINDOW = Duration.ofMinutes(15);
     static final int MAXIMUM_TRACKED_KEYS = 1_000;
 
-    private static final int MAXIMUM_TRACKED_USERNAME_LENGTH = 80;
-    private static final String OVERSIZED_USERNAME_KEY = "<oversized-username>";
+    private static final int MAXIMUM_USERNAME_LENGTH = 80;
+    private static final int MAXIMUM_SOURCE_LENGTH = 128;
 
     private final Clock clock;
-    private final int maximumUsernameAndSourceAttempts;
-    private final int maximumSourceAttempts;
-    private final Duration failureWindow;
-    private final int maximumTrackedKeys;
-    private final Map<UsernameAndSourceKey, AttemptWindow> usernameAndSourceAttempts =
-            new LinkedHashMap<>(16, 0.75f, true);
-    private final Map<String, AttemptWindow> sourceAttempts =
+    private final Map<AttemptKey, AttemptWindow> attempts =
             new LinkedHashMap<>(16, 0.75f, true);
 
     public SignInAttemptThrottle() {
-        this(
-                Clock.systemUTC(),
-                MAXIMUM_FAILED_ATTEMPTS_PER_USERNAME_AND_SOURCE,
-                MAXIMUM_FAILED_ATTEMPTS_PER_SOURCE,
-                FAILURE_WINDOW,
-                MAXIMUM_TRACKED_KEYS);
+        this(Clock.systemUTC());
     }
 
-    SignInAttemptThrottle(
-            Clock clock,
-            int maximumUsernameAndSourceAttempts,
-            int maximumSourceAttempts,
-            Duration failureWindow,
-            int maximumTrackedKeys) {
+    SignInAttemptThrottle(Clock clock) {
         this.clock = Objects.requireNonNull(clock);
-        this.maximumUsernameAndSourceAttempts = requirePositive(
-                maximumUsernameAndSourceAttempts,
-                "Maximum username and source attempts");
-        this.maximumSourceAttempts = requirePositive(
-                maximumSourceAttempts,
-                "Maximum source attempts");
-        this.failureWindow = requirePositive(failureWindow, "Failure window");
-        this.maximumTrackedKeys = requirePositive(maximumTrackedKeys, "Maximum tracked keys");
     }
 
-    synchronized boolean reserveAuthenticationAttempt(
-            String normalizedUsername,
-            String sourceIdentifier) {
+    synchronized boolean reserveAuthenticationAttempt(String username, String source) {
         Instant now = clock.instant();
-        String sourceKey = ClientSourceKey.of(sourceIdentifier);
-        UsernameAndSourceKey usernameAndSourceKey = new UsernameAndSourceKey(
-                usernameKey(normalizedUsername),
-                sourceKey);
-        AttemptWindow usernameAndSourceWindow = activeWindow(
-                usernameAndSourceAttempts,
-                usernameAndSourceKey,
-                now);
-        AttemptWindow sourceWindow = activeWindow(sourceAttempts, sourceKey, now);
-        if (attemptCount(usernameAndSourceWindow) >= maximumUsernameAndSourceAttempts
-                || attemptCount(sourceWindow) >= maximumSourceAttempts) {
+        removeExpiredAttempts(now);
+        AttemptKey key = new AttemptKey(bounded(username, MAXIMUM_USERNAME_LENGTH), bounded(source, MAXIMUM_SOURCE_LENGTH));
+        AttemptWindow window = attempts.get(key);
+        if (window != null && window.attemptCount >= MAXIMUM_FAILED_ATTEMPTS) {
             return false;
         }
-
-        increment(usernameAndSourceAttempts, usernameAndSourceKey, usernameAndSourceWindow, now);
-        increment(sourceAttempts, sourceKey, sourceWindow, now);
+        if (window == null) {
+            if (attempts.size() >= MAXIMUM_TRACKED_KEYS) {
+                attempts.remove(attempts.keySet().iterator().next());
+            }
+            window = new AttemptWindow(now);
+            attempts.put(key, window);
+        }
+        window.attemptCount++;
         return true;
     }
 
-    synchronized void withdrawAuthenticationAttempt(
-            String normalizedUsername,
-            String sourceIdentifier) {
-        String sourceKey = ClientSourceKey.of(sourceIdentifier);
-        decrement(
-                usernameAndSourceAttempts,
-                new UsernameAndSourceKey(usernameKey(normalizedUsername), sourceKey));
-        decrement(sourceAttempts, sourceKey);
+    synchronized void withdrawAuthenticationAttempt(String username, String source) {
+        decrement(new AttemptKey(bounded(username, MAXIMUM_USERNAME_LENGTH), bounded(source, MAXIMUM_SOURCE_LENGTH)));
     }
 
-    synchronized void releaseSuccessfulAttempt(
-            String normalizedUsername,
-            String sourceIdentifier) {
-        String sourceKey = ClientSourceKey.of(sourceIdentifier);
-        usernameAndSourceAttempts.remove(
-                new UsernameAndSourceKey(usernameKey(normalizedUsername), sourceKey));
-        decrement(sourceAttempts, sourceKey);
+    synchronized void releaseSuccessfulAttempt(String username, String source) {
+        attempts.remove(new AttemptKey(bounded(username, MAXIMUM_USERNAME_LENGTH), bounded(source, MAXIMUM_SOURCE_LENGTH)));
     }
 
-    synchronized int trackedUsernameAndSourceCount() {
-        removeExpiredWindows(usernameAndSourceAttempts, clock.instant());
-        return usernameAndSourceAttempts.size();
-    }
-
-    synchronized int trackedSourceCount() {
-        removeExpiredWindows(sourceAttempts, clock.instant());
-        return sourceAttempts.size();
-    }
-
-    private <KeyType> AttemptWindow activeWindow(
-            Map<KeyType, AttemptWindow> windows,
-            KeyType key,
-            Instant now) {
-        AttemptWindow window = windows.get(key);
-        if (window != null && window.hasExpired(now, failureWindow)) {
-            windows.remove(key);
-            return null;
-        }
-        return window;
-    }
-
-    private <KeyType> void increment(
-            Map<KeyType, AttemptWindow> windows,
-            KeyType key,
-            AttemptWindow window,
-            Instant now) {
-        AttemptWindow activeWindow = window;
-        if (activeWindow == null) {
-            if (windows.size() >= maximumTrackedKeys) {
-                windows.remove(windows.keySet().iterator().next());
-            }
-            activeWindow = new AttemptWindow(now);
-            windows.put(key, activeWindow);
-        }
-        activeWindow.attemptCount++;
-    }
-
-    private static <KeyType> void decrement(
-            Map<KeyType, AttemptWindow> windows,
-            KeyType key) {
-        AttemptWindow window = windows.get(key);
-        if (window == null) {
-            return;
-        }
-        window.attemptCount--;
-        if (window.attemptCount <= 0) {
-            windows.remove(key);
+    private void decrement(AttemptKey key) {
+        AttemptWindow window = attempts.get(key);
+        if (window == null || --window.attemptCount <= 0) {
+            attempts.remove(key);
         }
     }
 
-    private <KeyType> void removeExpiredWindows(
-            Map<KeyType, AttemptWindow> windows,
-            Instant now) {
-        windows.values().removeIf(window -> window.hasExpired(now, failureWindow));
+    private void removeExpiredAttempts(Instant now) {
+        attempts.values().removeIf(window -> !now.isBefore(window.startedAt.plus(FAILURE_WINDOW)));
     }
 
-    private static int attemptCount(AttemptWindow window) {
-        return window == null ? 0 : window.attemptCount;
-    }
-
-    private static String usernameKey(String normalizedUsername) {
-        if (normalizedUsername == null) {
-            return "";
+    private static String bounded(String value, int maximumLength) {
+        if (value == null || value.isBlank()) {
+            return "<unknown>";
         }
-        return normalizedUsername.length() <= MAXIMUM_TRACKED_USERNAME_LENGTH
-                ? normalizedUsername
-                : OVERSIZED_USERNAME_KEY;
+        String normalizedValue = value.trim();
+        return normalizedValue.length() <= maximumLength ? normalizedValue : "<oversized>";
     }
 
-    private static int requirePositive(int value, String description) {
-        if (value < 1) {
-            throw new IllegalArgumentException(description + " must be positive.");
-        }
-        return value;
-    }
-
-    private static Duration requirePositive(Duration value, String description) {
-        if (value == null || value.isZero() || value.isNegative()) {
-            throw new IllegalArgumentException(description + " must be positive.");
-        }
-        return value;
-    }
-
-    private record UsernameAndSourceKey(String username, String sourceIdentifier) {
+    private record AttemptKey(String username, String source) {
     }
 
     private static final class AttemptWindow {
@@ -189,10 +84,6 @@ public class SignInAttemptThrottle {
 
         private AttemptWindow(Instant startedAt) {
             this.startedAt = startedAt;
-        }
-
-        private boolean hasExpired(Instant now, Duration duration) {
-            return !now.isBefore(startedAt.plus(duration));
         }
     }
 }

@@ -19,10 +19,7 @@ public class CalendarRouteFilter implements Filter {
     public static final String CALENDAR_LINK_TOKEN_REQUEST_ATTRIBUTE = "calendarLinkToken";
     public static final String CALENDAR_NOT_FOUND_REQUEST_ATTRIBUTE = "calendarNotFound";
     public static final String CALENDAR_REQUEST_ATTRIBUTE = "calendar";
-    public static final String ANONYMOUS_CALENDAR_POSTBACK_REQUIRED_REQUEST_ATTRIBUTE =
-            "anonymousCalendarPostbackRequired";
-
-    private static final String CALENDAR_TEMPLATE_PATH = "/calendar.xhtml";
+    private static final String CALENDAR_TEMPLATE_PATH = "/WEB-INF/views/calendar.xhtml";
     @Inject
     private CalendarAccessService calendarAccessService;
 
@@ -40,11 +37,6 @@ public class CalendarRouteFilter implements Filter {
             return;
         }
 
-        if (isLegacyCalendarRoute(request)) {
-            response.sendError(HttpServletResponse.SC_NOT_FOUND);
-            return;
-        }
-
         String calendarLinkToken = CalendarLinkToken.fromRequestPath(
                 request.getContextPath(), request.getRequestURI());
         if (calendarLinkToken == null) {
@@ -52,26 +44,17 @@ public class CalendarRouteFilter implements Filter {
             return;
         }
 
-        if (!isReadOnlyRequest(request)) {
+        if (!isSupportedCalendarRequest(request)) {
             filterChain.doFilter(request, response);
             return;
         }
         forwardCalendar(request, response, calendarLinkToken);
     }
 
-    private static boolean isReadOnlyRequest(HttpServletRequest request) {
+    private static boolean isSupportedCalendarRequest(HttpServletRequest request) {
         return "GET".equalsIgnoreCase(request.getMethod())
-                || "HEAD".equalsIgnoreCase(request.getMethod());
-    }
-
-    private static boolean isLegacyCalendarRoute(HttpServletRequest request) {
-        String contextPath = request.getContextPath();
-        String requestUri = request.getRequestURI();
-        if (contextPath == null || requestUri == null || !requestUri.startsWith(contextPath)) {
-            return false;
-        }
-        String applicationPath = requestUri.substring(contextPath.length());
-        return applicationPath.equals("/calendar") || applicationPath.startsWith("/calendar/");
+                || "HEAD".equalsIgnoreCase(request.getMethod())
+                || "POST".equalsIgnoreCase(request.getMethod());
     }
 
     private void forwardCalendar(

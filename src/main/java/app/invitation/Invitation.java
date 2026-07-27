@@ -1,12 +1,9 @@
 package app.invitation;
 
 import app.calendar.Calendar;
-import app.membership.CalendarRole;
 import app.user.ApplicationUser;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -17,7 +14,7 @@ import jakarta.persistence.Table;
 import java.time.OffsetDateTime;
 
 @Entity
-@Table(name = "app_invitation")
+@Table(name = "invitation")
 public class Invitation {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -28,29 +25,15 @@ public class Invitation {
     private Calendar calendar;
 
     @Column(
-            name = "invite_token",
+            name = "invitation_token",
             nullable = false,
             unique = true,
             length = InvitationToken.MAXIMUM_LENGTH)
     private String invitationToken;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "role_name", length = 20)
-    private CalendarRole role;
-
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "created_by_user_id", nullable = false)
     private ApplicationUser createdByUser;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "accepted_by_user_id")
-    private ApplicationUser acceptedByUser;
-
-    @Column(name = "revoked_at")
-    private OffsetDateTime revokedAt;
-
-    @Column(name = "accepted_at")
-    private OffsetDateTime acceptedAt;
 
     @Column(name = "expires_at", nullable = false)
     private OffsetDateTime expiresAt;
@@ -78,44 +61,12 @@ public class Invitation {
         this.invitationToken = invitationToken;
     }
 
-    public CalendarRole getRole() {
-        return role;
-    }
-
-    public void setRole(CalendarRole role) {
-        this.role = role;
-    }
-
     public ApplicationUser getCreatedByUser() {
         return createdByUser;
     }
 
     public void setCreatedByUser(ApplicationUser createdByUser) {
         this.createdByUser = createdByUser;
-    }
-
-    public ApplicationUser getAcceptedByUser() {
-        return acceptedByUser;
-    }
-
-    public void setAcceptedByUser(ApplicationUser acceptedByUser) {
-        this.acceptedByUser = acceptedByUser;
-    }
-
-    public OffsetDateTime getRevokedAt() {
-        return revokedAt;
-    }
-
-    public void setRevokedAt(OffsetDateTime revokedAt) {
-        this.revokedAt = revokedAt;
-    }
-
-    public OffsetDateTime getAcceptedAt() {
-        return acceptedAt;
-    }
-
-    public void setAcceptedAt(OffsetDateTime acceptedAt) {
-        this.acceptedAt = acceptedAt;
     }
 
     public OffsetDateTime getExpiresAt() {

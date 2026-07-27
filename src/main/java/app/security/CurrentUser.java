@@ -47,7 +47,7 @@ public class CurrentUser {
         if (callerPrincipal == null) {
             return Optional.empty();
         }
-        return userService.findActiveByUsername(callerPrincipal.getName())
+        return userService.findByUsername(callerPrincipal.getName())
                 .filter(user -> AuthenticatedSessionSecurity.hasCurrentPasswordVersion(request, user));
     }
 }

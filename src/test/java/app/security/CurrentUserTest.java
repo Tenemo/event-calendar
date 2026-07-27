@@ -22,8 +22,8 @@ import org.junit.jupiter.api.Test;
 
 final class CurrentUserTest {
     @Test
-    void signedInRequiresAnActiveApplicationUser() {
-        ApplicationUser activeUser = activeUser("piotr");
+    void signedInRequiresAnApplicationUserWithTheCurrentPasswordVersion() {
+        ApplicationUser activeUser = user("piotr");
         RecordingUserService userService = new RecordingUserService(Optional.of(activeUser));
         CurrentUser currentUser = currentUser("piotr", userService);
 
@@ -48,7 +48,7 @@ final class CurrentUserTest {
 
     @Test
     void missingPrincipalIsNotSignedInAndDoesNotQueryUsers() {
-        RecordingUserService userService = new RecordingUserService(Optional.of(activeUser("piotr")));
+        RecordingUserService userService = new RecordingUserService(Optional.of(user("piotr")));
         CurrentUser currentUser = currentUser(null, userService);
 
         assertAll(
@@ -59,7 +59,7 @@ final class CurrentUserTest {
 
     @Test
     void passwordVersionMismatchRejectsAnOtherwiseActiveAuthenticatedSession() {
-        ApplicationUser activeUser = activeUser("piotr");
+        ApplicationUser activeUser = user("piotr");
         activeUser.setPasswordVersion(4);
         RecordingUserService userService = new RecordingUserService(Optional.of(activeUser));
         CurrentUser currentUser = currentUser("piotr", userService, 3);
@@ -126,11 +126,10 @@ final class CurrentUserTest {
                 });
     }
 
-    private static ApplicationUser activeUser(String username) {
+    private static ApplicationUser user(String username) {
         ApplicationUser user = new ApplicationUser();
         user.setUsername(username);
         user.setDisplayName("Piotr");
-        user.setActive(true);
         return user;
     }
 
@@ -144,7 +143,7 @@ final class CurrentUserTest {
         }
 
         @Override
-        public Optional<ApplicationUser> findActiveByUsername(String username) {
+        public Optional<ApplicationUser> findByUsername(String username) {
             lookupCount++;
             lastUsername = username;
             return user;

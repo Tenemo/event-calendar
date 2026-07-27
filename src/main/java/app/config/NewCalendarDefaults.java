@@ -27,7 +27,7 @@ public class NewCalendarDefaults {
             defaultTimeZone = calendarTimeService.normalizeTimeZone(configuredDefaultTimeZone);
         } catch (ValidationException exception) {
             throw new IllegalStateException(
-                    "APP_TIMEZONE must be a valid IANA time zone such as Europe/Warsaw.", exception);
+                    "APP_DEFAULT_TIME_ZONE must be a valid IANA time zone such as Europe/Warsaw.", exception);
         }
     }
 

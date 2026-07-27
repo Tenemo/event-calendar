@@ -1,7 +1,6 @@
 package app.user;
 
 import app.security.AuthenticatedSessionSecurity;
-import app.security.AuthenticationAuditService;
 import app.security.CurrentUser;
 import app.util.AuthorizationException;
 import app.util.ValidationException;
@@ -13,7 +12,6 @@ import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
-import java.io.IOException;
 
 @Named
 @RequestScoped
@@ -24,14 +22,11 @@ public class AccountSettingsView {
     @Inject
     private UserService userService;
 
-    @Inject
-    private AuthenticationAuditService authenticationAuditService;
-
     private String currentPassword;
     private String newPassword;
     private String newPasswordConfirmation;
 
-    public void changePassword() throws IOException, ServletException {
+    public void changePassword() throws ServletException {
         try {
             userService.changePassword(
                     currentUser.require(),
@@ -53,11 +48,10 @@ public class AccountSettingsView {
         return currentUser.require().getUsername();
     }
 
-    private void signOutAndRedirect() throws IOException, ServletException {
+    private void signOutAndRedirect() throws ServletException {
         FacesContext facesContext = FacesContext.getCurrentInstance();
         HttpServletRequest request = (HttpServletRequest) facesContext.getExternalContext().getRequest();
         AuthenticatedSessionSecurity.invalidateSessionAndLogout(request);
-        authenticationAuditService.recordForcedSessionInvalidation();
         RelativeRedirect.send(facesContext, "/login?passwordChanged=true");
     }
 

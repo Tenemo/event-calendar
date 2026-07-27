@@ -7,8 +7,8 @@ import app.user.ApplicationUser;
 import app.util.AuthorizationException;
 import app.util.NotFoundException;
 import app.util.ValidationException;
-import app.web.ViewParameterParser;
 import app.web.FacesMessages;
+import app.web.ViewParameterParser;
 import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
 import jakarta.faces.view.ViewScoped;
@@ -59,47 +59,29 @@ public class CalendarMembersView implements Serializable {
     }
 
     public void saveRole(Long userId, CalendarRole role) {
-        updateMemberRole(userId, role, false);
-    }
-
-    public void reactivateMembership(Long userId, CalendarRole role) {
-        updateMemberRole(userId, role, true);
-    }
-
-    private void updateMemberRole(Long userId, CalendarRole role, boolean reactivationRequested) {
         ApplicationUser actingUser;
         try {
             actingUser = currentUser.require();
-            if (reactivationRequested) {
-                calendarMembershipService.reactivateMembership(actingUser, calendarId, userId, role);
-            } else {
-                calendarMembershipService.changeMemberRole(actingUser, calendarId, userId, role);
-            }
+            calendarMembershipService.changeMemberRole(actingUser, calendarId, userId, role);
         } catch (ValidationException exception) {
             reloadMembersAfterRejectedChange();
             addMessage(
                     FacesMessage.SEVERITY_ERROR,
-                    reactivationRequested
-                            ? "Member access could not be reactivated."
-                            : "Member role could not be saved.",
+                    "Member role could not be saved.",
                     exception.getMessage());
             return;
         } catch (AuthorizationException | NotFoundException exception) {
             addMessage(
                     FacesMessage.SEVERITY_ERROR,
-                    reactivationRequested
-                            ? "Member access could not be reactivated."
-                            : "Member role could not be saved.",
+                    "Member role could not be saved.",
                     exception.getMessage());
             return;
         }
 
         addMessage(
                 FacesMessage.SEVERITY_INFO,
-                reactivationRequested ? "Member access reactivated." : "Member role saved.",
-                reactivationRequested
-                        ? "The member can edit this calendar again with the selected role."
-                        : "The member's role has been updated.");
+                "Member role saved.",
+                "The member's role has been updated.");
         reloadMembersAfterCommittedChange(actingUser);
     }
 
@@ -107,7 +89,7 @@ public class CalendarMembersView implements Serializable {
         ApplicationUser actingUser;
         try {
             actingUser = currentUser.require();
-            calendarMembershipService.deactivateMembership(actingUser, calendarId, userId);
+            calendarMembershipService.removeMembership(actingUser, calendarId, userId);
         } catch (ValidationException exception) {
             reloadMembersAfterRejectedChange();
             addMessage(FacesMessage.SEVERITY_ERROR, "Member access could not be removed.", exception.getMessage());
@@ -131,7 +113,6 @@ public class CalendarMembersView implements Serializable {
                         member.getUser().getDisplayName(),
                         member.getUser().getUsername(),
                         member.getRole(),
-                        member.isActive(),
                         member.getUser().getId().equals(currentUserId)))
                 .toList();
     }
@@ -158,7 +139,10 @@ public class CalendarMembersView implements Serializable {
 
     private void markNotFound() {
         available = false;
-        FacesContext.getCurrentInstance().getExternalContext().setResponseStatus(HttpServletResponse.SC_NOT_FOUND);
+        FacesContext facesContext = FacesContext.getCurrentInstance();
+        if (!facesContext.isPostback()) {
+            facesContext.getExternalContext().setResponseStatus(HttpServletResponse.SC_NOT_FOUND);
+        }
     }
 
     private void addMessage(FacesMessage.Severity severity, String summary, String detail) {
@@ -177,7 +161,6 @@ public class CalendarMembersView implements Serializable {
         private final Long userId;
         private final String displayName;
         private final String username;
-        private final boolean active;
         private final boolean currentUser;
         private CalendarRole role;
 
@@ -186,13 +169,11 @@ public class CalendarMembersView implements Serializable {
                 String displayName,
                 String username,
                 CalendarRole role,
-                boolean active,
                 boolean currentUser) {
             this.userId = userId;
             this.displayName = displayName;
             this.username = username;
             this.role = role;
-            this.active = active;
             this.currentUser = currentUser;
         }
 
@@ -201,7 +182,6 @@ public class CalendarMembersView implements Serializable {
         public String getUsername() { return username; }
         public CalendarRole getRole() { return role; }
         public void setRole(CalendarRole role) { this.role = role; }
-        public boolean isActive() { return active; }
         public boolean isCurrentUser() { return currentUser; }
     }
 }

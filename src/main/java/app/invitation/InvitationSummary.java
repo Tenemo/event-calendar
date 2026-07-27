@@ -6,9 +6,6 @@ public record InvitationSummary(
         Long id,
         String invitationToken,
         String calendarName,
-        OffsetDateTime revokedAt,
-        OffsetDateTime acceptedAt,
-        OffsetDateTime expiresAt,
         OffsetDateTime createdAt,
-        boolean admissionAvailable) {
+        OffsetDateTime expiresAt) {
 }

@@ -14,11 +14,10 @@ import app.util.ConflictException;
 import app.util.NotFoundException;
 import app.util.ValidationException;
 import jakarta.faces.application.FacesMessage;
-import jakarta.faces.context.FacesContext;
-import jakarta.faces.context.FacesContextWrapper;
 import jakarta.faces.context.ExternalContext;
 import jakarta.faces.context.ExternalContextWrapper;
-import jakarta.servlet.http.HttpServletResponse;
+import jakarta.faces.context.FacesContext;
+import jakarta.faces.context.FacesContextWrapper;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
@@ -188,7 +187,7 @@ final class CalendarSettingsViewTest {
             assertAll(
                     () -> assertFalse(view.isAvailable()),
                     () -> assertEquals(
-                            HttpServletResponse.SC_NOT_FOUND,
+                            0,
                             rejectedRequestContext.responseStatus()),
                     () -> assertEquals(1, calendarService.requireAdminCalendarCallCount()),
                     () -> assertRejectedSaveMessage(rejectedRequestContext, expectedMessage));
@@ -225,7 +224,7 @@ final class CalendarSettingsViewTest {
             assertAll(
                     () -> assertFalse(view.isAvailable()),
                     () -> assertEquals(
-                            HttpServletResponse.SC_NOT_FOUND,
+                            0,
                             rejectedRequestContext.responseStatus()),
                     () -> assertEquals(2, calendarService.requireAdminCalendarCallCount()),
                     () -> assertRejectedSaveMessage(rejectedRequestContext, "The calendar changed."));
@@ -403,6 +402,11 @@ final class CalendarSettingsViewTest {
         @Override
         public boolean isValidationFailed() {
             return validationFailed;
+        }
+
+        @Override
+        public boolean isPostback() {
+            return true;
         }
 
         private List<FacesMessage> messages() {

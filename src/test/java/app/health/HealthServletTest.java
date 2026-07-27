@@ -3,7 +3,6 @@ package app.health;
 import static app.testsupport.ServiceTestSupport.setField;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -12,7 +11,6 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 final class HealthServletTest {
@@ -27,23 +25,6 @@ final class HealthServletTest {
                 () -> assertEquals(HttpServletResponse.SC_OK, responseCapture.status),
                 () -> assertEquals("text/plain; charset=UTF-8", responseCapture.contentType),
                 () -> assertEquals("no-store", responseCapture.cacheControl),
-                () -> assertNull(responseCapture.deploymentRevision),
-                () -> assertEquals("ok", responseCapture.body()));
-    }
-
-    @Test
-    void healthyDatabaseReturnsTheValidatedDeploymentRevision() throws Exception {
-        String deploymentRevision = "0123456789abcdef0123456789abcdef01234567";
-        HealthServlet healthServlet = healthServlet(
-                databaseHealthMonitorReturning(true),
-                Optional.of(deploymentRevision));
-        ResponseCapture responseCapture = new ResponseCapture();
-
-        healthServlet.doGet(null, responseCapture.response());
-
-        assertAll(
-                () -> assertEquals(HttpServletResponse.SC_OK, responseCapture.status),
-                () -> assertEquals(deploymentRevision, responseCapture.deploymentRevision),
                 () -> assertEquals("ok", responseCapture.body()));
     }
 
@@ -72,15 +53,8 @@ final class HealthServletTest {
     }
 
     private static HealthServlet healthServlet(DatabaseHealthMonitor databaseHealthMonitor) {
-        return healthServlet(databaseHealthMonitor, Optional.empty());
-    }
-
-    private static HealthServlet healthServlet(
-            DatabaseHealthMonitor databaseHealthMonitor,
-            Optional<String> deploymentRevision) {
         HealthServlet healthServlet = new HealthServlet();
         setField(healthServlet, "databaseHealthMonitor", databaseHealthMonitor);
-        setField(healthServlet, "deploymentRevision", deploymentRevision.orElse(null));
         return healthServlet;
     }
 
@@ -128,7 +102,6 @@ final class HealthServletTest {
         private int status;
         private String contentType;
         private String cacheControl;
-        private String deploymentRevision;
 
         private HttpServletResponse response() {
             return (HttpServletResponse) Proxy.newProxyInstance(
@@ -161,8 +134,6 @@ final class HealthServletTest {
         private Object setHeader(String name, String value) {
             if (name.equals("Cache-Control")) {
                 cacheControl = value;
-            } else if (name.equals(HealthServlet.DEPLOYMENT_REVISION_HEADER)) {
-                deploymentRevision = value;
             }
             return null;
         }

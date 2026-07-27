@@ -1,6 +1,8 @@
 package app.security;
 
 import app.invitation.InvitationToken;
+import app.user.ApplicationUser;
+import app.user.UserService;
 import app.web.RelativeRedirect;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.faces.application.FacesMessage;
@@ -14,10 +16,8 @@ import jakarta.security.enterprise.credential.UsernamePasswordCredential;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.OptionalLong;
 
 @Named
 @RequestScoped
@@ -26,10 +26,7 @@ public class SignInView {
     private SecurityContext securityContext;
 
     @Inject
-    private PasswordValidationState passwordValidationState;
-
-    @Inject
-    private AuthenticationAuditService authenticationAuditService;
+    private UserService userService;
 
     private String username;
     private String password;
@@ -37,9 +34,8 @@ public class SignInView {
     private boolean passwordChanged;
     private boolean reauthenticationRequired;
 
-    public void signIn() throws IOException, ServletException {
+    public void signIn() throws ServletException {
         if (isBlank(username) || isBlank(password)) {
-            authenticationAuditService.recordSignInFailed();
             addFailureMessage("Username and password are required.");
             return;
         }
@@ -47,7 +43,6 @@ public class SignInView {
         FacesContext facesContext = FacesContext.getCurrentInstance();
         HttpServletRequest request = (HttpServletRequest) facesContext.getExternalContext().getRequest();
         HttpServletResponse response = (HttpServletResponse) facesContext.getExternalContext().getResponse();
-
         AuthenticationStatus status = securityContext.authenticate(
                 request,
                 response,
@@ -56,25 +51,27 @@ public class SignInView {
                         .newAuthentication(true));
 
         if (status == AuthenticationStatus.SUCCESS) {
-            OptionalLong validatedPasswordVersion = passwordValidationState.consumeValidatedPasswordVersion(
-                    securityContext.getCallerPrincipal());
-            if (validatedPasswordVersion.isEmpty()) {
+            ApplicationUser authenticatedUser = securityContext.getCallerPrincipal() == null
+                    ? null
+                    : userService.findByUsername(securityContext.getCallerPrincipal().getName())
+                            .orElse(null);
+            if (authenticatedUser == null) {
                 AuthenticatedSessionSecurity.invalidateSessionAndLogout(request);
-                authenticationAuditService.recordForcedSessionInvalidation();
                 response.setStatus(HttpServletResponse.SC_OK);
                 addFailureMessage("Sign-in failed. Check your username and password.");
                 return;
             }
             AuthenticatedSessionSecurity.establishAuthenticatedSession(
-                    request,
-                    validatedPasswordVersion.getAsLong());
+                    request, authenticatedUser.getPasswordVersion());
             RelativeRedirect.send(facesContext, successfulSignInRoute(invitationToken));
-        } else if (status == AuthenticationStatus.SEND_CONTINUE) {
-            facesContext.responseComplete();
-        } else {
-            response.setStatus(HttpServletResponse.SC_OK);
-            addFailureMessage("Sign-in failed. Check your username and password.");
+            return;
         }
+        if (status == AuthenticationStatus.SEND_CONTINUE) {
+            facesContext.responseComplete();
+            return;
+        }
+        response.setStatus(HttpServletResponse.SC_OK);
+        addFailureMessage("Sign-in failed. Check your username and password.");
     }
 
     public String getUsername() {
@@ -105,44 +102,37 @@ public class SignInView {
         return passwordChanged;
     }
 
-    public void setPasswordChanged(boolean passwordChanged) {
-        this.passwordChanged = passwordChanged;
-    }
-
     public String getPasswordChangedParameter() {
         return Boolean.toString(passwordChanged);
     }
 
-    public void setPasswordChangedParameter(String passwordChangedParameter) {
-        passwordChanged = "true".equals(passwordChangedParameter);
+    public void setPasswordChangedParameter(String value) {
+        passwordChanged = "true".equals(value);
     }
 
     public boolean isReauthenticationRequired() {
         return reauthenticationRequired;
     }
 
-    public void setReauthenticationRequired(boolean reauthenticationRequired) {
-        this.reauthenticationRequired = reauthenticationRequired;
-    }
-
     public String getReauthenticationRequiredParameter() {
         return Boolean.toString(reauthenticationRequired);
     }
 
-    public void setReauthenticationRequiredParameter(String reauthenticationRequiredParameter) {
-        reauthenticationRequired = "true".equals(reauthenticationRequiredParameter);
+    public void setReauthenticationRequiredParameter(String value) {
+        reauthenticationRequired = "true".equals(value);
     }
 
     static String successfulSignInRoute(String invitationToken) {
-        String normalizedInvitationToken = InvitationToken.normalize(invitationToken);
-        return InvitationToken.isValidCandidate(normalizedInvitationToken)
-                ? "/register?token="
-                        + URLEncoder.encode(normalizedInvitationToken, StandardCharsets.UTF_8)
+        String normalizedToken = InvitationToken.normalize(invitationToken);
+        return InvitationToken.isValidCandidate(normalizedToken)
+                ? "/register?token=" + URLEncoder.encode(normalizedToken, StandardCharsets.UTF_8)
                 : AuthenticatedApplicationFilter.DEFAULT_AUTHENTICATED_ROUTE;
     }
 
     private void addFailureMessage(String detail) {
-        FacesContext.getCurrentInstance().addMessage(null, new FacesMessage(FacesMessage.SEVERITY_ERROR, "Sign-in failed.", detail));
+        FacesContext.getCurrentInstance().addMessage(
+                null,
+                new FacesMessage(FacesMessage.SEVERITY_ERROR, "Sign-in failed.", detail));
     }
 
     private boolean isBlank(String value) {
