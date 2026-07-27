@@ -27,7 +27,7 @@ requireStringArrayEqual(
 requireEqual(configuration.deploy.region, "europe-west4-drams3a", "deploy.region");
 requireEqual(configuration.deploy.numReplicas, 1, "deploy.numReplicas");
 requireEqual(configuration.deploy.healthcheckPath, "/health", "deploy.healthcheckPath");
-requireBoundedInteger(configuration.deploy.healthcheckTimeout, 30, 300, "deploy.healthcheckTimeout");
+requireEqual(configuration.deploy.healthcheckTimeout, 7200, "deploy.healthcheckTimeout");
 requireEqual(configuration.deploy.restartPolicyType, "ON_FAILURE", "deploy.restartPolicyType");
 requireBoundedInteger(configuration.deploy.restartPolicyMaxRetries, 1, 10, "deploy.restartPolicyMaxRetries");
 requireEqual(configuration.deploy.overlapSeconds, 0, "deploy.overlapSeconds");

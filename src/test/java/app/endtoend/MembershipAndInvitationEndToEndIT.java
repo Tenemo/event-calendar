@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
+import app.invitation.InvitationService;
 import com.microsoft.playwright.APIResponse;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Locator;
@@ -17,6 +18,10 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -76,7 +81,9 @@ final class MembershipAndInvitationEndToEndIT extends SharedCalendarEndToEndSupp
             assertTrue(
                     expectedInvitationQuery.equals(URI.create(page.url()).getRawQuery()),
                     "The sign-in continuation must preserve the invitation token without logging it.");
-            assertBodyContains(page, "Accept invitation");
+            assertEquals("Registration invitation", page.locator("h1").textContent().trim());
+            assertBodyContains(page, "only creates a new account");
+            assertEquals(0, page.locator("button:has-text('Accept invitation')").count());
             signOut(page);
 
             navigateToBearerLink(page, route("/login?invite=" + invitationToken));
@@ -84,17 +91,14 @@ final class MembershipAndInvitationEndToEndIT extends SharedCalendarEndToEndSupp
             assertTrue(
                     expectedInvitationQuery.equals(URI.create(page.url()).getRawQuery()),
                     "The legacy sign-in continuation must normalize and preserve the invitation token.");
-            assertBodyContains(page, "Accept invitation");
+            assertEquals("Registration invitation", page.locator("h1").textContent().trim());
+            assertBodyContains(page, "only creates a new account");
+            assertEquals(0, page.locator("button:has-text('Accept invitation')").count());
             signOut(page);
 
             navigateToBearerLink(page, route("/register"));
-            fillRegistrationForm(
-                    page,
-                    "blocked-" + uniqueSuffix,
-                    "Blocked user " + uniqueSuffix,
-                    "Blocked calendar " + uniqueSuffix,
-                    password);
-            page.locator("button:has-text('Register')").click();
+            assertEquals("Invitation unavailable", page.locator("h1").textContent().trim());
+            assertEquals(0, page.locator("button:has-text('Register')").count());
             assertBodyContains(page, "Invitation is invalid or no longer available.");
 
             String preregistrationSessionIdentifier = requiredSessionCookieValue(browserContext);
@@ -115,7 +119,7 @@ final class MembershipAndInvitationEndToEndIT extends SharedCalendarEndToEndSupp
 
             navigateToBearerLink(page, existingUserInvitationLink);
             assertEquals("Accept invitation", page.locator("h1").textContent().trim());
-            assertBodyContains(page, "already signed in");
+            assertBodyContains(page, "with your current account");
             page.locator("button:has-text('Accept invitation')").click();
             waitForCanonicalCalendarRoute(page);
             assertBodyContains(page, ownerCalendarName);
@@ -134,8 +138,8 @@ final class MembershipAndInvitationEndToEndIT extends SharedCalendarEndToEndSupp
             assertBodyContains(page, "Admin");
 
             navigateToBearerLink(page, editorInvitationLink);
-            page.locator("button:has-text('Accept invitation')").click();
             assertBodyContains(page, "Invitation is invalid or no longer available.");
+            assertEquals(0, page.locator("button:has-text('Accept invitation')").count());
             assertNoBrowserMessages(browserMessages);
         }
     }
@@ -169,6 +173,9 @@ final class MembershipAndInvitationEndToEndIT extends SharedCalendarEndToEndSupp
             signIn(candidatePage, candidateUsername, TEST_PASSWORD);
             navigateToBearerLink(candidatePage, invitationLink);
             assertThat(candidatePage.locator("button:has-text('Accept invitation')")).isVisible();
+            Page staleRetryPage = newPage(candidateContext, browserMessages);
+            navigateToBearerLink(staleRetryPage, invitationLink);
+            assertThat(staleRetryPage.locator("button:has-text('Accept invitation')")).isVisible();
 
             try (AutoCloseable ignored = candidatePage.route("**/register", route -> {
                 if (!route.request().method().equals("POST") || responseWasDiscarded.get()) {
@@ -228,9 +235,11 @@ final class MembershipAndInvitationEndToEndIT extends SharedCalendarEndToEndSupp
                             candidateUsername),
                     "The completed request must persist who accepted the invitation and when.");
 
-            navigateToBearerLink(candidatePage, invitationLink);
-            candidatePage.locator("button:has-text('Accept invitation')").click();
-            assertBodyContains(candidatePage, "Invitation is invalid or no longer available.");
+            staleRetryPage.locator("button:has-text('Accept invitation')").click();
+            assertBodyContains(staleRetryPage, "Invitation is invalid or no longer available.");
+            assertEquals(
+                    0,
+                    staleRetryPage.locator("button:has-text('Accept invitation')").count());
             assertEquals(
                     1L,
                     queryLong(
@@ -590,6 +599,42 @@ final class MembershipAndInvitationEndToEndIT extends SharedCalendarEndToEndSupp
     }
 
     @Test
+    void invitationAvailabilityQueriesExecuteThroughTheConfiguredPersistenceProvider()
+            throws SQLException {
+        String uniqueSuffix = uniqueSuffix();
+        String username = "provider-invitation-owner-" + uniqueSuffix;
+        String calendarName = "Provider invitation calendar " + uniqueSuffix;
+        seedUser(username);
+        List<String> browserMessages = new ArrayList<>();
+
+        try (BrowserContext browserContext = browser.newContext()) {
+            Page page = newPage(browserContext, browserMessages);
+            signIn(page, username, TEST_PASSWORD);
+            createCalendar(page, calendarName);
+            String registrationInvitationLink = createRegistrationInvitation(page);
+            String editorInvitationLink = createEditorInvitation(page, calendarName);
+
+            navigateToBearerLink(page, route("/app/invitations"));
+            Locator registrationInvitationRow = invitationRow(page, registrationInvitationLink);
+            assertThat(registrationInvitationRow).containsText("Registration invitation");
+            assertThat(registrationInvitationRow).containsText("Available");
+            assertThat(registrationInvitationRow.locator("button:has-text('Revoke')")).isVisible();
+
+            Locator editorInvitationRow = invitationRow(page, editorInvitationLink);
+            assertThat(editorInvitationRow).containsText("Editor: " + calendarName);
+            assertThat(editorInvitationRow).containsText("Available");
+            assertThat(editorInvitationRow.locator("button:has-text('Revoke')")).isVisible();
+
+            registrationInvitationRow.locator("button:has-text('Revoke')").click();
+            confirmationButton(page, "Revoke invitation").click();
+            navigateToBearerLink(page, route("/app/invitations"));
+            assertThat(invitationRow(page, registrationInvitationLink)).containsText("Revoked");
+            assertThat(invitationRow(page, editorInvitationLink)).containsText("Available");
+            assertNoBrowserMessages(browserMessages);
+        }
+    }
+
+    @Test
     void acceptedInvitationsPreserveStrongerRolesAndReactivateRemovedMembers() throws SQLException {
         String uniqueSuffix = uniqueSuffix();
         String ownerUsername = "membership-owner-" + uniqueSuffix;
@@ -688,7 +733,7 @@ final class MembershipAndInvitationEndToEndIT extends SharedCalendarEndToEndSupp
             assertBodyContains(ownerPage, "Member access removed.");
 
             navigateToBearerLink(ownerPage, route("/app/invitations"));
-            assertThat(invitationRow(ownerPage, savedSelfInvitationLink)).isVisible();
+            assertThat(invitationRow(ownerPage, savedSelfInvitationLink)).containsText("Unavailable");
             Locator administratorRevocationRow = invitationRow(ownerPage, administratorRevocationLink);
             assertThat(administratorRevocationRow).isVisible();
             administratorRevocationRow.locator("button:has-text('Revoke')").click();
@@ -700,13 +745,338 @@ final class MembershipAndInvitationEndToEndIT extends SharedCalendarEndToEndSupp
             assertThat(invitationRow(ownerPage, administratorRevocationLink)).containsText("Revoked");
 
             navigateToBearerLink(editorPage, savedSelfInvitationLink);
-            editorPage.locator("button:has-text('Accept invitation')").click();
+            assertEquals("Invitation unavailable", editorPage.locator("h1").textContent().trim());
+            assertEquals(0, editorPage.locator("button:has-text('Accept invitation')").count());
             assertBodyContains(editorPage, "Invitation is invalid or no longer available.");
             navigateToBearerLink(editorPage, calendarLink(calendarId));
             assertBodyContains(editorPage, calendarName);
             assertBodyContains(editorPage, "Read-only");
             assertEquals(0, editorPage.locator("button:has-text('Create event')").count());
         }
+    }
+
+    @Test
+    void concurrentRegistrationInvitationCreationCannotCrossTheOutstandingAccountLimit()
+            throws Exception {
+        String uniqueSuffix = uniqueSuffix();
+        String creatorUsername = "registration-limit-owner-" + uniqueSuffix;
+        seedUser(creatorUsername);
+        insertRegistrationInvitations(
+                creatorUsername,
+                InvitationService.MAXIMUM_OUTSTANDING_REGISTRATION_INVITATIONS_PER_ACCOUNT - 1);
+
+        try (BrowserContext firstContext = browser.newContext();
+                BrowserContext secondContext = browser.newContext()) {
+            Page firstPage = firstContext.newPage();
+            Page secondPage = secondContext.newPage();
+            signIn(firstPage, creatorUsername, TEST_PASSWORD);
+            signIn(secondPage, creatorUsername, TEST_PASSWORD);
+            navigateToBearerLink(firstPage, route("/app/invitations"));
+            navigateToBearerLink(secondPage, route("/app/invitations"));
+
+            try (Connection blockingConnection = lockUserRowForConcurrentRequests(creatorUsername)) {
+                clickWithoutChangingFocus(
+                        firstPage.locator("button:has-text('Generate registration link')"));
+                clickWithoutChangingFocus(
+                        secondPage.locator("button:has-text('Generate registration link')"));
+                waitForBlockedDatabaseRequests(
+                        blockingConnection,
+                        2,
+                        "registration invitation outstanding limit");
+                blockingConnection.commit();
+            }
+            waitForInvitationCreationLimitResult(
+                    firstPage,
+                    "Registration invitation created.",
+                    "Too many active registration invitations.");
+            waitForInvitationCreationLimitResult(
+                    secondPage,
+                    "Registration invitation created.",
+                    "Too many active registration invitations.");
+
+            boolean firstRequestSucceeded = firstPage.locator("body").innerText()
+                    .contains("Registration invitation created.");
+            boolean secondRequestSucceeded = secondPage.locator("body").innerText()
+                    .contains("Registration invitation created.");
+            assertNotEquals(
+                    firstRequestSucceeded,
+                    secondRequestSucceeded,
+                    "Exactly one concurrent request may create the final outstanding registration invitation.");
+            assertEquals(
+                    InvitationService.MAXIMUM_OUTSTANDING_REGISTRATION_INVITATIONS_PER_ACCOUNT,
+                    queryLong(
+                            "select count(*) from app_invitation invitation "
+                                    + "where invitation.created_by_user_id = "
+                                    + "(select id from app_user where username = ?) "
+                                    + "and invitation.calendar_id is null "
+                                    + "and invitation.accepted_at is null "
+                                    + "and invitation.revoked_at is null "
+                                    + "and invitation.expires_at > now()",
+                            creatorUsername));
+        }
+    }
+
+    @Test
+    void calendarInvitationCreationLocksCalendarBeforeWaitingForTheUser() throws Exception {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "invitation-lock-order-owner-" + uniqueSuffix;
+        String calendarName = "Invitation lock order " + uniqueSuffix;
+        seedUser(ownerUsername);
+        ExecutorService calendarLockExecutor = Executors.newSingleThreadExecutor();
+
+        try (BrowserContext browserContext = browser.newContext()) {
+            Page page = browserContext.newPage();
+            signIn(page, ownerUsername, TEST_PASSWORD);
+            createCalendar(page, calendarName);
+            long calendarId = findCalendarId(calendarName);
+            prepareEditorInvitationCreation(page, calendarName);
+
+            Future<?> calendarLockAttempt;
+            try (Connection blockingUserConnection = lockUserRowForConcurrentRequests(ownerUsername)) {
+                clickWithoutChangingFocus(
+                        page.locator("button:has-text('Generate editor link')"));
+                waitForBlockedDatabaseRequests(
+                        blockingUserConnection,
+                        1,
+                        "calendar invitation user lock");
+                calendarLockAttempt = calendarLockExecutor.submit(() -> {
+                    try (Connection calendarLockConnection =
+                            lockCalendarRowForConcurrentRequests(calendarId)) {
+                        calendarLockConnection.rollback();
+                    }
+                    return null;
+                });
+                waitForBlockedDatabaseRequests(
+                        blockingUserConnection,
+                        2,
+                        "calendar-before-user invitation lock order");
+                assertFalse(
+                        calendarLockAttempt.isDone(),
+                        "The invitation request must hold the calendar while waiting for the user lock.");
+                blockingUserConnection.commit();
+            }
+            calendarLockAttempt.get(20, TimeUnit.SECONDS);
+            waitForInvitationCreationLimitResult(
+                    page,
+                    "Editor invitation created.",
+                    "Too many outstanding editor invitations.");
+            assertBodyContains(page, "Editor invitation created.");
+        } finally {
+            calendarLockExecutor.shutdownNow();
+            assertTrue(
+                    calendarLockExecutor.awaitTermination(20, TimeUnit.SECONDS),
+                    "The calendar lock-order test executor did not terminate.");
+        }
+    }
+
+    @Test
+    void editorInvitationAcceptanceLocksCalendarBeforeWaitingForTheCreator() throws Exception {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "acceptance-lock-owner-" + uniqueSuffix;
+        String candidateUsername = "acceptance-lock-candidate-" + uniqueSuffix;
+        String calendarName = "Acceptance lock order " + uniqueSuffix;
+        seedUser(ownerUsername);
+        seedUser(candidateUsername);
+        ExecutorService calendarLockExecutor = Executors.newSingleThreadExecutor();
+
+        try (BrowserContext ownerContext = browser.newContext();
+                BrowserContext candidateContext = browser.newContext()) {
+            Page ownerPage = ownerContext.newPage();
+            Page candidatePage = candidateContext.newPage();
+            signIn(ownerPage, ownerUsername, TEST_PASSWORD);
+            createCalendar(ownerPage, calendarName);
+            long calendarId = findCalendarId(calendarName);
+            String editorInvitationLink = createEditorInvitation(ownerPage, calendarName);
+            signIn(candidatePage, candidateUsername, TEST_PASSWORD);
+            navigateToBearerLink(candidatePage, editorInvitationLink);
+            assertThat(candidatePage.locator("button:has-text('Accept invitation')")).isVisible();
+
+            Future<?> calendarLockAttempt;
+            try (Connection blockingCreatorConnection = lockUserRowForConcurrentRequests(ownerUsername)) {
+                clickWithoutChangingFocus(
+                        candidatePage.locator("button:has-text('Accept invitation')"));
+                waitForBlockedDatabaseRequests(
+                        blockingCreatorConnection,
+                        1,
+                        "editor invitation creator lock");
+                calendarLockAttempt = calendarLockExecutor.submit(() -> {
+                    try (Connection calendarLockConnection =
+                            lockCalendarRowForConcurrentRequests(calendarId)) {
+                        calendarLockConnection.rollback();
+                    }
+                    return null;
+                });
+                waitForBlockedDatabaseRequests(
+                        blockingCreatorConnection,
+                        2,
+                        "calendar-before-creator invitation acceptance lock order");
+                assertFalse(
+                        calendarLockAttempt.isDone(),
+                        "Invitation acceptance must hold the calendar while waiting for its creator lock.");
+                blockingCreatorConnection.commit();
+            }
+            calendarLockAttempt.get(20, TimeUnit.SECONDS);
+            waitForCanonicalCalendarRoute(candidatePage);
+            assertBodyContains(candidatePage, calendarName);
+            assertBodyContains(candidatePage, "Editor");
+        } finally {
+            calendarLockExecutor.shutdownNow();
+            assertTrue(
+                    calendarLockExecutor.awaitTermination(20, TimeUnit.SECONDS),
+                    "The invitation-acceptance lock-order test executor did not terminate.");
+        }
+    }
+
+    @Test
+    void concurrentEditorInvitationCreationCannotCrossTheRollingCalendarLimit()
+            throws Exception {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "calendar-limit-owner-" + uniqueSuffix;
+        String editorUsername = "calendar-limit-editor-" + uniqueSuffix;
+        String fixtureCreatorUsername = "calendar-limit-fixture-" + uniqueSuffix;
+        String calendarName = "Calendar invitation limit " + uniqueSuffix;
+        seedUser(ownerUsername);
+        seedUser(editorUsername);
+        seedUser(fixtureCreatorUsername);
+
+        try (BrowserContext ownerContext = browser.newContext();
+                BrowserContext editorContext = browser.newContext()) {
+            Page ownerPage = ownerContext.newPage();
+            Page editorPage = editorContext.newPage();
+            signIn(ownerPage, ownerUsername, TEST_PASSWORD);
+            createCalendar(ownerPage, calendarName);
+            long calendarId = findCalendarId(calendarName);
+            String membershipInvitationLink = createEditorInvitation(ownerPage, calendarName);
+            signIn(editorPage, editorUsername, TEST_PASSWORD);
+            navigateToBearerLink(editorPage, membershipInvitationLink);
+            editorPage.locator("button:has-text('Accept invitation')").click();
+            waitForCanonicalCalendarRoute(editorPage);
+
+            insertRevokedEditorInvitations(
+                    fixtureCreatorUsername,
+                    calendarId,
+                    InvitationService.MAXIMUM_EDITOR_INVITATIONS_PER_CALENDAR_IN_ROLLING_WINDOW - 2);
+            prepareEditorInvitationCreation(ownerPage, calendarName);
+            prepareEditorInvitationCreation(editorPage, calendarName);
+
+            try (Connection blockingConnection = lockCalendarRowForConcurrentRequests(calendarId)) {
+                clickWithoutChangingFocus(
+                        ownerPage.locator("button:has-text('Generate editor link')"));
+                clickWithoutChangingFocus(
+                        editorPage.locator("button:has-text('Generate editor link')"));
+                waitForBlockedDatabaseRequests(
+                        blockingConnection,
+                        2,
+                        "calendar invitation rolling limit");
+                blockingConnection.commit();
+            }
+            waitForInvitationCreationLimitResult(
+                    ownerPage,
+                    "Editor invitation created.",
+                    "Calendar invitation creation limit reached.");
+            waitForInvitationCreationLimitResult(
+                    editorPage,
+                    "Editor invitation created.",
+                    "Calendar invitation creation limit reached.");
+
+            boolean ownerRequestSucceeded = ownerPage.locator("body").innerText()
+                    .contains("Editor invitation created.");
+            boolean editorRequestSucceeded = editorPage.locator("body").innerText()
+                    .contains("Editor invitation created.");
+            assertNotEquals(
+                    ownerRequestSucceeded,
+                    editorRequestSucceeded,
+                    "Exactly one concurrent request may create the final editor invitation in the rolling window.");
+            assertEquals(
+                    InvitationService.MAXIMUM_EDITOR_INVITATIONS_PER_CALENDAR_IN_ROLLING_WINDOW,
+                    queryLong(
+                            "select count(*) from app_invitation "
+                                    + "where calendar_id = ? and role_name = 'EDITOR' "
+                                    + "and created_at >= now() - interval '24 hours'",
+                            calendarId));
+        }
+    }
+
+    @Test
+    void inactiveInvitationCreatorsDoNotFreeOutstandingCalendarCapacity() throws Exception {
+        String uniqueSuffix = uniqueSuffix();
+        String ownerUsername = "dormant-invitation-owner-" + uniqueSuffix;
+        String editorUsername = "dormant-invitation-editor-" + uniqueSuffix;
+        String calendarName = "Dormant invitation capacity " + uniqueSuffix;
+        seedUser(ownerUsername);
+        seedUser(editorUsername);
+
+        try (BrowserContext ownerContext = browser.newContext();
+                BrowserContext editorContext = browser.newContext()) {
+            Page ownerPage = ownerContext.newPage();
+            Page editorPage = editorContext.newPage();
+            signIn(ownerPage, ownerUsername, TEST_PASSWORD);
+            createCalendar(ownerPage, calendarName);
+            long calendarId = findCalendarId(calendarName);
+            String editorMembershipInvitation = createEditorInvitation(ownerPage, calendarName);
+            signIn(editorPage, editorUsername, TEST_PASSWORD);
+            navigateToBearerLink(editorPage, editorMembershipInvitation);
+            editorPage.locator("button:has-text('Accept invitation')").click();
+            waitForCanonicalCalendarRoute(editorPage);
+
+            insertPendingEditorInvitations(
+                    ownerUsername,
+                    calendarId,
+                    InvitationService.MAXIMUM_OUTSTANDING_EDITOR_INVITATIONS_PER_CALENDAR);
+            setUserActive(ownerUsername, false);
+            prepareEditorInvitationCreation(editorPage, calendarName);
+            editorPage.locator("button:has-text('Generate editor link')").click();
+
+            assertBodyContains(
+                    editorPage,
+                    "Too many outstanding editor invitations. Revoke one before creating another.");
+            assertEquals(
+                    InvitationService.MAXIMUM_OUTSTANDING_EDITOR_INVITATIONS_PER_CALENDAR,
+                    queryLong(
+                            "select count(*) from app_invitation "
+                                    + "where calendar_id = ? and role_name = 'EDITOR' "
+                                    + "and accepted_at is null and revoked_at is null "
+                                    + "and expires_at > now()",
+                            calendarId));
+
+            setUserActive(ownerUsername, true);
+            assertEquals(
+                    InvitationService.MAXIMUM_OUTSTANDING_EDITOR_INVITATIONS_PER_CALENDAR,
+                    queryLong(
+                            "select count(*) from app_invitation invitation "
+                                    + "where invitation.calendar_id = ? "
+                                    + "and invitation.role_name = 'EDITOR' "
+                                    + "and invitation.accepted_at is null "
+                                    + "and invitation.revoked_at is null "
+                                    + "and invitation.expires_at > now() "
+                                    + "and exists (select 1 from calendar_member membership "
+                                    + "join app_user creator on creator.id = membership.user_id "
+                                    + "where membership.calendar_id = invitation.calendar_id "
+                                    + "and membership.user_id = invitation.created_by_user_id "
+                                    + "and membership.active = true and creator.active = true)",
+                            calendarId));
+        }
+    }
+
+    private void prepareEditorInvitationCreation(Page page, String calendarName) {
+        navigateToBearerLink(page, route("/app/invitations"));
+        Locator calendarSelect = page.locator("select[id$='calendar']");
+        String calendarOptionValue = page.locator(
+                        "select[id$='calendar'] option",
+                        new Page.LocatorOptions().setHasText(calendarName))
+                .getAttribute("value");
+        calendarSelect.selectOption(calendarOptionValue);
+    }
+
+    private void waitForInvitationCreationLimitResult(
+            Page page,
+            String successMessage,
+            String limitMessage) {
+        page.waitForFunction(
+                "([successMessage, limitMessage]) => "
+                        + "document.body.innerText.includes(successMessage) "
+                        + "|| document.body.innerText.includes(limitMessage)",
+                List.of(successMessage, limitMessage));
     }
 
     @Test

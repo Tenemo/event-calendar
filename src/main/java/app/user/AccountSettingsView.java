@@ -1,6 +1,7 @@
 package app.user;
 
 import app.security.AuthenticatedSessionSecurity;
+import app.security.AuthenticationAuditService;
 import app.security.CurrentUser;
 import app.util.AuthorizationException;
 import app.util.ValidationException;
@@ -22,6 +23,9 @@ public class AccountSettingsView {
 
     @Inject
     private UserService userService;
+
+    @Inject
+    private AuthenticationAuditService authenticationAuditService;
 
     private String currentPassword;
     private String newPassword;
@@ -53,6 +57,7 @@ public class AccountSettingsView {
         FacesContext facesContext = FacesContext.getCurrentInstance();
         HttpServletRequest request = (HttpServletRequest) facesContext.getExternalContext().getRequest();
         AuthenticatedSessionSecurity.invalidateSessionAndLogout(request);
+        authenticationAuditService.recordForcedSessionInvalidation();
         RelativeRedirect.send(facesContext, "/login?passwordChanged=true");
     }
 

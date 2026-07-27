@@ -9,12 +9,15 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.concurrent.Flow;
 import org.junit.jupiter.api.Test;
 
 final class SecurityHeadersEndToEndIT {
+    private static final int MAXIMUM_HTTP_MESSAGE_SIZE_BYTES = 1_048_576;
     private static final String DEFAULT_APPLICATION_BASE_URL = "http://localhost:9080";
     private static final String APPLICATION_BASE_URL_PROPERTY = "app.baseUrl";
     private static final String APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE = "APP_BASE_URL";
@@ -44,6 +47,9 @@ final class SecurityHeadersEndToEndIT {
         HttpResponse<Void> forwardedNotFoundResponse = send(
                 httpClient,
                 applicationBaseUri.resolve("/Abc_123-xY0"));
+        HttpResponse<Void> capabilityQueryResponse = send(
+                httpClient,
+                applicationBaseUri.resolve("/login?%69nvite=opaque-preview-token"));
         HttpResponse<Void> errorResponse = send(
                 httpClient,
                 applicationBaseUri.resolve("/calendar/Abc_123-xY0"));
@@ -80,6 +86,7 @@ final class SecurityHeadersEndToEndIT {
                         "Rendered pages must declare the project favicon."),
                 () -> assertEquals(200, statefulFacesResponse.statusCode()),
                 () -> assertEquals(404, forwardedNotFoundResponse.statusCode()),
+                () -> assertEquals(200, capabilityQueryResponse.statusCode()),
                 () -> assertEquals(404, errorResponse.statusCode()),
                 () -> assertEquals(302, protectedRedirectResponse.statusCode()),
                 () -> assertEquals(302, privateHeaderRedirectResponse.statusCode()),
@@ -94,7 +101,8 @@ final class SecurityHeadersEndToEndIT {
                 () -> assertSecurityHeaders(homeResponse),
                 () -> assertSecurityHeaders(loginResponse),
                 () -> assertSecurityHeaders(statefulFacesResponse),
-                () -> assertSecurityHeaders(forwardedNotFoundResponse),
+                () -> assertCapabilitySecurityHeaders(forwardedNotFoundResponse, false),
+                () -> assertCapabilitySecurityHeaders(capabilityQueryResponse, true),
                 () -> assertSecurityHeaders(errorResponse),
                 () -> assertSecurityHeaders(protectedRedirectResponse),
                 () -> assertSecurityHeaders(privateHeaderRedirectResponse),
@@ -106,6 +114,7 @@ final class SecurityHeadersEndToEndIT {
                 () -> assertNoStore(loginResponse),
                 () -> assertNoStore(statefulFacesResponse),
                 () -> assertNoStore(forwardedNotFoundResponse),
+                () -> assertNoStore(capabilityQueryResponse),
                 () -> assertNoStore(errorResponse),
                 () -> assertNoStore(protectedRedirectResponse),
                 () -> assertNoStore(privateHeaderRedirectResponse),
@@ -131,6 +140,66 @@ final class SecurityHeadersEndToEndIT {
                 () -> assertFalse(
                         hasNoStore(faviconResponse),
                         "The favicon must retain the JSF resource-handler cache policy."));
+    }
+
+    @Test
+    void runtimeRejectsOversizedEncodedAndUnknownLengthRequestBodiesBeforeApplicationParsing()
+            throws Exception {
+        HttpClient httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .build();
+        URI loginUri = resolveApplicationBaseUri().resolve("/login");
+        byte[] oversizedBody = new byte[MAXIMUM_HTTP_MESSAGE_SIZE_BYTES + 65_536];
+
+        HttpResponse<Void> fixedLengthResponse = httpClient.send(
+                HttpRequest.newBuilder(loginUri)
+                        .header("Content-Type", "application/x-www-form-urlencoded")
+                        .POST(HttpRequest.BodyPublishers.ofByteArray(oversizedBody))
+                        .build(),
+                HttpResponse.BodyHandlers.discarding());
+        HttpResponse<Void> chunkedResponse = httpClient.send(
+                HttpRequest.newBuilder(loginUri)
+                        .header("Content-Type", "application/x-www-form-urlencoded")
+                        .POST(chunkedBody(oversizedBody))
+                        .build(),
+                HttpResponse.BodyHandlers.discarding());
+        HttpResponse<Void> smallChunkedResponse = httpClient.send(
+                HttpRequest.newBuilder(loginUri)
+                        .header("Content-Type", "application/x-www-form-urlencoded")
+                        .POST(chunkedBody("small-body".getBytes()))
+                        .build(),
+                HttpResponse.BodyHandlers.discarding());
+        HttpResponse<Void> encodedResponse = httpClient.send(
+                HttpRequest.newBuilder(loginUri)
+                        .header("Content-Type", "application/x-www-form-urlencoded")
+                        .header("Content-Encoding", "gzip")
+                        .POST(HttpRequest.BodyPublishers.ofByteArray(
+                                "body-must-not-be-decompressed-or-parsed".getBytes()))
+                        .build(),
+                HttpResponse.BodyHandlers.discarding());
+
+        assertAll(
+                () -> assertEquals(413, fixedLengthResponse.statusCode()),
+                () -> assertEquals(411, chunkedResponse.statusCode()),
+                () -> assertEquals(411, smallChunkedResponse.statusCode()),
+                () -> assertEquals(415, encodedResponse.statusCode()));
+    }
+
+    private static HttpRequest.BodyPublisher chunkedBody(byte[] body) {
+        HttpRequest.BodyPublisher delegate = HttpRequest.BodyPublishers.ofByteArray(body);
+        return new HttpRequest.BodyPublisher() {
+            @Override
+            public long contentLength() {
+                return -1;
+            }
+
+            @Override
+            public void subscribe(
+                    Flow.Subscriber<? super ByteBuffer> subscriber) {
+                delegate.subscribe(subscriber);
+            }
+        };
     }
 
     private static HttpResponse<String> sendForBody(HttpClient httpClient, URI uri)
@@ -176,6 +245,23 @@ final class SecurityHeadersEndToEndIT {
     }
 
     private static void assertSecurityHeaders(HttpResponse<?> response) {
+        assertSecurityHeaders(response, "strict-origin-when-cross-origin");
+    }
+
+    private static void assertCapabilitySecurityHeaders(
+            HttpResponse<?> response,
+            boolean expectSearchEngineExclusion) {
+        assertSecurityHeaders(response, "no-referrer");
+        if (expectSearchEngineExclusion) {
+            assertEquals(
+                    "noindex, nofollow",
+                    requiredHeader(response, "X-Robots-Tag"));
+        }
+    }
+
+    private static void assertSecurityHeaders(
+            HttpResponse<?> response,
+            String expectedReferrerPolicy) {
         assertAll(
                 () -> assertEquals(
                         CONTENT_SECURITY_POLICY,
@@ -183,7 +269,7 @@ final class SecurityHeadersEndToEndIT {
                 () -> assertEquals("DENY", requiredHeader(response, "X-Frame-Options")),
                 () -> assertEquals("nosniff", requiredHeader(response, "X-Content-Type-Options")),
                 () -> assertEquals(
-                        "strict-origin-when-cross-origin",
+                        expectedReferrerPolicy,
                         requiredHeader(response, "Referrer-Policy")),
                 () -> assertEquals(
                         PERMISSIONS_POLICY,

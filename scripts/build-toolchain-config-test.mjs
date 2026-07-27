@@ -4,6 +4,7 @@ const wrapperProperties = readFileSync(".mvn/wrapper/maven-wrapper.properties", 
 const dockerfile = readFileSync("Dockerfile", "utf8");
 const miseConfiguration = readFileSync(".mise.toml", "utf8");
 const pom = readFileSync("pom.xml", "utf8");
+const normalizedDockerfile = dockerfile.replaceAll("\\\r\n", " ").replaceAll("\\\n", " ");
 
 const miseJavaMatch = requiredMatch(
     miseConfiguration,
@@ -37,12 +38,34 @@ const mavenImageMatch = requiredMatch(
 requireEqual(mavenImageMatch[1], wrapperVersion, "Maven Docker image version");
 
 const seededDistributionMatch = requiredMatch(
-    dockerfile.replaceAll("\\\r\n", " ").replaceAll("\\\n", " "),
+    normalizedDockerfile,
     /\/root\/\.m2\/wrapper\/dists\/apache-maven-(\d+\.\d+\.\d+)\/apache-maven-(\d+\.\d+\.\d+)/,
     "Seeded Maven Wrapper destination",
 );
 requireEqual(seededDistributionMatch[1], wrapperVersion, "Seeded Maven distribution directory");
 requireEqual(seededDistributionMatch[2], wrapperVersion, "Seeded Maven installation directory");
+
+const effectiveDependencyResolutionIndex = normalizedDockerfile.indexOf(
+    "dependency:go-offline dependency:resolve",
+);
+const applicationSourceCopyIndex = normalizedDockerfile.indexOf("COPY src/main src/main");
+const applicationSourcePermissionNormalizationIndex = normalizedDockerfile.indexOf(
+    "find src/main -type f -exec chmod 0644 {} +",
+);
+const offlinePackageIndex = normalizedDockerfile.indexOf("-o -Dmaven.test.skip=true package");
+if (
+    effectiveDependencyResolutionIndex < 0 ||
+    applicationSourceCopyIndex < 0 ||
+    applicationSourcePermissionNormalizationIndex < 0 ||
+    offlinePackageIndex < 0 ||
+    effectiveDependencyResolutionIndex >= applicationSourceCopyIndex ||
+    applicationSourceCopyIndex >= applicationSourcePermissionNormalizationIndex ||
+    applicationSourcePermissionNormalizationIndex >= offlinePackageIndex
+) {
+    throw new Error(
+        "The Docker build must resolve dependencies, copy source, normalize file permissions, and then package offline.",
+    );
+}
 
 const enforcerRangeMatch = requiredMatch(
     pom,
@@ -51,6 +74,12 @@ const enforcerRangeMatch = requiredMatch(
 );
 requireEqual(enforcerRangeMatch[1], wrapperVersion, "Maven Enforcer minimum version");
 requireEqual(enforcerRangeMatch[2], nextPatchVersion(wrapperVersion), "Maven Enforcer exclusive maximum version");
+requireSingleSetting(
+    pom,
+    "addMavenDescriptor",
+    "false",
+    "WAR packaging must omit Maven's platform-dependent generated descriptor",
+);
 
 const libertyDevProfileStart = pom.indexOf("<id>liberty-dev</id>");
 const libertyDevProfileEnd = pom.indexOf("</profile>", libertyDevProfileStart);
@@ -58,14 +87,16 @@ if (libertyDevProfileStart < 0 || libertyDevProfileEnd < 0) {
     throw new Error("The Liberty development Maven profile is missing or malformed.");
 }
 const libertyDevProfile = pom.slice(libertyDevProfileStart, libertyDevProfileEnd);
-requireSingleTrueSetting(
+requireSingleSetting(
     libertyDevProfile,
     "changeOnDemandTestsAction",
+    "true",
     "Liberty development on-demand tests must require an explicit command",
 );
-requireSingleTrueSetting(
+requireSingleSetting(
     libertyDevProfile,
     "skipITs",
+    "true",
     "Liberty development mode must not run integration or browser tests",
 );
 
@@ -75,16 +106,26 @@ if (finalStageUserDirectives.length !== 1 || finalStageUserDirectives[0][1] !== 
     throw new Error("The final Docker stage must contain exactly one USER directive and it must be USER 1001.");
 }
 
+const containerHttpHostDirectives = [...finalDockerStage.matchAll(/^ENV\s+HTTP_HOST=(\S+)\s*$/gmu)];
+if (containerHttpHostDirectives.length !== 1 || containerHttpHostDirectives[0][1] !== "*") {
+    throw new Error(
+        "The final Docker stage must override the loopback Liberty default with exactly one HTTP_HOST=* directive.",
+    );
+}
+
 const generatedLtpaPasswordSetting = "RUN GENERATE_LTPA_KEYS_PASSWORD=false configure.sh";
+const libertyConfigurationCopy = "COPY --chown=1001:0 src/main/liberty/config/server.xml /config/";
 const generatedLtpaPasswordSettingIndex = finalDockerStage.indexOf(generatedLtpaPasswordSetting);
-const libertyConfigurationIndex = generatedLtpaPasswordSettingIndex;
+const libertyConfigurationIndex = finalDockerStage.indexOf(libertyConfigurationCopy);
 if (
     generatedLtpaPasswordSettingIndex < 0 ||
     libertyConfigurationIndex < 0 ||
-    generatedLtpaPasswordSettingIndex > libertyConfigurationIndex
+    generatedLtpaPasswordSettingIndex <= libertyConfigurationIndex ||
+    finalDockerStage.indexOf(generatedLtpaPasswordSetting, generatedLtpaPasswordSettingIndex + 1) >= 0 ||
+    /^ENV\s+GENERATE_LTPA_KEYS_PASSWORD=/gmu.test(finalDockerStage)
 ) {
     throw new Error(
-        "The final Docker stage must disable generated LTPA passwords only while configure.sh runs.",
+        "The final Docker stage must copy Liberty configuration first and disable generated LTPA passwords only for one configure.sh run.",
     );
 }
 
@@ -117,14 +158,17 @@ function requireEqual(actual, expected, description) {
     }
 }
 
-function requireSingleTrueSetting(contents, settingName, description) {
+function requireSingleSetting(contents, settingName, expectedValue, description) {
     const settingPattern = new RegExp(
         `<${settingName}>\\s*([^<]+?)\\s*</${settingName}>`,
         "gu",
     );
     const matches = [...contents.matchAll(settingPattern)];
-    if (matches.length !== 1 || matches[0][1].trim() !== "true") {
-        throw new Error(`${description}; expected exactly one <${settingName}>true</${settingName}> setting.`);
+    if (matches.length !== 1 || matches[0][1].trim() !== expectedValue) {
+        throw new Error(
+            `${description}; expected exactly one `
+                + `<${settingName}>${expectedValue}</${settingName}> setting.`,
+        );
     }
 }
 

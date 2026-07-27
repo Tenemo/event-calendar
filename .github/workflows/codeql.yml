@@ -18,9 +18,19 @@ concurrency:
 
 jobs:
   analyze:
-    name: Code analysis
+    name: Code analysis (${{ matrix.language }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: java-kotlin
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+          - language: actions
+            build-mode: none
 
     steps:
       - name: Check out repository
@@ -29,6 +39,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up the pinned toolchain
+        if: matrix.language == 'java-kotlin'
         uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4.2.1
         with:
           version: 2026.7.7
@@ -36,22 +47,27 @@ jobs:
           cache: true
 
       - name: Restore Maven dependency cache
+        if: matrix.language == 'java-kotlin'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.m2/repository
           key: maven-${{ runner.os }}-${{ hashFiles('pom.xml', '.mvn/wrapper/maven-wrapper.properties') }}
 
       - name: Make Maven wrapper executable
+        if: matrix.language == 'java-kotlin'
         run: chmod +x mvnw
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
         with:
-          languages: java-kotlin
-          build-mode: manual
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
 
       - name: Build application
+        if: matrix.language == 'java-kotlin'
         run: mise exec -- ./mvnw -B -ntp -DskipTests clean package
 
       - name: Analyze application
         uses: github/codeql-action/analyze@7188fc363630916deb702c7fdcf4e481b751f97a # v4.37.1
+        with:
+          category: /language:${{ matrix.language }}

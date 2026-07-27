@@ -2,6 +2,7 @@ package app.security;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import jakarta.servlet.DispatcherType;
@@ -157,7 +158,13 @@ final class SecurityHeadersFilterTest {
                     .doFilter(
                             new RequestCapture().request(),
                             responseCapture.response(),
-                            (request, response) -> { });
+                            (request, response) -> {
+                                HttpServletResponse httpResponse =
+                                        (HttpServletResponse) response;
+                                httpResponse.reset();
+                                httpResponse.setHeader("X-Robots-Tag", "index, follow");
+                                httpResponse.addHeader("X-Robots-Tag", "all");
+                            });
 
             assertEquals(
                     SecurityHeadersFilter.PREVIEW_ROBOTS_POLICY,
@@ -179,6 +186,110 @@ final class SecurityHeadersFilterTest {
                     (request, response) -> { });
 
             assertTrue(!responseCapture.headers.containsKey("X-Robots-Tag"));
+        }
+    }
+
+    @Test
+    void capabilityUrlsNeverSendTheirBearerSecretAsAReferrer() throws Exception {
+        for (RequestCapture requestCapture : new RequestCapture[] {
+            new RequestCapture("", "/Abc_123-xY0", (String) null),
+            new RequestCapture("/shared", "/shared/register", "token=secret"),
+            new RequestCapture("", "/register.xhtml", "t%6fken=secret"),
+            new RequestCapture("", "/login", "invite=legacy-secret"),
+            new RequestCapture("", "/login.xhtml", "token=secret&next=ignored"),
+            new RequestCapture("", "/login;matrix", "token=secret"),
+            new RequestCapture("", "/login.xhtml;matrix", "token=secret"),
+            new RequestCapture("", "/lo%67in", "token=secret"),
+            new RequestCapture("", "/register;matrix", "token=secret"),
+            new RequestCapture("", "/reg%69ster", "token=secret"),
+            new RequestCapture("", "/any-route", "token=secret"),
+            new RequestCapture("", "/login", "%ZZ=malformed")
+        }) {
+            ResponseCapture responseCapture = new ResponseCapture();
+            responseCapture.headers.put(
+                    "Referrer-Policy",
+                    "strict-origin-when-cross-origin");
+
+            new SecurityHeadersFilter().doFilter(
+                    requestCapture.request(),
+                    responseCapture.response(),
+                    (request, response) -> {
+                        ((HttpServletResponse) response).reset();
+                        ((HttpServletResponse) response).setHeader(
+                                "Referrer-Policy",
+                                "strict-origin-when-cross-origin");
+                    });
+
+            assertEquals(
+                    SecurityHeadersFilter.CAPABILITY_REFERRER_POLICY,
+                    responseCapture.headers.get("Referrer-Policy"));
+        }
+    }
+
+    @Test
+    void bearerQueriesCannotBeIndexedOrOverriddenInProduction() throws Exception {
+        for (RequestCapture requestCapture : new RequestCapture[] {
+            new RequestCapture("", "/register", "token=secret"),
+            new RequestCapture("", "/register.xhtml", "t%6fken=secret"),
+            new RequestCapture("", "/login", "invite=legacy-secret"),
+            new RequestCapture("", "/login;matrix", "token=secret"),
+            new RequestCapture("", "/login.xhtml;matrix", "invite=secret"),
+            new RequestCapture("", "/lo%67in", "token=secret"),
+            new RequestCapture("", "/register;matrix", "invite=secret"),
+            new RequestCapture("", "/reg%69ster", "token=secret"),
+            new RequestCapture("", "/any-route", "token=secret")
+        }) {
+            ResponseCapture responseCapture = new ResponseCapture();
+            responseCapture.headers.put("X-Robots-Tag", "index, follow");
+
+            new SecurityHeadersFilter("railway-environment-id", "production")
+                    .doFilter(
+                            requestCapture.request(),
+                            responseCapture.response(),
+                            (request, response) -> {
+                                HttpServletResponse httpResponse =
+                                        (HttpServletResponse) response;
+                                httpResponse.reset();
+                                httpResponse.setHeader("X-Robots-Tag", "index, follow");
+                                httpResponse.addHeader("X-Robots-Tag", "all");
+                            });
+
+            assertAll(
+                    () -> assertEquals(
+                            SecurityHeadersFilter.PREVIEW_ROBOTS_POLICY,
+                            responseCapture.headers.get("X-Robots-Tag")),
+                    () -> assertEquals(
+                            SecurityHeadersFilter.CAPABILITY_REFERRER_POLICY,
+                            responseCapture.headers.get("Referrer-Policy")));
+        }
+    }
+
+    @Test
+    void ordinaryMalformedAndPostbackOnlyAliasesRemainOutsideCapabilityQueryHandling()
+            throws Exception {
+        for (RequestCapture requestCapture : new RequestCapture[] {
+            new RequestCapture("", "/login", (String) null),
+            new RequestCapture("", "/register", "not_token=secret"),
+            new RequestCapture("", "/register", "invitationToken=secret"),
+            new RequestCapture("", "/register", "registrationForm%3AinvitationToken=secret"),
+            new RequestCapture("", "/Abc_123-xY1", (String) null)
+        }) {
+            ResponseCapture responseCapture = new ResponseCapture();
+
+            new SecurityHeadersFilter("railway-environment-id", "production").doFilter(
+                    requestCapture.request(),
+                    responseCapture.response(),
+                    (request, response) -> { });
+
+            assertAll(
+                    () -> assertEquals(
+                            "strict-origin-when-cross-origin",
+                            responseCapture.headers.get("Referrer-Policy"),
+                            () -> "Unexpected policy for "
+                                    + requestCapture.requestUri
+                                    + "?"
+                                    + requestCapture.queryString),
+                    () -> assertFalse(responseCapture.headers.containsKey("X-Robots-Tag")));
         }
     }
 
@@ -208,20 +319,35 @@ final class SecurityHeadersFilterTest {
         private final String scheme;
         private final String serverName;
         private final String headerValue;
+        private final String queryString;
 
         private RequestCapture() {
-            this("", "/login", DispatcherType.REQUEST, null, null, null);
+            this("", "/login", DispatcherType.REQUEST, null, null, null, null);
         }
 
         private RequestCapture(String contextPath, String requestUri) {
-            this(contextPath, requestUri, DispatcherType.REQUEST, null, null, null);
+            this(contextPath, requestUri, DispatcherType.REQUEST, null, null, null, null);
+        }
+
+        private RequestCapture(
+                String contextPath,
+                String requestUri,
+                String queryString) {
+            this(
+                    contextPath,
+                    requestUri,
+                    DispatcherType.REQUEST,
+                    null,
+                    null,
+                    null,
+                    queryString);
         }
 
         private RequestCapture(
                 String contextPath,
                 String requestUri,
                 DispatcherType dispatcherType) {
-            this(contextPath, requestUri, dispatcherType, null, null, null);
+            this(contextPath, requestUri, dispatcherType, null, null, null, null);
         }
 
         private RequestCapture(
@@ -231,12 +357,31 @@ final class SecurityHeadersFilterTest {
                 String scheme,
                 String serverName,
                 String headerValue) {
+            this(
+                    contextPath,
+                    requestUri,
+                    dispatcherType,
+                    scheme,
+                    serverName,
+                    headerValue,
+                    null);
+        }
+
+        private RequestCapture(
+                String contextPath,
+                String requestUri,
+                DispatcherType dispatcherType,
+                String scheme,
+                String serverName,
+                String headerValue,
+                String queryString) {
             this.contextPath = contextPath;
             this.requestUri = requestUri;
             this.dispatcherType = dispatcherType;
             this.scheme = scheme;
             this.serverName = serverName;
             this.headerValue = headerValue;
+            this.queryString = queryString;
         }
 
         private ServletRequest request() {
@@ -252,6 +397,9 @@ final class SecurityHeadersFilterTest {
                         }
                         if (method.getName().equals("getDispatcherType")) {
                             return dispatcherType;
+                        }
+                        if (method.getName().equals("getQueryString")) {
+                            return queryString;
                         }
                         if (method.getName().equals("isSecure") && scheme != null) {
                             return false;

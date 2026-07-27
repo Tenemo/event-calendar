@@ -1,8 +1,9 @@
 package app.user;
 
 import static app.testsupport.ServiceTestSupport.entityManagerStub;
-import static app.testsupport.ServiceTestSupport.setField;
+import static app.testsupport.ServiceTestSupport.queryParameter;
 import static app.testsupport.ServiceTestSupport.setEntityId;
+import static app.testsupport.ServiceTestSupport.setField;
 import static app.testsupport.TestPasswordServices.passwordService;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -58,7 +59,10 @@ final class UserServiceTest {
         ApplicationUser existingUser = new ApplicationUser();
         setEntityId(existingUser, 1L);
         existingUser.setUsername("piotr");
-        entityManagerStub.singleResult("from ApplicationUser applicationUser", existingUser);
+        entityManagerStub.singleResult(
+                "from ApplicationUser applicationUser",
+                existingUser,
+                queryParameter("username", "piotr"));
 
         UserService userService = new UserService();
         setField(userService, "entityManager", entityManagerStub.entityManager());
@@ -71,22 +75,30 @@ final class UserServiceTest {
 
     @Test
     void normalizesAndPersistsNewUsersWithAHashedPassword() {
+        String lowercasePassphrase = "a long lowercase passphrase";
         EntityManagerStub entityManagerStub = entityManagerStub()
-                .singleResultNotFound("from ApplicationUser applicationUser");
+                .singleResultNotFound(
+                        "from ApplicationUser applicationUser",
+                        queryParameter("username", "piotr"));
         PasswordService passwordService = passwordService();
 
         UserService userService = new UserService();
         setField(userService, "entityManager", entityManagerStub.entityManager());
         setField(userService, "passwordService", passwordService);
 
-        ApplicationUser createdUser = userService.createUser(" Piotr ", " Piotr Tenemo ", VALID_PASSWORD);
+        ApplicationUser createdUser = userService.createUser(
+                " Piotr ",
+                " Piotr Tenemo ",
+                lowercasePassphrase);
 
         assertAll(
                 () -> assertEquals("piotr", createdUser.getUsername()),
                 () -> assertEquals("Piotr Tenemo", createdUser.getDisplayName()),
                 () -> assertEquals(ZoneOffset.UTC, createdUser.getCreatedAt().getOffset()),
                 () -> assertEquals(ZoneOffset.UTC, createdUser.getUpdatedAt().getOffset()),
-                () -> assertTrue(passwordService.verifyPassword(VALID_PASSWORD, createdUser.getPasswordHash())),
+                () -> assertTrue(passwordService.verifyPassword(
+                        lowercasePassphrase,
+                        createdUser.getPasswordHash())),
                 () -> assertEquals(1, entityManagerStub.persistedObjects().size()),
                 () -> assertEquals(1, entityManagerStub.flushCount()));
     }
@@ -94,7 +106,9 @@ final class UserServiceTest {
     @Test
     void reportsDatabaseUsernameRaceAsValidationFailure() {
         EntityManagerStub entityManagerStub = entityManagerStub()
-                .singleResultNotFound("from ApplicationUser applicationUser")
+                .singleResultNotFound(
+                        "from ApplicationUser applicationUser",
+                        queryParameter("username", "piotr"))
                 .failOnFlush(new PersistenceException(new SQLException("duplicate username", "23505")));
 
         UserService userService = new UserService();
@@ -118,7 +132,10 @@ final class UserServiceTest {
         user.setPasswordVersion(6);
         String originalPasswordHash = user.getPasswordHash();
         EntityManagerStub entityManagerStub = entityManagerStub()
-                .singleResult("where applicationUser.id = :userId", user);
+                .singleResult(
+                        "where applicationUser.id = :userId",
+                        user,
+                        queryParameter("userId", user.getId()));
         RecordingAuditService auditService = new RecordingAuditService();
         UserService userService = passwordChangeUserService(entityManagerStub, passwordService, auditService);
         String newPassword = "Changed calendar password 2026";
@@ -161,12 +178,7 @@ final class UserServiceTest {
                         VALID_PASSWORD,
                         VALID_PASSWORD,
                         VALID_PASSWORD,
-                        "New password must be different from the current password."),
-                new PasswordChangeFailureCase(
-                        VALID_PASSWORD,
-                        "lowercase password 2026",
-                        "lowercase password 2026",
-                        "Password must contain at least one uppercase letter."));
+                        "New password must be different from the current password."));
 
         for (PasswordChangeFailureCase failureCase : failureCases) {
             PasswordService passwordService = passwordService();
@@ -174,7 +186,10 @@ final class UserServiceTest {
             user.setPasswordVersion(2);
             String originalPasswordHash = user.getPasswordHash();
             EntityManagerStub entityManagerStub = entityManagerStub()
-                    .singleResult("where applicationUser.id = :userId", user);
+                    .singleResult(
+                            "where applicationUser.id = :userId",
+                            user,
+                            queryParameter("userId", user.getId()));
             RecordingAuditService auditService = new RecordingAuditService();
             UserService userService = passwordChangeUserService(entityManagerStub, passwordService, auditService);
 

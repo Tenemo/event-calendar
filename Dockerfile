@@ -11,12 +11,13 @@ WORKDIR /app
 COPY .mvn .mvn
 COPY mvnw pom.xml ./
 RUN chmod +x mvnw \
-    && ./mvnw -B -ntp -Dmaven.test.skip=true dependency:go-offline
+    && ./mvnw -B -ntp -Dmaven.test.skip=true dependency:go-offline dependency:resolve
 
 ARG RAILWAY_GIT_COMMIT_SHA=""
 
 COPY src/main src/main
-RUN revision_resource="src/main/resources/META-INF/deployment-revision" \
+RUN find src/main -type f -exec chmod 0644 {} + \
+    && revision_resource="src/main/resources/META-INF/deployment-revision" \
     && rm -f "$revision_resource" \
     && if [ -n "$RAILWAY_GIT_COMMIT_SHA" ]; then \
         if [ "$(printf '%s' "$RAILWAY_GIT_COMMIT_SHA" | wc -c)" -ne 40 ] \
@@ -33,6 +34,7 @@ FROM icr.io/appcafe/open-liberty:kernel-slim-java25-openj9-ubi-minimal@sha256:b9
 USER 1001
 
 ENV OPENJ9_SCC=false
+ENV HTTP_HOST=*
 
 COPY --chown=1001:0 src/main/liberty/config/server.xml /config/
 COPY --chown=1001:0 src/main/liberty/container/bootstrap.properties /config/

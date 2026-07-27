@@ -36,7 +36,7 @@
                           styleClass="surface-panel form-panel lightweight-panel"
                           pt:aria-labelledby="signInHeading">
                 <h:form styleClass="stacked-form">
-                    <h:inputHidden value="#{signInView.invitationToken}"/>
+                    <h:inputHidden id="invitationToken" value="#{signInView.invitationToken}"/>
                     <h:outputLabel for="username" value="Username"/>
                     <h:inputText id="username"
                                  value="#{signInView.username}"
@@ -51,7 +51,7 @@
                                    value="#{signInView.password}"
                                    styleClass="native-input"
                                    pt:autocomplete="current-password"
-                                   maxlength="#{passwordService.maximumPasswordLength}"
+                                   maxlength="#{passwordService.maximumPasswordTransportLength}"
                                    required="true"
                                    requiredMessage="Password is required."/>
 

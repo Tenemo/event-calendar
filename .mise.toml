@@ -48,8 +48,11 @@ run = [
 ]
 
 [tasks.lighthouse]
-description = "Measure mobile Lighthouse scores against the production image"
-run = "mise exec -- java scripts/calendar-tool.java lighthouse"
+description = "Run Lighthouse performance budgets against the running application"
+run = [
+    "npm ci --ignore-scripts",
+    "npm run lighthouse",
+]
 
 [tasks.verify-reproducible-build]
 description = "Verify that repeated WAR builds are identical"
@@ -58,10 +61,6 @@ run = "mise exec -- java scripts/calendar-tool.java verify-reproducible-build"
 [tasks.end-to-end]
 description = "Run isolated Playwright end-to-end tests"
 run = "mise exec -- java scripts/calendar-tool.java end-to-end"
-
-[tasks.end-to-end-calendar-link-throttle]
-description = "Run isolated calendar-link request-throttle end-to-end tests"
-run = "mise exec -- java scripts/calendar-tool.java end-to-end-calendar-link-throttle"
 
 [tasks.verify-bootstrap-registration]
 description = "Verify atomic bootstrap registration against isolated PostgreSQL"
@@ -82,15 +81,3 @@ run = "mise exec -- java scripts/calendar-tool.java image-scan"
 [tasks.docker-up]
 description = "Build and start the production image with local PostgreSQL"
 run = "mise exec -- java scripts/calendar-tool.java docker-up"
-
-[tasks.backup-postgres]
-description = "Create a PostgreSQL custom-format backup"
-run = "mise exec -- java scripts/calendar-tool.java backup-postgres"
-
-[tasks.restore-postgres]
-description = "Restore a PostgreSQL backup after explicit database confirmation"
-run = "mise exec -- java scripts/calendar-tool.java restore-postgres"
-
-[tasks.verify-backup-restore]
-description = "Verify backup and restore against a fresh temporary PostgreSQL database"
-run = "mise exec -- java scripts/calendar-tool.java verify-backup-restore"

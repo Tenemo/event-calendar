@@ -21,6 +21,7 @@ final class RuntimeSessionConfigurationTest {
     private static final Path WEB_CONFIGURATION_PATH = Path.of(
             "src", "main", "webapp", "WEB-INF", "web.xml");
     private static final Path COMPOSE_CONFIGURATION_PATH = Path.of("docker-compose.yml");
+    private static final Path CONTAINER_DEFINITION_PATH = Path.of("Dockerfile");
     private static final Path LOCAL_ENVIRONMENT_EXAMPLE_PATH = Path.of(".env.example");
 
     @Test
@@ -58,7 +59,7 @@ final class RuntimeSessionConfigurationTest {
     }
 
     @Test
-    void anonymousSessionsAreShortLivedAndDoNotReceivePersistentCookies() throws Exception {
+    void anonymousSessionsAreBoundedShortLivedAndDoNotReceivePersistentCookies() throws Exception {
         Element httpSession = (Element) parseXml(SERVER_CONFIGURATION_PATH)
                 .getElementsByTagName("httpSession")
                 .item(0);
@@ -74,10 +75,12 @@ final class RuntimeSessionConfigurationTest {
                 () -> assertEquals("true", httpSession.getAttribute("cookieSecure")),
                 () -> assertEquals("Lax", httpSession.getAttribute("cookieSameSite")),
                 () -> assertEquals("", httpSession.getAttribute("cookieMaxAge")),
-                () -> assertEquals("30m", httpSession.getAttribute("invalidationTimeout")),
+                () -> assertEquals("false", httpSession.getAttribute("allowOverflow")),
+                () -> assertEquals("1000", httpSession.getAttribute("maxInMemorySessionCount")),
+                () -> assertEquals("10m", httpSession.getAttribute("invalidationTimeout")),
                 () -> assertEquals("false", httpSession.getAttribute("urlRewritingEnabled")),
                 () -> assertEquals(
-                        "30",
+                        "10",
                         webSession.getElementsByTagName("session-timeout").item(0).getTextContent()),
                 () -> assertEquals(
                         "true",
@@ -93,14 +96,22 @@ final class RuntimeSessionConfigurationTest {
     @Test
     void localBrowserOriginUsesHttpsWhenAuthenticationCookiesRequireSecureTransport() throws Exception {
         Element serverConfiguration = readXmlRoot(SERVER_CONFIGURATION_PATH);
+        Element httpEndpoint = firstElement(serverConfiguration, "httpEndpoint");
+        Element httpHostVariable = variable(serverConfiguration, "HTTP_HOST");
         Element webApplicationSecurity = firstElement(serverConfiguration, "webAppSecurity");
         String composeConfiguration = Files.readString(COMPOSE_CONFIGURATION_PATH);
+        String containerDefinition = Files.readString(CONTAINER_DEFINITION_PATH);
         String localEnvironmentExample = Files.readString(LOCAL_ENVIRONMENT_EXAMPLE_PATH);
 
         assertAll(
                 () -> assertEquals(
                         "true",
                         webApplicationSecurity.getAttribute("ssoRequiresSSL")),
+                () -> assertEquals("127.0.0.1", httpHostVariable.getAttribute("defaultValue")),
+                () -> assertEquals("${HTTP_HOST}", httpEndpoint.getAttribute("host")),
+                () -> assertTrue(
+                        containsTrimmedLine(containerDefinition, "ENV HTTP_HOST=*"),
+                        "The production container must accept traffic from its container network."),
                 () -> assertTrue(
                         containsTrimmedLine(
                                 composeConfiguration,
@@ -109,8 +120,18 @@ final class RuntimeSessionConfigurationTest {
                 () -> assertTrue(
                         containsTrimmedLine(
                                 composeConfiguration,
-                                "- \"${HTTPS_PORT:-9443}:9443\""),
-                        "The local Compose application must expose Liberty's HTTPS listener."),
+                                "- \"127.0.0.1:${PGPORT:-5432}:5432\""),
+                        "The local Compose database must be exposed only on loopback."),
+                () -> assertTrue(
+                        containsTrimmedLine(
+                                composeConfiguration,
+                                "- \"127.0.0.1:${PORT:-9080}:9080\""),
+                        "The local Compose HTTP listener must be exposed only on loopback."),
+                () -> assertTrue(
+                        containsTrimmedLine(
+                                composeConfiguration,
+                                "- \"127.0.0.1:${HTTPS_PORT:-9443}:9443\""),
+                        "The local Compose HTTPS listener must be exposed only on loopback."),
                 () -> assertTrue(
                         containsTrimmedLine(
                                 localEnvironmentExample,
@@ -174,7 +195,7 @@ final class RuntimeSessionConfigurationTest {
     }
 
     @Test
-    void securityHeadersAndCalendarAdmissionRunBeforeRollingSessionRefreshAndForwardedRendering() throws Exception {
+    void securityHeadersAndCalendarRoutingRunBeforeRollingSessionRefreshAndForwardedRendering() throws Exception {
         NodeList filterMappingElements = parseXml(WEB_CONFIGURATION_PATH)
                 .getElementsByTagName("filter-mapping");
         List<String> filterNames = new ArrayList<>();
@@ -198,14 +219,18 @@ final class RuntimeSessionConfigurationTest {
                 () -> assertEquals(
                         List.of(
                                 "Security headers filter",
+                                "Request body security filter",
                                 "Calendar route filter",
                                 "Session cookie refresh filter",
                                 "Authenticated application filter"),
                         filterNames),
-                () -> assertEquals(List.of("/*", "/*", "/*", "/app/*"), urlPatterns),
+                () -> assertEquals(
+                        List.of("/*", "/*", "/*", "/*", "/app/*"),
+                        urlPatterns),
                 () -> assertEquals(
                         List.of(
                                 List.of("REQUEST", "FORWARD", "ERROR"),
+                                List.of("REQUEST"),
                                 List.of("REQUEST"),
                                 List.of("REQUEST", "FORWARD"),
                                 List.of("REQUEST", "FORWARD")),

@@ -6,7 +6,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.security.enterprise.identitystore.Pbkdf2PasswordHash;
+import java.text.Normalizer;
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.Map;
 
 @ApplicationScoped
@@ -16,8 +18,9 @@ public class PasswordService {
     static final int PASSWORD_HASH_ITERATIONS = 600_000;
     private static final int PASSWORD_HASH_SALT_BYTES = 32;
     private static final int PASSWORD_HASH_KEY_BYTES = 32;
-    public static final int MINIMUM_PASSWORD_LENGTH = 8;
+    public static final int MINIMUM_PASSWORD_LENGTH = 15;
     public static final int MAXIMUM_PASSWORD_LENGTH = 512;
+    public static final int MAXIMUM_PASSWORD_TRANSPORT_LENGTH = MAXIMUM_PASSWORD_LENGTH * 2;
 
     /**
      * Verified instead of a real stored hash when the username does not exist, so that a missing
@@ -36,7 +39,6 @@ public class PasswordService {
         if (passwordHash == null) {
             throw new IllegalStateException("Jakarta Security password hash is unavailable.");
         }
-
         passwordHash.initialize(Map.of(
                 "Pbkdf2PasswordHash.Algorithm", PASSWORD_HASH_ALGORITHM,
                 "Pbkdf2PasswordHash.Iterations", Integer.toString(PASSWORD_HASH_ITERATIONS),
@@ -49,7 +51,7 @@ public class PasswordService {
         char[] unusablePasswordCharacters = ("absent-account-placeholder-"
                 + PASSWORD_HASH_ALGORITHM + "-" + PASSWORD_HASH_ITERATIONS).toCharArray();
         try {
-            return passwordHash.generate(unusablePasswordCharacters);
+            return generatePasswordHash(unusablePasswordCharacters);
         } finally {
             Arrays.fill(unusablePasswordCharacters, '\0');
         }
@@ -59,8 +61,13 @@ public class PasswordService {
         return MAXIMUM_PASSWORD_LENGTH;
     }
 
+    public int getMaximumPasswordTransportLength() {
+        return MAXIMUM_PASSWORD_TRANSPORT_LENGTH;
+    }
+
     public void validatePasswordPolicy(String username, String password) {
-        if (password == null || password.isBlank()) {
+        String normalizedPassword = normalizedCredentialForPolicyComparison(password);
+        if (normalizedPassword.isBlank()) {
             throw new ValidationException("Password is required.");
         }
         int passwordLength = password.codePointCount(0, password.length());
@@ -70,32 +77,32 @@ public class PasswordService {
         if (passwordLength > MAXIMUM_PASSWORD_LENGTH) {
             throw new ValidationException("Password must be " + MAXIMUM_PASSWORD_LENGTH + " characters or fewer.");
         }
-        if (username != null && password.equalsIgnoreCase(username.trim())) {
+        if (normalizedPassword.equals(normalizedCredentialForPolicyComparison(username))) {
             throw new ValidationException("Password must not match the username.");
         }
-        if (password.codePoints().noneMatch(Character::isUpperCase)) {
-            throw new ValidationException("Password must contain at least one uppercase letter.");
+    }
+
+    private String normalizedCredentialForPolicyComparison(String credential) {
+        if (credential == null) {
+            return "";
         }
-        if (password.codePoints().noneMatch(Character::isDigit)) {
-            throw new ValidationException("Password must contain at least one digit.");
-        }
+        return Normalizer.normalize(credential, Normalizer.Form.NFKC)
+                .strip()
+                .toLowerCase(Locale.ROOT);
     }
 
     public String hashPassword(String username, String password) {
         validatePasswordPolicy(username, password);
         char[] passwordCharacters = password.toCharArray();
         try {
-            return passwordHash.generate(passwordCharacters);
+            return generatePasswordHash(passwordCharacters);
         } finally {
             Arrays.fill(passwordCharacters, '\0');
         }
     }
 
     public boolean verifyPassword(String password, String storedHash) {
-        if (password == null || password.isBlank() || storedHash == null || storedHash.isBlank()) {
-            return false;
-        }
-        if (password.codePointCount(0, password.length()) > MAXIMUM_PASSWORD_LENGTH) {
+        if (!isPasswordVerificationCandidate(password, storedHash)) {
             return false;
         }
 
@@ -112,6 +119,20 @@ public class PasswordService {
             throw new IllegalStateException("The absent-account password hash was not initialized.");
         }
         verifyPassword(password, absentUserPasswordHash);
+    }
+
+    private String generatePasswordHash(char[] passwordCharacters) {
+        return passwordHash.generate(passwordCharacters);
+    }
+
+    private boolean isPasswordVerificationCandidate(
+            String password,
+            String storedHash) {
+        return password != null
+                && !password.isBlank()
+                && storedHash != null
+                && !storedHash.isBlank()
+                && password.codePointCount(0, password.length()) <= MAXIMUM_PASSWORD_LENGTH;
     }
 
     private boolean verifyJakartaSecurityPasswordHash(char[] passwordCharacters, String storedHash) {

@@ -238,7 +238,6 @@ jobs:
     needs: production-image
     env:
       BROWSER: chromium
-      END_TO_END_ARTIFACTS_DIRECTORY: .build/end-to-end-artifacts/chromium
 
     steps:
       - name: Check out repository
@@ -284,14 +283,13 @@ jobs:
       - name: Run shared-calendar browser workflows
         run: java scripts/calendar-tool.java end-to-end-shared
 
-      - name: Upload browser diagnostics
+      - name: Upload end-to-end failure logs
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           include-hidden-files: true
           name: end-to-end-chromium-diagnostics-${{ github.run_attempt }}
           path: |
-            .build/end-to-end-artifacts/**
             .build/package/failsafe-reports/**
             .build/verification/**
           if-no-files-found: ignore
@@ -308,7 +306,6 @@ jobs:
         browser: [firefox, webkit]
     env:
       BROWSER: ${{ matrix.browser }}
-      END_TO_END_ARTIFACTS_DIRECTORY: .build/end-to-end-artifacts/${{ matrix.browser }}
 
     steps:
       - name: Check out repository
@@ -354,14 +351,13 @@ jobs:
       - name: Run focused cross-browser workflows
         run: java scripts/calendar-tool.java end-to-end-cross-browser-smoke
 
-      - name: Upload cross-browser diagnostics
+      - name: Upload cross-browser failure logs
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           include-hidden-files: true
           name: end-to-end-${{ matrix.browser }}-diagnostics-${{ github.run_attempt }}
           path: |
-            .build/end-to-end-artifacts/**
             .build/package/failsafe-reports/**
             .build/verification/**
           if-no-files-found: ignore
@@ -374,7 +370,6 @@ jobs:
     needs: production-image
     env:
       BROWSER: chromium
-      END_TO_END_ARTIFACTS_DIRECTORY: .build/end-to-end-artifacts/bootstrap-registration
 
     steps:
       - name: Check out repository
@@ -420,21 +415,20 @@ jobs:
       - name: Verify atomic bootstrap registration
         run: java scripts/calendar-tool.java verify-bootstrap-registration --reuse-image
 
-      - name: Upload bootstrap-registration diagnostics
+      - name: Upload bootstrap-registration failure logs
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           include-hidden-files: true
           name: bootstrap-registration-diagnostics-${{ github.run_attempt }}
           path: |
-            .build/end-to-end-artifacts/**
             .build/package/failsafe-reports/**
             .build/verification/**
           if-no-files-found: ignore
           retention-days: 7
 
   production-smoke:
-    name: Production container smoke
+    name: Production smoke and Lighthouse
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     needs: production-image
@@ -442,76 +436,6 @@ jobs:
       APP_BASE_URL: http://localhost:9080
       EXPECTED_DEPLOYMENT_REVISION: ${{ github.sha }}
       PORT: "9080"
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-
-      - name: Set up the pinned toolchain
-        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4.2.1
-        with:
-          version: 2026.7.7
-          install_args: java
-          cache: true
-
-      - name: Download exact production image
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: production-image-${{ github.sha }}
-          path: .build/production-image
-
-      - name: Load and verify exact production image
-        run: |
-          docker image load --input .build/production-image/shared-calendar-image.tar.gz
-          expected_image_id="$(tr -d '\r\n' < .build/production-image/image-id.txt)"
-          actual_image_id="$(docker image inspect --format '{{.Id}}' "$PRODUCTION_IMAGE_NAME")"
-          test "$actual_image_id" = "$expected_image_id"
-
-      - name: Start production container and PostgreSQL
-        run: docker compose --profile application up -d --no-build web
-
-      - name: Wait for production container
-        run: java scripts/calendar-tool.java wait-for-app
-
-      - name: Verify artifact revision, stable routes, and migrations
-        run: |
-          java scripts/calendar-tool.java verify-local
-          java scripts/verify-production-deployment.java \
-            --base-url "$APP_BASE_URL" \
-            --expected-revision "$EXPECTED_DEPLOYMENT_REVISION" \
-            --timeout-seconds 30 \
-            --poll-interval-seconds 1
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://localhost:9080/AAAAAAAAAAA)" = "404"
-
-      - name: Save production container logs on failure
-        if: failure()
-        run: |
-          mkdir -p .build/ci-diagnostics
-          docker compose --profile application logs --no-color web postgres > .build/ci-diagnostics/production-container.log
-
-      - name: Upload production container diagnostics
-        if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          include-hidden-files: true
-          name: production-container-diagnostics-${{ github.run_attempt }}
-          path: |
-            .build/ci-diagnostics/**
-            .build/verification/**
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: Stop isolated production containers
-        if: always()
-        run: docker compose --profile application down --volumes --remove-orphans
-
-  lighthouse:
-    name: Mobile Lighthouse
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    needs: production-image
 
     steps:
       - name: Check out repository
@@ -545,21 +469,56 @@ jobs:
           actual_image_id="$(docker image inspect --format '{{.Id}}' "$PRODUCTION_IMAGE_NAME")"
           test "$actual_image_id" = "$expected_image_id"
 
-      - name: Require mobile Lighthouse scores of at least 95
-        run: java scripts/calendar-tool.java lighthouse --reuse-image
+      - name: Start production container and PostgreSQL
+        run: docker compose --profile application up -d --no-build web
+
+      - name: Wait for production container
+        run: java scripts/calendar-tool.java wait-for-app
+
+      - name: Verify artifact revision, stable routes, and migrations
+        run: |
+          java scripts/calendar-tool.java verify-local
+          java scripts/verify-production-deployment.java \
+            --base-url "$APP_BASE_URL" \
+            --expected-revision "$EXPECTED_DEPLOYMENT_REVISION" \
+            --timeout-seconds 30 \
+            --poll-interval-seconds 1
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://localhost:9080/AAAAAAAAAAA)" = "404"
+
+      - name: Enforce Lighthouse performance budgets
+        run: mise run lighthouse
 
       - name: Upload Lighthouse reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           include-hidden-files: true
-          name: mobile-lighthouse-${{ github.sha }}-${{ github.run_attempt }}
+          name: lighthouse-${{ github.sha }}-${{ github.run_attempt }}
+          path: .build/lighthouse
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Save production container logs on failure
+        if: failure()
+        run: |
+          mkdir -p .build/ci-diagnostics
+          docker compose --profile application logs --no-color web postgres > .build/ci-diagnostics/production-container.log
+
+      - name: Upload production container diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          include-hidden-files: true
+          name: production-container-diagnostics-${{ github.run_attempt }}
           path: |
-            .build/lighthouse/**
-            .lighthouseci/**
-            .build/verification/lighthouse/**
-          if-no-files-found: warn
+            .build/ci-diagnostics/**
+            .build/verification/**
+          if-no-files-found: ignore
           retention-days: 7
+
+      - name: Stop isolated production containers
+        if: always()
+        run: docker compose --profile application down --volumes --remove-orphans
 
   image-scan:
     name: Production image vulnerability scan
@@ -628,56 +587,6 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  backup-restore:
-    name: PostgreSQL backup and restore
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    needs: production-image
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-
-      - name: Set up the pinned toolchain
-        uses: jdx/mise-action@dad1bfd3df957f44999b559dd69dc1671cb4e9ea # v4.2.1
-        with:
-          version: 2026.7.7
-          install_args: java
-          cache: true
-
-      - name: Download exact production image
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: production-image-${{ github.sha }}
-          path: .build/production-image
-
-      - name: Load and verify exact production image
-        run: |
-          expected_image_id="$(tr -d '\r\n' < .build/production-image/image-id.txt)"
-          docker image load --input .build/production-image/shared-calendar-image.tar.gz
-          actual_image_id="$(docker image inspect --format '{{.Id}}' "$PRODUCTION_IMAGE_NAME")"
-          test "$actual_image_id" = "$expected_image_id"
-
-      - name: Initialize clean source database and verify backup and restore
-        run: |
-          set -euo pipefail
-          mkdir -p .build/ci-diagnostics
-          mise run verify-backup-restore 2>&1 | tee .build/ci-diagnostics/backup-restore.log
-
-      - name: Upload backup and restore diagnostics
-        if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          include-hidden-files: true
-          name: backup-restore-diagnostics-${{ github.run_attempt }}
-          path: |
-            .build/ci-diagnostics/**
-            .build/verification/**
-          if-no-files-found: ignore
-          retention-days: 7
-
   required-pr-checks:
     name: Required PR checks
     runs-on: ubuntu-24.04
@@ -694,9 +603,7 @@ jobs:
       - cross-browser-smoke
       - bootstrap-registration
       - production-smoke
-      - lighthouse
       - image-scan
-      - backup-restore
     env:
       DEPENDENCY_REVIEW_RESULT: ${{ needs.dependency-review.result }}
       STATIC_ANALYSIS_RESULT: ${{ needs.static-analysis.result }}
@@ -708,9 +615,7 @@ jobs:
       CROSS_BROWSER_SMOKE_RESULT: ${{ needs.cross-browser-smoke.result }}
       BOOTSTRAP_REGISTRATION_RESULT: ${{ needs.bootstrap-registration.result }}
       PRODUCTION_SMOKE_RESULT: ${{ needs.production-smoke.result }}
-      LIGHTHOUSE_RESULT: ${{ needs.lighthouse.result }}
       IMAGE_SCAN_RESULT: ${{ needs.image-scan.result }}
-      BACKUP_RESTORE_RESULT: ${{ needs.backup-restore.result }}
 
     steps:
       - name: Require every merge gate to pass
@@ -736,10 +641,8 @@ jobs:
           require_success "Playwright end-to-end" "$END_TO_END_RESULT"
           require_success "Cross-browser smoke matrix" "$CROSS_BROWSER_SMOKE_RESULT"
           require_success "Bootstrap registration concurrency" "$BOOTSTRAP_REGISTRATION_RESULT"
-          require_success "Production container smoke" "$PRODUCTION_SMOKE_RESULT"
-          require_success "Mobile Lighthouse" "$LIGHTHOUSE_RESULT"
+          require_success "Production smoke and Lighthouse" "$PRODUCTION_SMOKE_RESULT"
           require_success "Production image vulnerability scan" "$IMAGE_SCAN_RESULT"
-          require_success "PostgreSQL backup and restore" "$BACKUP_RESTORE_RESULT"
 
           if [ "$failed_job_count" -ne 0 ]; then
             exit 1

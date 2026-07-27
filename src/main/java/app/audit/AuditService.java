@@ -5,15 +5,24 @@ import app.user.ApplicationUser;
 import jakarta.ejb.Stateless;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import java.time.Clock;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 
 @Stateless
 public class AuditService {
     @PersistenceContext(unitName = "calendarPersistenceUnit")
     private EntityManager entityManager;
 
-    public void record(ApplicationUser actingUser, Calendar calendar, String entityType, Long entityId, String action, String details) {
+    private Clock clock = Clock.systemUTC();
+
+    public void record(
+            ApplicationUser actingUser,
+            Calendar calendar,
+            String entityType,
+            Long entityId,
+            String action,
+            String details) {
+        OffsetDateTime currentTime = OffsetDateTime.now(clock);
         AuditLog auditLog = new AuditLog(
                 actingUser,
                 calendar,
@@ -21,7 +30,7 @@ public class AuditService {
                 entityId,
                 action,
                 details,
-                OffsetDateTime.now(ZoneOffset.UTC));
+                currentTime);
         entityManager.persist(auditLog);
     }
 }

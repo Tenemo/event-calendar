@@ -1,6 +1,7 @@
 package app.endtoend;
 
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -58,14 +59,14 @@ final class CalendarAndEventEndToEndIT extends SharedCalendarEndToEndSupport {
 
             Locator allDayCheckbox = page.getByLabel("All-day event");
             Locator timedEventStartInput = page.locator("input[id$='eventStart_input']");
+            page.locator("input[id$='eventTitle']").fill(allDayEventTitle);
             timedEventStartInput.fill("");
-            clickAllDayCheckboxAndWaitForUpdate(page);
+            page.locator("button:has-text('Create event')").click();
             assertThat(allDayCheckbox).not().isChecked();
             assertThat(timedEventStartInput).isVisible();
             assertEquals(0, page.locator("input[id$='eventFirstDay_input']").count());
             assertBodyContains(page, "Event start time is required.");
 
-            page.locator("input[id$='eventTitle']").fill(allDayEventTitle);
             timedEventStartInput.fill("2026-07-22 13:30");
             page.locator("input[id$='eventEnd_input']").fill("2026-07-25 00:00");
             clickAllDayCheckboxAndWaitForUpdate(page);
@@ -74,13 +75,6 @@ final class CalendarAndEventEndToEndIT extends SharedCalendarEndToEndSupport {
             Locator lastDayInput = page.locator("input[id$='eventLastDay_input']");
             assertThat(firstDayInput).hasValue("2026-07-22");
             assertThat(lastDayInput).hasValue("2026-07-24");
-
-            firstDayInput.fill("");
-            clickAllDayCheckboxAndWaitForUpdate(page);
-            assertThat(allDayCheckbox).isChecked();
-            assertThat(firstDayInput).isVisible();
-            assertEquals(0, timedEventStartInput.count());
-            assertBodyContains(page, "Event first day is required.");
 
             firstDayInput.fill("2026-07-23");
             lastDayInput.fill("2026-07-25");
@@ -107,12 +101,32 @@ final class CalendarAndEventEndToEndIT extends SharedCalendarEndToEndSupport {
             assertBodyContains(page, allDayEventTitle);
 
             calendarSettingsLink(page).click();
-            page.locator("input[id$='timeZone']").fill("Mars/Olympus");
+            Locator calendarNameInput = page.locator("input[id$='calendarName']");
+            Locator calendarDescriptionInput = page.locator("textarea[id$='calendarDescription']");
+            Locator timeZoneInput = page.locator("input[id$='timeZone']");
+            Locator publicAccessCheckbox = page.getByLabel("Enable public read-only access");
+            String persistedCalendarName = calendarNameInput.inputValue();
+            assertThat(publicAccessCheckbox).isChecked();
+            calendarNameInput.fill("Rejected calendar name " + uniqueSuffix);
+            calendarDescriptionInput.fill("Rejected calendar description " + uniqueSuffix);
+            timeZoneInput.fill("Mars/Olympus");
+            page.locator(".checkbox-field .ui-chkbox-box").click();
+            assertThat(publicAccessCheckbox).not().isChecked();
             page.locator("button:has-text('Save settings')").click();
             assertBodyContains(page, "Time zone must be a valid region such as Europe/Warsaw.");
+            assertAll(
+                    () -> assertEquals("Rejected calendar name " + uniqueSuffix, calendarNameInput.inputValue()),
+                    () -> assertEquals(
+                            "Rejected calendar description " + uniqueSuffix,
+                            calendarDescriptionInput.inputValue()),
+                    () -> assertEquals("Mars/Olympus", timeZoneInput.inputValue()),
+                    () -> assertThat(publicAccessCheckbox).not().isChecked(),
+                    () -> assertBodyContains(page, "Public access disabled"));
             String calendarDescription = "Summer river plans " + uniqueSuffix;
-            page.locator("input[id$='timeZone']").fill("America/New_York");
-            page.locator("textarea[id$='calendarDescription']").fill(calendarDescription);
+            calendarNameInput.fill(persistedCalendarName);
+            calendarDescriptionInput.fill(calendarDescription);
+            timeZoneInput.fill("America/New_York");
+            page.locator(".checkbox-field .ui-chkbox-box").click();
             page.locator("button:has-text('Save settings')").click();
             assertBodyContains(page, "Calendar settings saved.");
             page.locator("a:has-text('Back to calendar')").click();
@@ -174,7 +188,6 @@ final class CalendarAndEventEndToEndIT extends SharedCalendarEndToEndSupport {
                             + redactedDiagnosticUrl(staleRegenerationPage.url())
                             + ".");
             assertNoBrowserMessages(staleRegenerationBrowserMessages);
-            staleRegenerationPage.close();
 
             try (BrowserContext publicBrowserContext = browser.newContext()) {
                 List<String> publicBrowserMessages = new ArrayList<>();
@@ -205,6 +218,23 @@ final class CalendarAndEventEndToEndIT extends SharedCalendarEndToEndSupport {
                     "Regeneration must replace the previous calendar bearer link.");
             assertCanonicalCalendarRoute(page, Long.toString(findCalendarId(calendarName)));
 
+            staleRegenerationPage.locator("button:has-text('Regenerate link')").click();
+            clickAndWaitForNavigation(
+                    staleRegenerationPage,
+                    confirmationButton(staleRegenerationPage, "Regenerate link"),
+                    "concurrent stale calendar-link regeneration");
+            assertBodyContains(staleRegenerationPage, "Calendar link could not be regenerated.");
+            assertBodyContains(
+                    staleRegenerationPage,
+                    "This calendar changed after you opened it. Reload the page and try again.");
+            assertEquals(
+                    regeneratedCalendarLink,
+                    staleRegenerationPage.url(),
+                    "A stale member tab must recover the current canonical link after another tab regenerates it.");
+            assertBodyContains(staleRegenerationPage, eventTitle);
+            assertNoBrowserMessages(staleRegenerationBrowserMessages);
+            staleRegenerationPage.close();
+
             try (BrowserContext regeneratedLinkBrowserContext = browser.newContext()) {
                 List<String> oldLinkBrowserMessages = new ArrayList<>();
                 Page oldLinkPage = newPage(regeneratedLinkBrowserContext, oldLinkBrowserMessages);
@@ -226,11 +256,13 @@ final class CalendarAndEventEndToEndIT extends SharedCalendarEndToEndSupport {
     }
 
     @Test
-    void anonymousReadersCanLoadEveryEventPageWithoutLosingTheirFacesView() throws SQLException {
+    void anonymousPaginationRestartsWhenEventOrderingChangesWithoutOmittingMovedEvents()
+            throws SQLException {
         String uniqueSuffix = uniqueSuffix();
         String ownerUsername = "pagination-owner-" + uniqueSuffix;
         String calendarName = "Pagination calendar " + uniqueSuffix;
         String eventTitlePrefix = "Paginated event " + uniqueSuffix + " ";
+        String insertedEventTitlePrefix = "Earlier inserted event " + uniqueSuffix + " ";
         seedUser(ownerUsername);
         long calendarId;
         String calendarLink;
@@ -243,7 +275,7 @@ final class CalendarAndEventEndToEndIT extends SharedCalendarEndToEndSupport {
             calendarId = findCalendarId(calendarName);
             calendarLink = ownerPage.url();
         }
-        insertCalendarEvents(calendarId, eventTitlePrefix, 51);
+        insertCalendarEvents(calendarId, eventTitlePrefix, 102);
 
         List<String> browserMessages = new ArrayList<>();
         try (BrowserContext publicContext = browser.newContext()) {
@@ -257,11 +289,50 @@ final class CalendarAndEventEndToEndIT extends SharedCalendarEndToEndSupport {
                     "article",
                     new Page.LocatorOptions().setHasText(eventTitlePrefix + "051")).count());
 
+            moveCalendarEventBeforeLoadedPage(calendarId, eventTitlePrefix + "051");
             publicPage.locator("button:has-text('Load more events')").click();
             waitForPageResources(publicPage);
 
-            assertEquals(51, publicPage.locator("article").count());
-            assertBodyContains(publicPage, eventTitlePrefix + "051");
+            assertEquals(100, publicPage.locator("article").count());
+            assertEquals(1, publicPage.locator(
+                    "article",
+                    new Page.LocatorOptions().setHasText(eventTitlePrefix + "051")).count());
+            assertEquals(1, publicPage.locator(
+                    "article",
+                    new Page.LocatorOptions().setHasText(eventTitlePrefix + "100")).count());
+            assertEquals(0, publicPage.locator(
+                    "article",
+                    new Page.LocatorOptions().setHasText(eventTitlePrefix + "101")).count());
+            assertThat(publicPage.locator("article:focus")).containsText(eventTitlePrefix + "051");
+            assertThat(publicPage.locator("[id$='eventPaginationAnnouncement']"))
+                    .containsText("Events changed, so the list was refreshed. New events shown: 50. Total events shown: 100.");
+            assertEquals(1, publicPage.locator("button:has-text('Load more events')").count());
+
+            insertEarlierCalendarEvents(calendarId, insertedEventTitlePrefix, 1, 1);
+            deleteCalendarEvent(calendarId, eventTitlePrefix + "001");
+            publicPage.locator("button:has-text('Load more events')").click();
+            waitForPageResources(publicPage);
+
+            assertEquals(102, publicPage.locator("article").count());
+            assertEquals(1, publicPage.locator(
+                    "article",
+                    new Page.LocatorOptions().setHasText(eventTitlePrefix + "051")).count());
+            assertEquals(1, publicPage.locator(
+                    "article",
+                    new Page.LocatorOptions().setHasText(eventTitlePrefix + "101")).count());
+            assertEquals(1, publicPage.locator(
+                    "article",
+                    new Page.LocatorOptions().setHasText(eventTitlePrefix + "102")).count());
+            assertEquals(1, publicPage.locator(
+                    "article",
+                    new Page.LocatorOptions().setHasText(insertedEventTitlePrefix + "001")).count());
+            assertEquals(0, publicPage.locator(
+                    "article",
+                    new Page.LocatorOptions().setHasText(eventTitlePrefix + "001")).count());
+            assertThat(publicPage.locator("article:focus"))
+                    .containsText(insertedEventTitlePrefix + "001");
+            assertThat(publicPage.locator("[id$='eventPaginationAnnouncement']"))
+                    .containsText("Events changed, so the list was refreshed. New events shown: 3. Total events shown: 102.");
             assertEquals(0, publicPage.locator("button:has-text('Load more events')").count());
             assertEquals(calendarLink, publicPage.url());
             assertNoBrowserMessages(browserMessages);
@@ -522,11 +593,21 @@ final class CalendarAndEventEndToEndIT extends SharedCalendarEndToEndSupport {
             navigateToBearerLink(firstPage, route("/app/calendar-settings?id=" + calendarId));
             navigateToBearerLink(secondPage, route("/app/calendar-settings?id=" + calendarId));
             firstPage.locator("textarea[id$='calendarDescription']").fill("First settings update " + uniqueSuffix);
+            assertThat(firstPage.getByLabel("Enable public read-only access")).isChecked();
+            firstPage.locator(".checkbox-field .ui-chkbox-box").click();
             firstPage.locator("button:has-text('Save settings')").click();
             assertBodyContains(firstPage, "Calendar settings saved.");
+            assertBodyContains(firstPage, "Public access disabled");
+            assertThat(secondPage.getByLabel("Enable public read-only access")).isChecked();
             secondPage.locator("textarea[id$='calendarDescription']").fill("Second settings update " + uniqueSuffix);
             secondPage.locator("button:has-text('Save settings')").click();
             assertBodyContains(secondPage, "This calendar changed after you opened it. Reload the page and try again.");
+            assertEquals(
+                    "First settings update " + uniqueSuffix,
+                    secondPage.locator("textarea[id$='calendarDescription']").inputValue());
+            assertThat(secondPage.getByLabel("Enable public read-only access")).not().isChecked();
+            assertBodyContains(secondPage, "Public access disabled");
+            assertFalse(secondPage.locator("body").innerText().contains("Second settings update " + uniqueSuffix));
             navigateToBearerLink(secondPage, secondPage.url());
             assertBodyContains(secondPage, "First settings update " + uniqueSuffix);
             assertFalse(secondPage.locator("body").innerText().contains("Second settings update " + uniqueSuffix));
@@ -585,6 +666,68 @@ final class CalendarAndEventEndToEndIT extends SharedCalendarEndToEndSupport {
             statement.setInt(2, eventCount);
             statement.setLong(3, calendarId);
             assertEquals(eventCount, statement.executeUpdate());
+        }
+    }
+
+    private void insertEarlierCalendarEvents(
+            long calendarId,
+            String eventTitlePrefix,
+            int eventCount,
+            int firstEventNumber) throws SQLException {
+        try (Connection connection = openDatabaseConnection();
+                PreparedStatement statement = connection.prepareStatement("""
+                        insert into calendar_event (
+                            calendar_id,
+                            title,
+                            start_at,
+                            end_at,
+                            created_by_user_id,
+                            updated_by_user_id)
+                        select calendar.id,
+                               ? || lpad(event_number::text, 3, '0'),
+                               timestamptz '2026-01-01 08:00:00+00'
+                                   + event_number * interval '1 day',
+                               timestamptz '2026-01-01 09:00:00+00'
+                                   + event_number * interval '1 day',
+                               calendar.created_by_user_id,
+                               calendar.created_by_user_id
+                        from calendar
+                        cross join generate_series(?, ? + ? - 1) as event_number
+                        where calendar.id = ?
+                        """)) {
+            statement.setString(1, eventTitlePrefix);
+            statement.setInt(2, firstEventNumber);
+            statement.setInt(3, firstEventNumber);
+            statement.setInt(4, eventCount);
+            statement.setLong(5, calendarId);
+            assertEquals(eventCount, statement.executeUpdate());
+        }
+    }
+
+    private void moveCalendarEventBeforeLoadedPage(long calendarId, String eventTitle)
+            throws SQLException {
+        try (Connection connection = openDatabaseConnection();
+                PreparedStatement statement = connection.prepareStatement("""
+                        update calendar_event
+                        set start_at = timestamptz '2025-01-01 08:00:00+00',
+                            end_at = timestamptz '2025-01-01 09:00:00+00',
+                            version = version + 1,
+                            updated_at = now()
+                        where calendar_id = ? and title = ?
+                        """)) {
+            statement.setLong(1, calendarId);
+            statement.setString(2, eventTitle);
+            assertEquals(1, statement.executeUpdate());
+        }
+    }
+
+    private void deleteCalendarEvent(long calendarId, String eventTitle) throws SQLException {
+        try (Connection connection = openDatabaseConnection();
+                PreparedStatement statement = connection.prepareStatement(
+                        "delete from calendar_event where calendar_id = ? and title = ?")) {
+            statement.setLong(1, calendarId);
+            statement.setString(2, eventTitle);
+            assertEquals(1, statement.executeUpdate());
         }
     }
 

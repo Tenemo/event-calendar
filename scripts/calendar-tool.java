@@ -1,9 +1,14 @@
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 final class CalendarTool extends CalendarToolProcessRunner {
     private static final String JAVA_COMMAND = Path.of(
@@ -35,6 +40,16 @@ final class CalendarTool extends CalendarToolProcessRunner {
             return;
         }
 
+        if (requiresWorkspaceOperationLock(invocation.command())) {
+            try (WorkspaceOperationLock ignored = acquireWorkspaceOperationLock()) {
+                executeInvocation(invocation);
+            }
+        } else {
+            executeInvocation(invocation);
+        }
+    }
+
+    private static void executeInvocation(ToolInvocation invocation) throws Exception {
         switch (invocation.command()) {
             case "help", "--help" -> printUsage();
             case "setup" -> setup();
@@ -46,17 +61,10 @@ final class CalendarTool extends CalendarToolProcessRunner {
             case "static-analysis" -> runStaticAnalysis();
             case "verify-reproducible-build" -> verifyReproducibleBuild();
             case "lint-css" -> lintCss();
-            case "lighthouse" -> {
-                boolean reuseImage = invocation.arguments().contains("--reuse-image");
-                CalendarToolVerification.runLighthouse(!reuseImage);
-            }
             case "verify-preview-deployment" -> CalendarToolVerification.verifyPreviewDeployment();
             case "end-to-end" -> CalendarToolVerification.runEndToEndTests();
             case "end-to-end-shared" -> CalendarToolVerification.runSharedEndToEndTests();
             case "end-to-end-cross-browser-smoke" -> CalendarToolVerification.runCrossBrowserSmokeEndToEndTests();
-            case "end-to-end-calendar-link-throttle" -> CalendarToolVerification.runIsolatedEndToEndTest(
-                    "CalendarLinkRequestThrottleIT",
-                    "end-to-end-calendar-link-throttle");
             case "verify-bootstrap-registration" -> {
                 boolean reuseImage = invocation.arguments().contains("--reuse-image");
                 CalendarToolVerification.verifyBootstrapRegistrationConcurrency(true, !reuseImage);
@@ -66,14 +74,78 @@ final class CalendarTool extends CalendarToolProcessRunner {
             case "docker-build" -> buildDockerImage();
             case "image-scan" -> scanDockerImage();
             case "docker-up" -> startDockerApplication();
-            case "backup-postgres" -> CalendarToolPostgreSql.backupPostgres(invocation.arguments().isEmpty()
-                    ? null
-                    : invocation.arguments().getFirst());
-            case "restore-postgres" -> CalendarToolPostgreSql.restorePostgres(
-                    invocation.arguments().get(0),
-                    invocation.arguments().get(1));
-            case "verify-backup-restore" -> CalendarToolPostgreSql.verifyBackupRestore();
             default -> throw new IllegalStateException("Unhandled command: " + invocation.command());
+        }
+    }
+
+    static boolean requiresWorkspaceOperationLock(String command) {
+        return List.of(
+                        "db",
+                        "package",
+                        "tooling-self-test",
+                        "format",
+                        "static-analysis",
+                        "verify-reproducible-build",
+                        "lint-css",
+                        "verify-preview-deployment",
+                        "end-to-end",
+                        "end-to-end-shared",
+                        "end-to-end-cross-browser-smoke",
+                        "verify-bootstrap-registration",
+                        "verify-local",
+                        "docker-build",
+                        "image-scan",
+                        "docker-up")
+                .contains(command);
+    }
+
+    static WorkspaceOperationLock acquireWorkspaceOperationLock() throws IOException {
+        return acquireWorkspaceOperationLock(PROJECT_DIRECTORY.resolve(".build/workspace-operation.lock"));
+    }
+
+    static WorkspaceOperationLock acquireWorkspaceOperationLock(Path lockPath) throws IOException {
+        Path lockDirectory = lockPath.toAbsolutePath().normalize().getParent();
+        if (lockDirectory == null) {
+            throw new IllegalArgumentException("The workspace operation lock must have a parent directory.");
+        }
+        Files.createDirectories(lockDirectory);
+        FileChannel lockChannel = FileChannel.open(
+                lockPath.toAbsolutePath().normalize(),
+                StandardOpenOption.CREATE,
+                StandardOpenOption.WRITE);
+        FileLock fileLock;
+        try {
+            fileLock = lockChannel.tryLock();
+        } catch (OverlappingFileLockException exception) {
+            lockChannel.close();
+            throw new IllegalStateException(
+                    "Another local build or verification operation is already using this workspace.",
+                    exception);
+        }
+        if (fileLock == null) {
+            lockChannel.close();
+            throw new IllegalStateException(
+                    "Another local build or verification operation is already using this workspace.");
+        }
+        return new WorkspaceOperationLock(lockChannel, fileLock);
+    }
+
+    static final class WorkspaceOperationLock implements AutoCloseable {
+        private final FileChannel lockChannel;
+        private final FileLock fileLock;
+
+        private WorkspaceOperationLock(FileChannel lockChannel, FileLock fileLock) {
+            this.lockChannel = lockChannel;
+            this.fileLock = fileLock;
+        }
+
+        @Override
+        public void close() throws IOException {
+            try {
+                fileLock.release();
+            } finally {
+                lockChannel.close();
+            }
         }
     }
 
@@ -88,27 +160,14 @@ final class CalendarTool extends CalendarToolProcessRunner {
         switch (command) {
             case "help", "--help", "setup", "db", "dev", "package", "tooling-self-test", "format",
                     "static-analysis", "verify-reproducible-build", "lint-css", "end-to-end", "end-to-end-shared",
-                    "end-to-end-cross-browser-smoke", "end-to-end-calendar-link-throttle", "wait-for-app", "verify-local",
-                    "verify-preview-deployment", "docker-build", "image-scan", "docker-up",
-                    "verify-backup-restore" -> {
+                    "end-to-end-cross-browser-smoke", "wait-for-app", "verify-local",
+                    "verify-preview-deployment", "docker-build", "image-scan", "docker-up" -> {
                 minimumArgumentCount = 0;
                 maximumArgumentCount = 0;
             }
             case "verify-bootstrap-registration" -> {
                 minimumArgumentCount = 0;
                 maximumArgumentCount = 1;
-            }
-            case "lighthouse" -> {
-                minimumArgumentCount = 0;
-                maximumArgumentCount = 1;
-            }
-            case "backup-postgres" -> {
-                minimumArgumentCount = 0;
-                maximumArgumentCount = 1;
-            }
-            case "restore-postgres" -> {
-                minimumArgumentCount = 2;
-                maximumArgumentCount = 2;
             }
             default -> throw new UsageException("Unknown command: " + command);
         }
@@ -122,12 +181,6 @@ final class CalendarTool extends CalendarToolProcessRunner {
                 && !arguments[1].equals("--reuse-image")) {
             throw new UsageException("Invalid arguments for command '" + command + "'.");
         }
-        if (command.equals("lighthouse")
-                && suppliedArgumentCount == 1
-                && !arguments[1].equals("--reuse-image")) {
-            throw new UsageException("Invalid arguments for command '" + command + "'.");
-        }
-
         return new ToolInvocation(command, List.copyOf(Arrays.asList(arguments).subList(1, arguments.length)));
     }
 
@@ -178,12 +231,28 @@ final class CalendarTool extends CalendarToolProcessRunner {
     }
 
     private static void startDevelopmentServer() throws IOException, InterruptedException {
-        runCommand(
+        runCommandWithEnvironment(
                 "Open Liberty dev mode",
-                MAVEN_WRAPPER_COMMAND,
-                "-Pliberty-dev",
-                "generate-resources",
-                "liberty:dev");
+                developmentServerEnvironment(System.getenv()),
+                developmentServerCommand());
+    }
+
+    static Map<String, String> developmentServerEnvironment(Map<String, String> environment) {
+        return Map.of(
+                "HTTP_HOST",
+                "127.0.0.1",
+                CalendarToolPostgreSql.POSTGRESQL_APPLICATION_NAME_ENVIRONMENT_VARIABLE,
+                CalendarToolVerification.developmentDatabaseApplicationName(environment));
+    }
+
+    static String[] developmentServerCommand() {
+        return new String[] {
+            MAVEN_WRAPPER_COMMAND,
+            "-Pliberty-dev",
+            "clean",
+            "generate-resources",
+            "liberty:dev"
+        };
     }
 
     private static void packageApplication() throws IOException, InterruptedException {
@@ -210,9 +279,7 @@ final class CalendarTool extends CalendarToolProcessRunner {
         runCommand("Calendar tool exact source-launch test", sourceLauncherHelpCommand());
         runCommand("Railway configuration contract test", railwayConfigurationTestCommand());
         runCommand("Railway preview URL contract test", railwayPreviewUrlTestCommand());
-        runCommand("Preview login argument contract test", previewLoginTestCommand());
         runCommand("Node dependency installation", npmInstallCommand());
-        runCommand("Lighthouse browser lifecycle test", lighthouseBrowserTestCommand());
         runCommand("Build toolchain configuration contract test", buildToolchainConfigurationTestCommand());
     }
 
@@ -222,14 +289,6 @@ final class CalendarTool extends CalendarToolProcessRunner {
 
     static String[] railwayPreviewUrlTestCommand() {
         return new String[] {"node", "scripts/railway-preview-url-test.mjs"};
-    }
-
-    static String[] previewLoginTestCommand() {
-        return new String[] {"node", "scripts/preview-login-test.mjs"};
-    }
-
-    static String[] lighthouseBrowserTestCommand() {
-        return new String[] {"node", "scripts/lighthouse-browser-test.mjs"};
     }
 
     static String[] sourceLauncherHelpCommand() {
@@ -292,13 +351,14 @@ final class CalendarTool extends CalendarToolProcessRunner {
         Files.deleteIfExists(PROJECT_DIRECTORY.resolve(IMAGE_SBOM_OUTPUT_PATH));
         Files.deleteIfExists(PROJECT_DIRECTORY.resolve(IMAGE_VULNERABILITY_REPORT_OUTPUT_PATH));
         runCommand("Production image SBOM generation", imageSbomCommand());
-        int scanExitCode = runCommandForExitCode(true, imageScanCommand());
+        runCommand("Production image vulnerability report", imageVulnerabilityReportCommand());
         Path vulnerabilityReportPath = PROJECT_DIRECTORY.resolve(IMAGE_VULNERABILITY_REPORT_OUTPUT_PATH);
         if (!Files.isRegularFile(vulnerabilityReportPath) || Files.size(vulnerabilityReportPath) == 0) {
             throw new IllegalStateException(
                     "Production image vulnerability scan did not produce "
                             + IMAGE_VULNERABILITY_REPORT_OUTPUT_PATH + ".");
         }
+        int scanExitCode = runCommandForExitCode(true, imageScanGateCommand());
         if (scanExitCode != 0) {
             throw new IllegalStateException(
                     "Production image scan failed or found HIGH/CRITICAL vulnerabilities. Inspect "
@@ -323,14 +383,14 @@ final class CalendarTool extends CalendarToolProcessRunner {
         };
     }
 
-    static String[] imageScanCommand() {
+    static String[] imageVulnerabilityReportCommand() {
         return new String[] {
             "trivy",
             "image",
             "--exit-code",
-            "1",
+            "0",
             "--severity",
-            "HIGH,CRITICAL",
+            "MEDIUM,HIGH,CRITICAL",
             "--scanners",
             "vuln",
             "--format",
@@ -342,7 +402,23 @@ final class CalendarTool extends CalendarToolProcessRunner {
         };
     }
 
+    static String[] imageScanGateCommand() {
+        return new String[] {
+            "trivy",
+            "image",
+            "--exit-code",
+            "1",
+            "--severity",
+            "HIGH,CRITICAL",
+            "--scanners",
+            "vuln",
+            "--no-progress",
+            "shared-calendar:local"
+        };
+    }
+
     private static void startDockerApplication() throws IOException, InterruptedException {
+        buildDockerImage();
         runCommand(
                 "Production container startup",
                 "docker",
@@ -351,7 +427,6 @@ final class CalendarTool extends CalendarToolProcessRunner {
                 "application",
                 "up",
                 "-d",
-                "--build",
                 "web");
         CalendarToolVerification.waitForApplication();
     }
@@ -367,12 +442,9 @@ final class CalendarTool extends CalendarToolProcessRunner {
         System.err.println("Usage: " + executableName + " <command> [arguments]");
         System.err.println(
                 "Commands: help, setup, db, dev, package, tooling-self-test, format, static-analysis, "
-                        + "verify-reproducible-build, lint-css, end-to-end, end-to-end-shared, end-to-end-cross-browser-smoke, "
-                        + "end-to-end-calendar-link-throttle, verify-bootstrap-registration [--reuse-image], "
-                        + "lighthouse [--reuse-image], verify-preview-deployment, "
-                        + "wait-for-app, verify-local, docker-build, image-scan, docker-up, "
-                        + "backup-postgres [output-file], "
-                        + "restore-postgres <backup-file> <confirmed-database-name>, verify-backup-restore");
+                        + "verify-reproducible-build, lint-css, end-to-end, end-to-end-shared, "
+                        + "end-to-end-cross-browser-smoke, verify-bootstrap-registration [--reuse-image], "
+                        + "verify-preview-deployment, wait-for-app, verify-local, docker-build, image-scan, docker-up");
     }
 
 }

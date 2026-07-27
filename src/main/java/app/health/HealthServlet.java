@@ -1,24 +1,20 @@
 package app.health;
 
-import jakarta.annotation.Resource;
+import jakarta.inject.Inject;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.sql.Connection;
-import java.sql.SQLException;
-import javax.sql.DataSource;
 
 @WebServlet("/health")
 public class HealthServlet extends HttpServlet {
-    static final int DATABASE_VALIDATION_TIMEOUT_SECONDS = 2;
     static final String DEPLOYMENT_REVISION_HEADER = "X-Deployment-Revision";
 
     private String deploymentRevision;
 
-    @Resource(lookup = "jdbc/CalendarDataSource")
-    private DataSource dataSource;
+    @Inject
+    private DatabaseHealthMonitor databaseHealthMonitor;
 
     @Override
     public void init() {
@@ -32,7 +28,7 @@ public class HealthServlet extends HttpServlet {
         if (deploymentRevision != null) {
             response.setHeader(DEPLOYMENT_REVISION_HEADER, deploymentRevision);
         }
-        if (databaseIsUsable()) {
+        if (databaseHealthMonitor.isDatabaseUsable()) {
             response.setStatus(HttpServletResponse.SC_OK);
             response.getWriter().write("ok");
             return;
@@ -40,13 +36,5 @@ public class HealthServlet extends HttpServlet {
 
         response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
         response.getWriter().write("unavailable");
-    }
-
-    private boolean databaseIsUsable() {
-        try (Connection connection = dataSource.getConnection()) {
-            return connection.isValid(DATABASE_VALIDATION_TIMEOUT_SECONDS);
-        } catch (SQLException exception) {
-            return false;
-        }
     }
 }

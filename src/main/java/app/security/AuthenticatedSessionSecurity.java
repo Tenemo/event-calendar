@@ -36,14 +36,37 @@ public final class AuthenticatedSessionSecurity {
             throw new IllegalArgumentException("Validated password version cannot be negative.");
         }
         HttpSession authenticatedSession = rotateSessionIdentifier(request);
-        authenticatedSession.setMaxInactiveInterval(AUTHENTICATED_SESSION_LIFETIME_SECONDS);
-        authenticatedSession.setAttribute(
-                PASSWORD_VERSION_SESSION_ATTRIBUTE,
-                validatedPasswordVersion);
+        try {
+            authenticatedSession.setMaxInactiveInterval(
+                    AUTHENTICATED_SESSION_LIFETIME_SECONDS);
+            authenticatedSession.setAttribute(
+                    PASSWORD_VERSION_SESSION_ATTRIBUTE,
+                    validatedPasswordVersion);
+        } catch (RuntimeException sessionConfigurationFailure) {
+            try {
+                authenticatedSession.invalidate();
+            } catch (RuntimeException invalidationFailure) {
+                sessionConfigurationFailure.addSuppressed(invalidationFailure);
+            }
+            throw sessionConfigurationFailure;
+        }
     }
 
     public static void invalidateSessionAndLogout(HttpServletRequest request) throws ServletException {
-        request.logout();
+        try {
+            request.logout();
+        } catch (ServletException | RuntimeException logoutFailure) {
+            try {
+                invalidateRemainingSession(request);
+            } catch (RuntimeException invalidationFailure) {
+                logoutFailure.addSuppressed(invalidationFailure);
+            }
+            throw logoutFailure;
+        }
+        invalidateRemainingSession(request);
+    }
+
+    private static void invalidateRemainingSession(HttpServletRequest request) {
         HttpSession remainingSession = request.getSession(false);
         if (remainingSession != null) {
             remainingSession.invalidate();

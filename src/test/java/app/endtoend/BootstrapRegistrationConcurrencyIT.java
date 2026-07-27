@@ -4,6 +4,7 @@ import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertTha
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -24,12 +25,15 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.util.Arrays;
+import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.MigrationInfo;
+import org.flywaydb.core.api.MigrationInfoService;
+import org.flywaydb.core.api.MigrationVersion;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.TestInfo;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 final class BootstrapRegistrationConcurrencyIT {
@@ -49,7 +53,6 @@ final class BootstrapRegistrationConcurrencyIT {
     private static final String DATABASE_NAME = "calendar_bootstrap_verification";
     private static final String DATABASE_USER = "calendar_bootstrap_verification";
     private static final String DATABASE_PASSWORD = "calendar_bootstrap_verification";
-    private static final String EXPECTED_LATEST_FLYWAY_VERSION = "15";
     private static final String VALID_PASSWORD = "Bootstrap password 2026";
     private static final Duration APPLICATION_READY_TIMEOUT = Duration.ofSeconds(120);
     private static final Duration BLOCKED_REQUEST_TIMEOUT = Duration.ofSeconds(20);
@@ -59,9 +62,7 @@ final class BootstrapRegistrationConcurrencyIT {
     private URI applicationHealthUri;
     private String bootstrapInvitationToken;
     private Playwright playwright;
-    private final EndToEndBrowserDiagnostics browserDiagnostics =
-            new EndToEndBrowserDiagnostics(BootstrapRegistrationConcurrencyIT.class);
-    private EndToEndBrowserDiagnostics.RecordedBrowser browser;
+    private EndToEndBrowser browser;
 
     @BeforeAll
     void prepareIsolatedApplication() throws Exception {
@@ -77,14 +78,7 @@ final class BootstrapRegistrationConcurrencyIT {
         waitForApplicationHealth();
         assertFreshMigratedDatabase();
         playwright = Playwright.create();
-        browser = browserDiagnostics.launch(playwright.chromium(), true);
-    }
-
-    @BeforeEach
-    void prepareBrowserDiagnostics(TestInfo testInfo) {
-        browserDiagnostics.startTest(testInfo.getTestMethod()
-                .map(java.lang.reflect.Method::getName)
-                .orElse(testInfo.getDisplayName()));
+        browser = EndToEndBrowser.launch(playwright.chromium(), true, applicationBaseUri);
     }
 
     @AfterAll
@@ -163,8 +157,9 @@ final class BootstrapRegistrationConcurrencyIT {
             page.locator("input[id$='displayName']").fill("Failed bootstrap user");
             page.locator("input[id$='calendarName']").fill("Failed bootstrap calendar");
             page.locator("input[id$='password']").fill("Short1");
+            page.locator("input[id$='passwordConfirmation']").fill("Short1");
             page.locator("button:has-text('Register')").click();
-            assertThat(page.locator("body")).containsText("Password must be at least 8 characters.");
+            assertThat(page.locator("body")).containsText("Password must be at least 15 characters.");
         }
     }
 
@@ -187,6 +182,7 @@ final class BootstrapRegistrationConcurrencyIT {
         page.locator("input[id$='displayName']").fill(displayName);
         page.locator("input[id$='calendarName']").fill(calendarName);
         page.locator("input[id$='password']").fill(VALID_PASSWORD);
+        page.locator("input[id$='passwordConfirmation']").fill(VALID_PASSWORD);
         assertThat(page.locator("button:has-text('Register')")).isVisible();
         return page;
     }
@@ -238,10 +234,29 @@ final class BootstrapRegistrationConcurrencyIT {
     }
 
     private void assertFreshMigratedDatabase() throws SQLException {
+        Flyway flyway = Flyway.configure()
+                .dataSource(databaseJdbcUrl(), DATABASE_USER, DATABASE_PASSWORD)
+                .locations("classpath:db/migration")
+                .load();
+        flyway.validate();
+
+        MigrationInfoService migrationInformation = flyway.info();
         assertEquals(
-                EXPECTED_LATEST_FLYWAY_VERSION,
-                queryString("select version from flyway_schema_history "
-                        + "where success = true order by installed_rank desc limit 1"));
+                0,
+                migrationInformation.pending().length,
+                "The isolated database must have no pending migrations.");
+        MigrationVersion highestResolvedVersion = Arrays.stream(migrationInformation.all())
+                .filter(MigrationInfo::isVersioned)
+                .filter(migration -> migration.getState().isResolved())
+                .map(MigrationInfo::getVersion)
+                .max(MigrationVersion::compareTo)
+                .orElseThrow(() -> new AssertionError("No resolved Flyway migrations were found."));
+        MigrationInfo currentMigration = migrationInformation.current();
+        assertNotNull(currentMigration, "The isolated database must have an applied migration.");
+        assertEquals(
+                highestResolvedVersion,
+                currentMigration.getVersion(),
+                "The isolated database must be current with the migrations in this build.");
         assertEquals(0L, queryLong("select count(*) from app_user"));
         assertFalse(queryBoolean(
                 "select consumed_at is not null from app_registration_bootstrap where singleton_id = 1"));
@@ -283,13 +298,14 @@ final class BootstrapRegistrationConcurrencyIT {
     }
 
     private Connection databaseConnection() throws SQLException {
+        return DriverManager.getConnection(databaseJdbcUrl(), DATABASE_USER, DATABASE_PASSWORD);
+    }
+
+    private String databaseJdbcUrl() {
         String databasePort = environmentValueOrDefault(
                 DATABASE_PORT_ENVIRONMENT_VARIABLE,
                 DEFAULT_DATABASE_PORT);
-        return DriverManager.getConnection(
-                "jdbc:postgresql://localhost:" + databasePort + "/" + DATABASE_NAME,
-                DATABASE_USER,
-                DATABASE_PASSWORD);
+        return "jdbc:postgresql://localhost:" + databasePort + "/" + DATABASE_NAME;
     }
 
     private void waitForApplicationHealth() throws InterruptedException {

@@ -2,8 +2,10 @@ package app.endtoend;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.security.PasswordService;
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.BrowserType;
@@ -19,6 +21,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
+/*
+ * This trusted default-branch test deliberately submits reusable, low-sensitivity preview credentials
+ * to PR-built application code. Those credentials must never be used outside disposable previews.
+ */
 final class PreviewDeploymentAuthenticationIT {
     private static final String BASE_URL_ENVIRONMENT_VARIABLE = "PREVIEW_VERIFICATION_BASE_URL";
     private static final String PULL_REQUEST_NUMBER_ENVIRONMENT_VARIABLE =
@@ -75,6 +81,17 @@ final class PreviewDeploymentAuthenticationIT {
         }
     }
 
+    @Test
+    void previewPasswordAdmissionMatchesTheApplicationLengthPolicy() {
+        validatePreviewPassword("a".repeat(PasswordService.MINIMUM_PASSWORD_LENGTH));
+        assertThrows(
+                IllegalStateException.class,
+                () -> validatePreviewPassword("a".repeat(PasswordService.MINIMUM_PASSWORD_LENGTH - 1)));
+        assertThrows(
+                IllegalStateException.class,
+                () -> validatePreviewPassword("a".repeat(PasswordService.MAXIMUM_PASSWORD_LENGTH + 1)));
+    }
+
     private boolean submitSignIn(
             Page page,
             URI previewBaseUri,
@@ -116,6 +133,7 @@ final class PreviewDeploymentAuthenticationIT {
         page.locator("input[id$='displayName']").fill("Preview pull request " + requiredPullRequestNumber());
         page.locator("input[id$='calendarName']").fill("Preview verification");
         page.locator("input[id$='password']").fill(password);
+        page.locator("input[id$='passwordConfirmation']").fill(password);
         page.locator("button:has-text('Register')").click();
         page.waitForLoadState(LoadState.DOMCONTENTLOADED);
         assertEquals(
@@ -179,15 +197,17 @@ final class PreviewDeploymentAuthenticationIT {
 
     private String requiredPassword() {
         String password = requiredSecret(PASSWORD_ENVIRONMENT_VARIABLE);
+        validatePreviewPassword(password);
+        return password;
+    }
+
+    private static void validatePreviewPassword(String password) {
         int passwordLength = password.codePointCount(0, password.length());
-        if (passwordLength < 8
-                || passwordLength > 512
-                || password.codePoints().noneMatch(Character::isUpperCase)
-                || password.codePoints().noneMatch(Character::isDigit)) {
+        if (passwordLength < PasswordService.MINIMUM_PASSWORD_LENGTH
+                || passwordLength > PasswordService.MAXIMUM_PASSWORD_LENGTH) {
             throw new IllegalStateException(
                     "PREVIEW_VERIFICATION_PASSWORD must satisfy the application password policy.");
         }
-        return password;
     }
 
     private String requiredSecret(String variableName) {

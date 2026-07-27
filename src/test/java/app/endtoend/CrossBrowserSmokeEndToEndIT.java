@@ -26,9 +26,7 @@ import java.util.Locale;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.TestInstance;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -41,11 +39,9 @@ final class CrossBrowserSmokeEndToEndIT {
     private static final Duration APPLICATION_READY_TIMEOUT = Duration.ofSeconds(30);
 
     private final BearerSecretRedactor bearerSecretRedactor = new BearerSecretRedactor();
-    private final EndToEndBrowserDiagnostics browserDiagnostics =
-            new EndToEndBrowserDiagnostics(CrossBrowserSmokeEndToEndIT.class);
     private URI applicationBaseUri;
     private Playwright playwright;
-    private EndToEndBrowserDiagnostics.RecordedBrowser browser;
+    private EndToEndBrowser browser;
 
     @BeforeAll
     void openBrowser() throws InterruptedException {
@@ -55,14 +51,10 @@ final class CrossBrowserSmokeEndToEndIT {
                 DEFAULT_APPLICATION_BASE_URL)));
         waitForApplicationHealth();
         playwright = Playwright.create();
-        browser = browserDiagnostics.launch(selectedBrowser(playwright), shouldRunHeadless());
-    }
-
-    @BeforeEach
-    void prepareBrowserDiagnostics(TestInfo testInfo) {
-        browserDiagnostics.startTest(testInfo.getTestMethod()
-                .map(java.lang.reflect.Method::getName)
-                .orElse(testInfo.getDisplayName()));
+        browser = EndToEndBrowser.launch(
+                selectedBrowser(playwright),
+                shouldRunHeadless(),
+                applicationBaseUri);
     }
 
     @AfterAll

@@ -24,7 +24,7 @@
                                 pt:aria-describedby="passwordChangeNotice"
                                 feedback="false"
                                 redisplay="false"
-                                maxlength="#{passwordService.maximumPasswordLength}"
+                                maxlength="#{passwordService.maximumPasswordTransportLength}"
                                 required="true"
                                 requiredMessage="Current password is required."/>
 
@@ -35,10 +35,10 @@
                                 pt:aria-describedby="passwordChangeNotice passwordRequirements"
                                 feedback="false"
                                 redisplay="false"
-                                maxlength="#{passwordService.maximumPasswordLength}"
+                                maxlength="#{passwordService.maximumPasswordTransportLength}"
                                 required="true"
                                 requiredMessage="New password is required."/>
-                    <p id="passwordRequirements" class="field-help">Use at least 8 characters, including one uppercase letter and one digit.</p>
+                    <p id="passwordRequirements" class="field-help">Use at least 15 characters.</p>
 
                     <p:outputLabel for="newPasswordConfirmation" value="Confirm new password"/>
                     <p:password id="newPasswordConfirmation"
@@ -47,7 +47,7 @@
                                 pt:aria-describedby="passwordRequirements"
                                 feedback="false"
                                 redisplay="false"
-                                maxlength="#{passwordService.maximumPasswordLength}"
+                                maxlength="#{passwordService.maximumPasswordTransportLength}"
                                 required="true"
                                 requiredMessage="New password confirmation is required."/>
 

@@ -1,6 +1,7 @@
 package app.event;
 
 import static app.testsupport.ServiceTestSupport.entityManagerStub;
+import static app.testsupport.ServiceTestSupport.queryParameter;
 import static app.testsupport.ServiceTestSupport.setEntityId;
 import static app.testsupport.ServiceTestSupport.setField;
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -16,6 +17,7 @@ import app.membership.CalendarAccessService;
 import app.testsupport.ServiceTestSupport.EntityManagerStub;
 import app.user.ApplicationUser;
 import app.util.ConflictException;
+import app.util.TextNormalizer;
 import app.util.ValidationException;
 import jakarta.persistence.OptimisticLockException;
 import java.time.Duration;
@@ -23,6 +25,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -245,34 +249,167 @@ final class CalendarEventServiceTest {
 
     @Test
     void memberQueriesStayCalendarScopedAndOrderedByStartTime() {
-        CalendarEvent firstEvent = new CalendarEvent();
-        CalendarEvent secondEvent = new CalendarEvent();
-        CalendarEvent extraEvent = new CalendarEvent();
+        CalendarEvent firstEvent = persistedEvent(301L, "2026-08-01T10:00:00Z");
+        CalendarEvent secondEvent = persistedEvent(302L, "2026-08-01T10:00:00Z");
+        CalendarEvent extraEvent = persistedEvent(303L, "2026-08-02T10:00:00Z");
         EntityManagerStub entityManagerStub = entityManagerStub().resultList(
                 "where calendarEvent.calendar.id = :calendarId "
                         + "order by calendarEvent.startTime, calendarEvent.id",
-                List.of(firstEvent, secondEvent, extraEvent));
-        CalendarEventService eventService = new CalendarEventService();
-        setField(eventService, "entityManager", entityManagerStub.entityManager());
-        setField(eventService, "calendarAccessService", new AllowingAccessService());
+                List.of(firstEvent, secondEvent, extraEvent),
+                queryParameter("calendarId", 200L));
+        CalendarEventRevision eventRevision = new CalendarEventRevision(3, 303, 0);
+        CalendarEventService eventService = paginationService(
+                entityManagerStub,
+                eventRevision,
+                eventRevision);
 
         CalendarEventPage eventPage = eventService.findEventsForMember(
                 activeUser(100L),
                 200L,
-                25,
+                null,
+                null,
                 2);
 
         assertAll(
                 () -> assertEquals(List.of(firstEvent, secondEvent), eventPage.events()),
                 () -> assertEquals(true, eventPage.hasMore()),
                 () -> assertEquals(
+                        new CalendarEventCursor(secondEvent.getStartTime(), secondEvent.getId()),
+                        eventPage.nextCursor()),
+                () -> assertEquals(eventRevision, eventPage.revision()),
+                () -> assertEquals(false, eventPage.restartRequired()),
+                () -> assertEquals(
                         List.of(new app.testsupport.ServiceTestSupport.QueryPagination(
                                 "select calendarEvent from CalendarEvent calendarEvent "
                                         + "where calendarEvent.calendar.id = :calendarId "
                                         + "order by calendarEvent.startTime, calendarEvent.id",
-                                25,
+                                0,
                                 3)),
                         entityManagerStub.queryPaginations()));
+    }
+
+    @Test
+    void memberQueriesContinueStrictlyAfterTheStableEventCursor() {
+        OffsetDateTime cursorStartTime = OffsetDateTime.parse("2026-08-01T10:00:00Z");
+        CalendarEventCursor afterCursor = new CalendarEventCursor(cursorStartTime, 302L);
+        CalendarEvent nextEvent = persistedEvent(303L, "2026-08-01T10:00:00Z");
+        EntityManagerStub entityManagerStub = entityManagerStub().resultList(
+                "and calendarEvent.startTime >= :afterStartTime "
+                        + "and (calendarEvent.startTime > :afterStartTime "
+                        + "or (calendarEvent.startTime = :afterStartTime "
+                        + "and calendarEvent.id > :afterEventId))",
+                List.of(nextEvent),
+                queryParameter("calendarId", 200L),
+                queryParameter("afterStartTime", cursorStartTime),
+                queryParameter("afterEventId", 302L));
+        CalendarEventRevision eventRevision = new CalendarEventRevision(1, 303, 0);
+        CalendarEventService eventService = paginationService(
+                entityManagerStub,
+                eventRevision,
+                eventRevision);
+
+        CalendarEventPage eventPage = eventService.findEventsForMember(
+                activeUser(100L),
+                200L,
+                afterCursor,
+                null,
+                50);
+
+        assertAll(
+                () -> assertEquals(List.of(nextEvent), eventPage.events()),
+                () -> assertEquals(false, eventPage.hasMore()),
+                () -> assertEquals(
+                        new CalendarEventCursor(nextEvent.getStartTime(), nextEvent.getId()),
+                        eventPage.nextCursor()),
+                () -> assertEquals(eventRevision, eventPage.revision()),
+                () -> assertEquals(false, eventPage.restartRequired()),
+                () -> assertEquals(0, entityManagerStub.queryPaginations().getFirst().firstResult()),
+                () -> assertEquals(51, entityManagerStub.queryPaginations().getFirst().maximumResults()));
+    }
+
+    @Test
+    void requestsACompleteRestartWhenAnEventMovedAcrossTheCursorBeforeTheNextPage() {
+        OffsetDateTime cursorStartTime = OffsetDateTime.parse("2026-08-01T10:00:00Z");
+        CalendarEventCursor afterCursor = new CalendarEventCursor(cursorStartTime, 302L);
+        CalendarEventRevision originalRevision = new CalendarEventRevision(102, 402, 0);
+        CalendarEventRevision revisionAfterMovingAnEvent =
+                new CalendarEventRevision(102, 402, 1);
+        EntityManagerStub entityManagerStub = entityManagerStub();
+        CalendarEventService eventService = paginationService(
+                entityManagerStub,
+                revisionAfterMovingAnEvent);
+
+        CalendarEventPage eventPage = eventService.findEventsForMember(
+                activeUser(100L),
+                200L,
+                afterCursor,
+                originalRevision,
+                50);
+
+        assertAll(
+                () -> assertEquals(true, eventPage.restartRequired()),
+                () -> assertEquals(revisionAfterMovingAnEvent, eventPage.revision()),
+                () -> assertEquals(List.of(), eventPage.events()),
+                () -> assertEquals(List.of(), entityManagerStub.queryPaginations()));
+    }
+
+    @Test
+    void discardsAPageWhenAnEventMovesBetweenThePageQueryAndFinalRevisionRead() {
+        CalendarEvent eventReadDuringRace = persistedEvent(303L, "2026-08-01T10:00:00Z");
+        CalendarEventRevision originalRevision = new CalendarEventRevision(102, 402, 0);
+        CalendarEventRevision revisionAfterMovingAnEvent =
+                new CalendarEventRevision(102, 402, 1);
+        EntityManagerStub entityManagerStub = entityManagerStub().resultList(
+                "order by calendarEvent.startTime, calendarEvent.id",
+                List.of(eventReadDuringRace),
+                queryParameter("calendarId", 200L));
+        CalendarEventService eventService = paginationService(
+                entityManagerStub,
+                originalRevision,
+                revisionAfterMovingAnEvent);
+
+        CalendarEventPage eventPage = eventService.findEventsForMember(
+                activeUser(100L),
+                200L,
+                null,
+                originalRevision,
+                50);
+
+        assertAll(
+                () -> assertEquals(true, eventPage.restartRequired()),
+                () -> assertEquals(revisionAfterMovingAnEvent, eventPage.revision()),
+                () -> assertEquals(List.of(), eventPage.events()),
+                () -> assertEquals(1, entityManagerStub.queryPaginations().size()));
+    }
+
+    @Test
+    void eventRevisionUsesBoundedCalendarAndEventAggregates() {
+        EntityManagerStub entityManagerStub = entityManagerStub()
+                .singleResult(
+                        "select count(calendarEvent), max(calendarEvent.id)",
+                        new Object[] {102L, 402L, 19L},
+                        queryParameter("calendarId", 200L));
+        CalendarEventService eventService = new CalendarEventService();
+        setField(eventService, "entityManager", entityManagerStub.entityManager());
+
+        CalendarEventRevision revision = eventService.findEventRevision(200L);
+
+        assertEquals(new CalendarEventRevision(102, 402, 19), revision);
+    }
+
+    @Test
+    void emptyCalendarHasAStableZeroEventRevision() {
+        EntityManagerStub entityManagerStub = entityManagerStub()
+                .singleResult(
+                        "select count(calendarEvent), max(calendarEvent.id)",
+                        new Object[] {0L, null, null},
+                        queryParameter("calendarId", 200L));
+        CalendarEventService eventService = new CalendarEventService();
+        setField(eventService, "entityManager", entityManagerStub.entityManager());
+
+        CalendarEventRevision revision = eventService.findEventRevision(200L);
+
+        assertEquals(new CalendarEventRevision(0, 0, 0), revision);
     }
 
     @Test
@@ -284,13 +421,17 @@ final class CalendarEventServiceTest {
         assertAll(
                 () -> assertThrows(
                         IllegalArgumentException.class,
-                        () -> eventService.findEventsForMember(activeUser(100L), 200L, -1, 50)),
+                        () -> eventService.findEventsForMember(
+                                activeUser(100L), 200L, null, null, 0)),
                 () -> assertThrows(
                         IllegalArgumentException.class,
-                        () -> eventService.findEventsForMember(activeUser(100L), 200L, 0, 0)),
+                        () -> eventService.findEventsForMember(
+                                activeUser(100L), 200L, null, null, 101)),
                 () -> assertThrows(
                         IllegalArgumentException.class,
-                        () -> eventService.findEventsForMember(activeUser(100L), 200L, 0, 101)));
+                        () -> new CalendarEventCursor(
+                                OffsetDateTime.parse("2026-08-01T10:00:00Z"),
+                                0L)));
     }
 
     @Test
@@ -316,6 +457,66 @@ final class CalendarEventServiceTest {
         assertAll(
                 () -> assertInvalidCreation(eventService, "K".repeat(201), null, startTime, startTime.plusHours(2)),
                 () -> assertInvalidCreation(eventService, "Kayaking", "R".repeat(201), startTime, startTime.plusHours(2)));
+    }
+
+    @Test
+    void eventDescriptionsPreserveMultilineUnicodeAtTheSharedLimitAndRejectLongerValues() {
+        Calendar calendar = activeCalendar(200L);
+        LocalDateTime startTime = LocalDateTime.parse("2026-07-08T12:00:00");
+        String unicodePrefix = "Zażółć gęślą jaźń\n東京\n\uD801\uDC37";
+        String normalizedMaximumLengthDescription = unicodePrefix
+                + "d".repeat(TextNormalizer.MAXIMUM_DESCRIPTION_LENGTH - unicodePrefix.length());
+        String browserPostedMaximumLengthDescription =
+                normalizedMaximumLengthDescription.replace("\n", "\r\n");
+        CalendarEvent createdEvent = configuredCreationService(calendar).createEvent(
+                activeUser(100L),
+                calendar.getId(),
+                "Kayaking",
+                browserPostedMaximumLengthDescription,
+                null,
+                new EventTimeInput.Timed(startTime, startTime.plusHours(2)),
+                calendar.getVersion(),
+                calendar.getTimeZone());
+
+        ValidationException creationException = assertThrows(
+                ValidationException.class,
+                () -> configuredCreationService(calendar).createEvent(
+                        activeUser(100L),
+                        calendar.getId(),
+                        "Kayaking",
+                        browserPostedMaximumLengthDescription + "x",
+                        null,
+                        new EventTimeInput.Timed(startTime, startTime.plusHours(2)),
+                        calendar.getVersion(),
+                        calendar.getTimeZone()));
+        CalendarEventService updateService = configuredUpdateService(
+                entityManagerStub().find(CalendarEvent.class, createdEvent.getId(), createdEvent),
+                calendar);
+        ValidationException updateException = assertThrows(
+                ValidationException.class,
+                () -> updateService.updateEvent(
+                        activeUser(100L),
+                        createdEvent.getId(),
+                        createdEvent.getVersion(),
+                        createdEvent.getTitle(),
+                        browserPostedMaximumLengthDescription + "x",
+                        createdEvent.getLocation(),
+                        new EventTimeInput.Timed(startTime, startTime.plusHours(2)),
+                        calendar.getVersion(),
+                        calendar.getTimeZone()));
+
+        assertAll(
+                () -> assertEquals(
+                        TextNormalizer.MAXIMUM_DESCRIPTION_LENGTH,
+                        normalizedMaximumLengthDescription.length()),
+                () -> assertEquals(
+                        TextNormalizer.MAXIMUM_DESCRIPTION_LENGTH + 2,
+                        browserPostedMaximumLengthDescription.length()),
+                () -> assertEquals(normalizedMaximumLengthDescription, createdEvent.getDescription()),
+                () -> assertEquals(
+                        "Event description must be 4,000 characters or fewer.",
+                        creationException.getMessage()),
+                () -> assertEquals(creationException.getMessage(), updateException.getMessage()));
     }
 
     @Test
@@ -434,6 +635,16 @@ final class CalendarEventServiceTest {
         return configuredCreationService(activeCalendar(200L));
     }
 
+    private static CalendarEventService paginationService(
+            EntityManagerStub entityManagerStub,
+            CalendarEventRevision... revisions) {
+        CalendarEventService eventService =
+                new RevisionControlledCalendarEventService(List.of(revisions));
+        setField(eventService, "entityManager", entityManagerStub.entityManager());
+        setField(eventService, "calendarAccessService", new AllowingAccessService());
+        return eventService;
+    }
+
     private static void assertInvalidCreation(
             CalendarEventService eventService,
             String title,
@@ -452,6 +663,13 @@ final class CalendarEventServiceTest {
                         new EventTimeInput.Timed(startTime, endTime),
                         calendar.getVersion(),
                         calendar.getTimeZone()));
+    }
+
+    private static CalendarEvent persistedEvent(Long id, String startTime) {
+        CalendarEvent event = new CalendarEvent();
+        setEntityId(event, id);
+        event.setStartTime(OffsetDateTime.parse(startTime));
+        return event;
     }
 
     private static Calendar activeCalendar(Long id) {
@@ -490,6 +708,24 @@ final class CalendarEventServiceTest {
         @Override
         public Calendar requireActiveCalendarForChildMutation(Long calendarId) {
             return calendar;
+        }
+    }
+
+    private static final class RevisionControlledCalendarEventService
+            extends CalendarEventService {
+        private final Deque<CalendarEventRevision> revisions;
+
+        private RevisionControlledCalendarEventService(
+                List<CalendarEventRevision> revisions) {
+            this.revisions = new ArrayDeque<>(revisions);
+        }
+
+        @Override
+        CalendarEventRevision findEventRevision(Long calendarId) {
+            if (revisions.isEmpty()) {
+                throw new AssertionError("An unexpected event revision was requested.");
+            }
+            return revisions.removeFirst();
         }
     }
 

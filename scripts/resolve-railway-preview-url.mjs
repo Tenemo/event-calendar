@@ -1,14 +1,11 @@
 import process from "node:process";
+import { readBoundedUtf8Input } from "./bounded-standard-input.mjs";
 import { resolveRailwayPreviewUrl } from "./railway-preview-url.mjs";
 
 const pullRequestNumber = process.argv[2];
-let standardInput = "";
-process.stdin.setEncoding("utf8");
-for await (const inputChunk of process.stdin) {
-    standardInput += inputChunk;
-}
 
 try {
+    const standardInput = await readBoundedUtf8Input(process.stdin);
     const comments = JSON.parse(standardInput);
     process.stdout.write(`${resolveRailwayPreviewUrl(comments, pullRequestNumber)}\n`);
 } catch (error) {

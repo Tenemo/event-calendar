@@ -17,7 +17,8 @@ permissions:
 concurrency:
   group: >-
     preview-verification-${{
-    github.event_name == 'workflow_dispatch' && inputs.pull_request_number ||
+    github.event_name == 'workflow_dispatch' &&
+    format('calendar.social / event-calendar-pr-{0}', inputs.pull_request_number) ||
     github.event.deployment.environment || github.run_id }}
   cancel-in-progress: true
 
@@ -32,7 +33,7 @@ jobs:
       github.event.deployment.task == 'deploy' &&
       startsWith(github.event.deployment.environment, 'calendar.social / event-calendar-pr-'))
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 45
 
     steps:
       - name: Check out trusted verifier code
@@ -63,7 +64,7 @@ jobs:
               echo "::error::Pull request number must be a positive integer."
               exit 1
             fi
-            expected_revision="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pull_request_number}" --jq .head.sha)"
+            expected_revision="$(timeout --signal=TERM 120s gh api "repos/${GITHUB_REPOSITORY}/pulls/${pull_request_number}" --jq .head.sha)"
           fi
           if [[ ! "$expected_revision" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error::Expected revision must be a full lowercase Git commit SHA."
@@ -79,18 +80,24 @@ jobs:
           PULL_REQUEST_NUMBER: ${{ steps.deployment.outputs.pull_request_number }}
         run: |
           set -euo pipefail
-          for _ in $(seq 1 60); do
+          preview_resolution_deadline=$((SECONDS + 900))
+          while (( SECONDS < preview_resolution_deadline )); do
+            remaining_resolution_seconds=$((preview_resolution_deadline - SECONDS))
+            request_timeout_seconds=$(( remaining_resolution_seconds < 120 ? remaining_resolution_seconds : 120 ))
             if preview_url="$(
-              gh api "repos/${GITHUB_REPOSITORY}/issues/${PULL_REQUEST_NUMBER}/comments?per_page=100" --paginate --slurp |
+              timeout --signal=TERM "${request_timeout_seconds}s" gh api "repos/${GITHUB_REPOSITORY}/issues/${PULL_REQUEST_NUMBER}/comments?per_page=100" --paginate --slurp |
                 node scripts/resolve-railway-preview-url.mjs "$PULL_REQUEST_NUMBER" 2>/dev/null
             )"; then
               echo "base_url=$preview_url" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            sleep 15
+            remaining_resolution_seconds=$((preview_resolution_deadline - SECONDS))
+            if (( remaining_resolution_seconds <= 0 )); then
+              break
+            fi
+            sleep_seconds=$(( remaining_resolution_seconds < 15 ? remaining_resolution_seconds : 15 ))
+            sleep "$sleep_seconds"
           done
-          gh api "repos/${GITHUB_REPOSITORY}/issues/${PULL_REQUEST_NUMBER}/comments?per_page=100" --paginate --slurp |
-            node scripts/resolve-railway-preview-url.mjs "$PULL_REQUEST_NUMBER"
           echo "::error::Railway did not publish a trusted preview URL within 15 minutes."
           exit 1
 
@@ -142,6 +149,9 @@ jobs:
           --poll-interval-seconds 5
 
       - name: Verify preview registration and authentication
+        # The default-branch checkout protects the verifier itself. The PR-built preview receives
+        # these intentionally reusable, low-sensitivity preview credentials through normal requests.
+        # They must never be production credentials or grant access outside disposable previews.
         env:
           BROWSER: chromium
           PREVIEW_BOOTSTRAP_INVITE_TOKEN: ${{ secrets.PREVIEW_BOOTSTRAP_INVITE_TOKEN }}

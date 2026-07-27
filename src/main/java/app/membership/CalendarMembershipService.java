@@ -49,8 +49,15 @@ public class CalendarMembershipService {
         requireValidInvitationMembership(calendar, user, invitationRole);
         Optional<Calendar> lockedCalendar = lockCalendarForMembershipChange(calendar.getId());
         if (lockedCalendar.isEmpty()
-                || !lockedCalendar.get().isActive()
-                || !invitationCreatorCanStillEdit(invitationCreator, calendar.getId())) {
+                || !lockedCalendar.get().isActive()) {
+            return Optional.empty();
+        }
+        Optional<ApplicationUser> lockedInvitationCreator =
+                lockActiveInvitationCreator(invitationCreator);
+        if (lockedInvitationCreator.isEmpty()
+                || !invitationCreatorCanStillEdit(
+                        lockedInvitationCreator.get(),
+                        calendar.getId())) {
             return Optional.empty();
         }
 
@@ -193,6 +200,26 @@ public class CalendarMembershipService {
                     .setLockMode(LockModeType.PESSIMISTIC_WRITE)
                     .getSingleResult();
             return Optional.of(calendar);
+        } catch (NoResultException exception) {
+            return Optional.empty();
+        }
+    }
+
+    private Optional<ApplicationUser> lockActiveInvitationCreator(
+            ApplicationUser invitationCreator) {
+        if (invitationCreator == null || invitationCreator.getId() == null) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(entityManager
+                    .createQuery(
+                            "select applicationUser from ApplicationUser applicationUser "
+                                    + "where applicationUser.id = :invitationCreatorId "
+                                    + "and applicationUser.active = true",
+                            ApplicationUser.class)
+                    .setParameter("invitationCreatorId", invitationCreator.getId())
+                    .setLockMode(LockModeType.PESSIMISTIC_READ)
+                    .getSingleResult());
         } catch (NoResultException exception) {
             return Optional.empty();
         }

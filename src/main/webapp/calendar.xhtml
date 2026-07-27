@@ -15,6 +15,16 @@
     </ui:define>
 
     <ui:define name="content">
+        <h:panelGroup id="eventPaginationLiveRegion"
+                      layout="block"
+                      styleClass="visually-hidden"
+                      pt:role="status"
+                      pt:aria-live="polite"
+                      pt:aria-atomic="true">
+            <h:outputText id="eventPaginationAnnouncement"
+                          value="#{calendarView.eventPaginationAnnouncement}"
+                          pt:data-first-new-event-id="#{calendarView.firstNewlyLoadedEventId}"/>
+        </h:panelGroup>
         <h:panelGroup id="calendarContent" layout="block" styleClass="page-section" rendered="#{calendarView.available}">
             <div class="section-header compact-heading">
                 <div>
@@ -27,7 +37,7 @@
                     </div>
                     <h1 id="calendarHeading" tabindex="-1">#{calendarView.calendarName}</h1>
                     <h:outputText value="#{calendarView.calendarDescription}"
-                                  styleClass="lead-text"
+                                  styleClass="lead-text description-text"
                                   rendered="#{not empty calendarView.calendarDescription}"/>
                     <h:outputText value="Share the URL in your browser for read-only access while public access is enabled."
                                   styleClass="secondary-line"
@@ -84,13 +94,15 @@
 
                     <h:panelGroup layout="block" styleClass="event-board" rendered="#{not empty calendarView.events}">
                         <ui:repeat value="#{calendarView.events}" var="event">
-                            <article class="event-item event-row">
+                            <article id="event-#{event.id}"
+                                     class="event-item event-row"
+                                     tabindex="-1">
                                 <span class="event-date">#{event.dateLabel}</span>
                                 <div class="event-copy">
                                     <h3>#{event.title}</h3>
                                     <p>#{event.scheduleAndLocationLabel}</p>
                                     <h:panelGroup layout="block"
-                                                  styleClass="event-description"
+                                                  styleClass="event-description description-text"
                                                   rendered="#{not empty event.description}">#{event.description}</h:panelGroup>
                                 </div>
                                 <h:panelGroup layout="block" styleClass="row-actions" rendered="#{calendarView.editable}">
@@ -132,8 +144,8 @@
                                          action="#{calendarView.loadMoreEvents}"
                                          ajax="true"
                                          process="@this"
-                                         update=":messages :calendarContent"
-                                         oncomplete="focusElementByIdSuffix('events-heading');"
+                                         update=":messages :calendarContent :eventPaginationAnnouncement"
+                                         oncomplete="focusAfterLoadingEvents();"
                                          styleClass="ui-button-outlined"/>
                     </h:form>
                 </section>
@@ -155,12 +167,10 @@
 
                         <div class="checkbox-field">
                             <p:selectBooleanCheckbox id="allDay"
-                                                     widgetVar="eventAllDayCheckbox"
                                                      value="#{calendarView.eventAllDaySelection}">
                                 <p:ajax listener="#{calendarView.changeEventAllDayMode}"
                                         process="eventScheduleFields @this"
-                                        update=":messages @this eventScheduleFields"
-                                        oncomplete="if (args.validationFailed) { var checkbox = PF('eventAllDayCheckbox'); var shouldBeChecked = #{calendarView.eventAllDay}; shouldBeChecked ? checkbox.check(true) : checkbox.uncheck(true); }"/>
+                                        update=":messages @this eventScheduleFields"/>
                             </p:selectBooleanCheckbox>
                             <p:outputLabel for="allDay" value="All-day event"/>
                         </div>
@@ -173,21 +183,19 @@
                                     <p:outputLabel for="eventStart" value="Starts"/>
                                     <p:datePicker id="eventStart"
                                                   value="#{calendarView.eventStartTime}"
-                                                  pattern="yyyy-MM-dd HH:mm"
-                                                  showTime="true"
-                                                  hourFormat="24"
-                                                  required="true"
-                                                  requiredMessage="Event start time is required."/>
+                                                   appendTo="@(body)"
+                                                   pattern="yyyy-MM-dd HH:mm"
+                                                   showTime="true"
+                                                   hourFormat="24"/>
                                 </div>
                                 <div class="field-stack">
                                     <p:outputLabel for="eventEnd" value="Ends"/>
                                     <p:datePicker id="eventEnd"
                                                   value="#{calendarView.eventEndTime}"
-                                                  pattern="yyyy-MM-dd HH:mm"
-                                                  showTime="true"
-                                                  hourFormat="24"
-                                                  required="true"
-                                                  requiredMessage="Event end time is required."/>
+                                                 appendTo="@(body)"
+                                                 pattern="yyyy-MM-dd HH:mm"
+                                                 showTime="true"
+                                                 hourFormat="24"/>
                                 </div>
                             </h:panelGroup>
 
@@ -198,17 +206,15 @@
                                     <p:outputLabel for="eventFirstDay" value="First day"/>
                                     <p:datePicker id="eventFirstDay"
                                                   value="#{calendarView.eventFirstDay}"
-                                                  pattern="yyyy-MM-dd"
-                                                  required="true"
-                                                  requiredMessage="Event first day is required."/>
+                                                  appendTo="@(body)"
+                                                  pattern="yyyy-MM-dd"/>
                                 </div>
                                 <div class="field-stack">
                                     <p:outputLabel for="eventLastDay" value="Last day (inclusive)"/>
                                     <p:datePicker id="eventLastDay"
-                                                  value="#{calendarView.eventLastDay}"
-                                                  pattern="yyyy-MM-dd"
-                                                  required="true"
-                                                  requiredMessage="Event last day is required."/>
+                                                 value="#{calendarView.eventLastDay}"
+                                                 appendTo="@(body)"
+                                                 pattern="yyyy-MM-dd"/>
                                 </div>
                             </h:panelGroup>
                         </h:panelGroup>
@@ -216,6 +222,7 @@
                         <p:outputLabel for="eventDescription" value="Description"/>
                         <p:inputTextarea id="eventDescription"
                                          value="#{calendarView.eventDescription}"
+                                         pt:maxlength="4000"
                                          rows="5"
                                          autoResize="false"/>
 

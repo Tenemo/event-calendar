@@ -32,11 +32,21 @@ public class SessionCookieRefreshFilter implements Filter {
     @Inject
     private CurrentUser currentUser;
 
+    @Inject
+    private AuthenticationAuditService authenticationAuditService;
+
     public SessionCookieRefreshFilter() {
     }
 
     SessionCookieRefreshFilter(CurrentUser currentUser) {
+        this(currentUser, AuthenticationAuditService.noOperation());
+    }
+
+    SessionCookieRefreshFilter(
+            CurrentUser currentUser,
+            AuthenticationAuditService authenticationAuditService) {
         this.currentUser = currentUser;
+        this.authenticationAuditService = authenticationAuditService;
     }
 
     @Override
@@ -105,6 +115,7 @@ public class SessionCookieRefreshFilter implements Filter {
         }
 
         AuthenticatedSessionSecurity.invalidateSessionAndLogout(request);
+        authenticationAuditService.recordForcedSessionInvalidation();
         expireAuthenticationCookies(response);
         return true;
     }

@@ -1,6 +1,7 @@
 package app.membership;
 
 import static app.testsupport.ServiceTestSupport.entityManagerStub;
+import static app.testsupport.ServiceTestSupport.queryParameter;
 import static app.testsupport.ServiceTestSupport.setEntityId;
 import static app.testsupport.ServiceTestSupport.setField;
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -27,8 +28,19 @@ final class CalendarMembershipServiceTest {
         ApplicationUser invitationCreator = activeUser(99L);
         CalendarMembership inactiveAdminMembership = membership(calendar, user, CalendarRole.ADMIN, false);
         EntityManagerStub entityManagerStub = entityManagerStub()
-                .singleResult("from Calendar calendarEntity", calendar)
-                .singleResult("where calendarMembership.calendar.id", inactiveAdminMembership);
+                .singleResult(
+                        "from Calendar calendarEntity",
+                        calendar,
+                        queryParameter("calendarId", calendar.getId()))
+                .singleResult(
+                        "where applicationUser.id = :invitationCreatorId",
+                        invitationCreator,
+                        queryParameter("invitationCreatorId", invitationCreator.getId()))
+                .singleResult(
+                        "where calendarMembership.calendar.id",
+                        inactiveAdminMembership,
+                        queryParameter("calendarId", calendar.getId()),
+                        queryParameter("userId", user.getId()));
         CalendarMembershipService membershipService = membershipService(entityManagerStub);
 
         CalendarMembership member = membershipService
@@ -41,7 +53,28 @@ final class CalendarMembershipServiceTest {
                 () -> assertTrue(member.isActive()),
                 () -> assertNotNull(member.getUpdatedAt()),
                 () -> assertTrue(entityManagerStub.lockedQueryTexts().stream()
-                        .anyMatch(queryText -> queryText.contains("from Calendar calendarEntity"))));
+                        .anyMatch(queryText -> queryText.contains("from Calendar calendarEntity"))),
+                () -> assertTrue(entityManagerStub.lockedQueryTexts().stream()
+                        .anyMatch(queryText -> queryText.contains(
+                                "where applicationUser.id = :invitationCreatorId"))),
+                () -> assertEquals(
+                        List.of(
+                                "calendar",
+                                "creator",
+                                "membership"),
+                        entityManagerStub.queryExecutions().stream()
+                                .map(queryExecution -> {
+                                    if (queryExecution.queryText().contains(
+                                            "from Calendar calendarEntity")) {
+                                        return "calendar";
+                                    }
+                                    if (queryExecution.queryText().contains(
+                                            "where applicationUser.id = :invitationCreatorId")) {
+                                        return "creator";
+                                    }
+                                    return "membership";
+                                })
+                                .toList()));
     }
 
     @Test
@@ -51,8 +84,19 @@ final class CalendarMembershipServiceTest {
         ApplicationUser invitationCreator = activeUser(99L);
         CalendarMembership activeAdminMembership = membership(calendar, user, CalendarRole.ADMIN, true);
         EntityManagerStub entityManagerStub = entityManagerStub()
-                .singleResult("from Calendar calendarEntity", calendar)
-                .singleResult("where calendarMembership.calendar.id", activeAdminMembership);
+                .singleResult(
+                        "from Calendar calendarEntity",
+                        calendar,
+                        queryParameter("calendarId", calendar.getId()))
+                .singleResult(
+                        "where applicationUser.id = :invitationCreatorId",
+                        invitationCreator,
+                        queryParameter("invitationCreatorId", invitationCreator.getId()))
+                .singleResult(
+                        "where calendarMembership.calendar.id",
+                        activeAdminMembership,
+                        queryParameter("calendarId", calendar.getId()),
+                        queryParameter("userId", user.getId()));
         CalendarMembershipService membershipService = membershipService(entityManagerStub);
 
         CalendarMembership member = membershipService
@@ -84,7 +128,15 @@ final class CalendarMembershipServiceTest {
         Calendar calendar = activeCalendar(200L);
         ApplicationUser removedEditor = activeUser(100L);
         CalendarMembershipService membershipService = membershipService(
-                entityManagerStub().singleResult("from Calendar calendarEntity", calendar));
+                entityManagerStub()
+                        .singleResult(
+                                "from Calendar calendarEntity",
+                                calendar,
+                                queryParameter("calendarId", calendar.getId()))
+                        .singleResult(
+                                "where applicationUser.id = :invitationCreatorId",
+                                removedEditor,
+                                queryParameter("invitationCreatorId", removedEditor.getId())));
         setField(membershipService, "calendarAccessService", new DenyingEditAccessService());
 
         assertTrue(membershipService
@@ -103,8 +155,14 @@ final class CalendarMembershipServiceTest {
         CalendarMembership actorMembership = membership(calendar, actingUser, CalendarRole.ADMIN, true);
         CalendarMembership targetMembership = membership(calendar, activeUser(101L), CalendarRole.ADMIN, true);
         EntityManagerStub entityManagerStub = entityManagerStub()
-                .singleResult("from Calendar calendarEntity", calendar)
-                .resultList("from CalendarMembership calendarMembership", List.of(actorMembership, targetMembership));
+                .singleResult(
+                        "from Calendar calendarEntity",
+                        calendar,
+                        queryParameter("calendarId", calendar.getId()))
+                .resultList(
+                        "from CalendarMembership calendarMembership",
+                        List.of(actorMembership, targetMembership),
+                        queryParameter("calendarId", calendar.getId()));
         CalendarMembershipService membershipService = membershipService(entityManagerStub);
         setField(membershipService, "calendarAccessService", new AllowingAccessService());
         setField(membershipService, "auditService", new NoOperationAuditService());
@@ -127,8 +185,14 @@ final class CalendarMembershipServiceTest {
         CalendarMembership soleAdminMembership =
                 membership(calendar, activeUser(101L), CalendarRole.ADMIN, true);
         EntityManagerStub entityManagerStub = entityManagerStub()
-                .singleResult("from Calendar calendarEntity", calendar)
-                .resultList("from CalendarMembership calendarMembership", List.of(soleAdminMembership));
+                .singleResult(
+                        "from Calendar calendarEntity",
+                        calendar,
+                        queryParameter("calendarId", calendar.getId()))
+                .resultList(
+                        "from CalendarMembership calendarMembership",
+                        List.of(soleAdminMembership),
+                        queryParameter("calendarId", calendar.getId()));
         CalendarMembershipService membershipService = membershipService(entityManagerStub);
 
         ValidationException demotionException = assertThrows(
@@ -163,8 +227,14 @@ final class CalendarMembershipServiceTest {
         CalendarMembership actorMembership = membership(calendar, actingUser, CalendarRole.ADMIN, true);
         CalendarMembership inactiveMembership = membership(calendar, activeUser(101L), CalendarRole.EDITOR, false);
         EntityManagerStub entityManagerStub = entityManagerStub()
-                .singleResult("from Calendar calendarEntity", calendar)
-                .resultList("from CalendarMembership calendarMembership", List.of(actorMembership, inactiveMembership));
+                .singleResult(
+                        "from Calendar calendarEntity",
+                        calendar,
+                        queryParameter("calendarId", calendar.getId()))
+                .resultList(
+                        "from CalendarMembership calendarMembership",
+                        List.of(actorMembership, inactiveMembership),
+                        queryParameter("calendarId", calendar.getId()));
         CalendarMembershipService membershipService = membershipService(entityManagerStub);
         setField(membershipService, "auditService", new NoOperationAuditService());
 
@@ -200,8 +270,14 @@ final class CalendarMembershipServiceTest {
         CalendarMembership otherAdminMembership = membership(calendar, activeUser(101L), CalendarRole.ADMIN, true);
         OffsetDateTime originalUpdatedAt = actorMembership.getUpdatedAt();
         EntityManagerStub entityManagerStub = entityManagerStub()
-                .singleResult("from Calendar calendarEntity", calendar)
-                .resultList("from CalendarMembership calendarMembership", List.of(actorMembership, otherAdminMembership));
+                .singleResult(
+                        "from Calendar calendarEntity",
+                        calendar,
+                        queryParameter("calendarId", calendar.getId()))
+                .resultList(
+                        "from CalendarMembership calendarMembership",
+                        List.of(actorMembership, otherAdminMembership),
+                        queryParameter("calendarId", calendar.getId()));
         CalendarMembershipService membershipService = membershipService(entityManagerStub);
         setField(membershipService, "calendarAccessService", new AllowingAccessService());
 
@@ -226,8 +302,14 @@ final class CalendarMembershipServiceTest {
         CalendarMembership actorMembership = membership(calendar, actingUser, CalendarRole.ADMIN, true);
         CalendarMembership targetMembership = membership(calendar, activeUser(101L), CalendarRole.EDITOR, true);
         EntityManagerStub entityManagerStub = entityManagerStub()
-                .singleResult("from Calendar calendarEntity", calendar)
-                .resultList("from CalendarMembership calendarMembership", List.of(actorMembership, targetMembership));
+                .singleResult(
+                        "from Calendar calendarEntity",
+                        calendar,
+                        queryParameter("calendarId", calendar.getId()))
+                .resultList(
+                        "from CalendarMembership calendarMembership",
+                        List.of(actorMembership, targetMembership),
+                        queryParameter("calendarId", calendar.getId()));
         CalendarMembershipService membershipService = membershipService(entityManagerStub);
         setField(membershipService, "calendarAccessService", new AdministrationRevokedAfterInitialCheckAccessService());
 

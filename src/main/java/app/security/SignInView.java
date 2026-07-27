@@ -28,6 +28,9 @@ public class SignInView {
     @Inject
     private PasswordValidationState passwordValidationState;
 
+    @Inject
+    private AuthenticationAuditService authenticationAuditService;
+
     private String username;
     private String password;
     private String invitationToken;
@@ -36,6 +39,7 @@ public class SignInView {
 
     public void signIn() throws IOException, ServletException {
         if (isBlank(username) || isBlank(password)) {
+            authenticationAuditService.recordSignInFailed();
             addFailureMessage("Username and password are required.");
             return;
         }
@@ -56,6 +60,7 @@ public class SignInView {
                     securityContext.getCallerPrincipal());
             if (validatedPasswordVersion.isEmpty()) {
                 AuthenticatedSessionSecurity.invalidateSessionAndLogout(request);
+                authenticationAuditService.recordForcedSessionInvalidation();
                 response.setStatus(HttpServletResponse.SC_OK);
                 addFailureMessage("Sign-in failed. Check your username and password.");
                 return;

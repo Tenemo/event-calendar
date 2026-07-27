@@ -33,7 +33,8 @@ final class RuntimeHealthConfigurationTest {
         Duration connectionAcquisitionTimeout = duration(connectionManager.getAttribute("connectionTimeout"));
         Duration driverConnectTimeout = duration(postgresqlProperties.getAttribute("connectTimeout"));
         Duration driverLoginTimeout = duration(postgresqlProperties.getAttribute("loginTimeout"));
-        Duration healthValidationTimeout = Duration.ofSeconds(HealthServlet.DATABASE_VALIDATION_TIMEOUT_SECONDS);
+        Duration healthValidationTimeout =
+                Duration.ofSeconds(DatabaseHealthMonitor.DATABASE_VALIDATION_TIMEOUT_SECONDS);
         Duration containerHealthTimeout = applicationContainerHealthTimeout();
 
         assertAll(

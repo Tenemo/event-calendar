@@ -26,6 +26,7 @@ import java.util.List;
 public class CalendarService {
     private static final int MAXIMUM_CALENDAR_NAME_LENGTH = 160;
     private static final int MAXIMUM_TIME_ZONE_LENGTH = 80;
+    private static final int MAXIMUM_ALL_DAY_EVENTS_PER_TIME_ZONE_CHANGE = 1_000;
     private static final String CALENDAR_CONFLICT_MESSAGE =
             "This calendar changed after you opened it. Reload the page and try again.";
 
@@ -52,11 +53,7 @@ public class CalendarService {
             throw new ValidationException("An active user is required to create a calendar.");
         }
 
-        String normalizedName = TextNormalizer.normalizeRequiredText(
-                name,
-                "Calendar name is required.",
-                MAXIMUM_CALENDAR_NAME_LENGTH,
-                "Calendar name must be 160 characters or fewer.");
+        String normalizedName = normalizeAndValidateCalendarName(name);
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         ApplicationUser managedCreator = entityManager.find(ApplicationUser.class, creator.getId());
         if (managedCreator == null || !managedCreator.isActive()) {
@@ -89,7 +86,15 @@ public class CalendarService {
         return calendar;
     }
 
-    public Calendar requireActiveCalendar(Long calendarId) {
+    public String normalizeAndValidateCalendarName(String calendarName) {
+        return TextNormalizer.normalizeRequiredText(
+                calendarName,
+                "Calendar name is required.",
+                MAXIMUM_CALENDAR_NAME_LENGTH,
+                "Calendar name must be 160 characters or fewer.");
+    }
+
+    private Calendar requireActiveCalendar(Long calendarId) {
         Calendar calendar = entityManager.find(Calendar.class, calendarId);
         if (calendar == null || !calendar.isActive()) {
             throw new NotFoundException("Calendar was not found.");
@@ -166,7 +171,10 @@ public class CalendarService {
                 "Calendar name is required.",
                 MAXIMUM_CALENDAR_NAME_LENGTH,
                 "Calendar name must be 160 characters or fewer."));
-        calendar.setDescription(TextNormalizer.normalizeOptionalText(description));
+        calendar.setDescription(TextNormalizer.normalizeOptionalMultilineText(
+                description,
+                TextNormalizer.MAXIMUM_DESCRIPTION_LENGTH,
+                "Calendar description must be 4,000 characters or fewer."));
         String normalizedTimeZone = TextNormalizer.normalizeRequiredText(
                 timeZone,
                 "Time zone is required.",
@@ -188,6 +196,21 @@ public class CalendarService {
             return;
         }
 
+        long numberOfAllDayEvents = entityManager
+                .createQuery(
+                        "select count(calendarEvent) from CalendarEvent calendarEvent "
+                                + "where calendarEvent.calendar.id = :calendarId "
+                                + "and calendarEvent.allDay = true",
+                        Long.class)
+                .setParameter("calendarId", calendar.getId())
+                .getSingleResult();
+        if (numberOfAllDayEvents > MAXIMUM_ALL_DAY_EVENTS_PER_TIME_ZONE_CHANGE) {
+            throw new ValidationException(
+                    "The calendar time zone cannot be changed while it has more than "
+                            + MAXIMUM_ALL_DAY_EVENTS_PER_TIME_ZONE_CHANGE
+                            + " all-day events.");
+        }
+
         List<CalendarEvent> allDayEvents = entityManager
                 .createQuery(
                         "select calendarEvent from CalendarEvent calendarEvent "
@@ -195,6 +218,7 @@ public class CalendarService {
                                 + "and calendarEvent.allDay = true",
                         CalendarEvent.class)
                 .setParameter("calendarId", calendar.getId())
+                .setMaxResults(MAXIMUM_ALL_DAY_EVENTS_PER_TIME_ZONE_CHANGE)
                 .getResultList();
         for (CalendarEvent allDayEvent : allDayEvents) {
             LocalDate firstDay = calendarTimeService

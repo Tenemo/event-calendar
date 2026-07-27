@@ -10,16 +10,9 @@
     "lint:css": "stylelint \"src/main/webapp/resources/css/**/*.css\""
   },
   "devDependencies": {
-    "@lhci/cli": "0.15.1",
+    "chrome-launcher": "1.2.1",
+    "lighthouse": "13.4.1",
     "stylelint": "17.14.0",
     "stylelint-config-standard": "40.0.0"
-  },
-  "overrides": {
-    "@lhci/cli": {
-      "chrome-launcher": "1.2.1",
-      "lighthouse": "13.4.1"
-    },
-    "tmp": "0.2.7",
-    "uuid": "11.1.1"
   }
 }

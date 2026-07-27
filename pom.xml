@@ -18,6 +18,7 @@
         <checkstyle.version>13.8.0</checkstyle.version>
         <cyclonedx.maven.plugin.version>2.9.2</cyclonedx.maven.plugin.version>
         <jakartaee.version>10.0.0</jakartaee.version>
+        <jackson.databind.version>3.1.5</jackson.databind.version>
         <primefaces.version>15.0.16</primefaces.version>
         <postgresql.version>42.7.13</postgresql.version>
         <flyway.version>12.10.0</flyway.version>
@@ -42,6 +43,17 @@
         <exec.maven.plugin.version>3.6.3</exec.maven.plugin.version>
         <liberty.postgresql.directory>${project.build.directory}/liberty-resources/postgresql</liberty.postgresql.directory>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Override Flyway's affected transitive version until its managed Jackson line is patched. -->
+            <dependency>
+                <groupId>tools.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson.databind.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -154,6 +166,9 @@
                 <artifactId>maven-war-plugin</artifactId>
                 <version>${maven.war.plugin.version}</version>
                 <configuration>
+                    <archive>
+                        <addMavenDescriptor>false</addMavenDescriptor>
+                    </archive>
                     <outputTimestamp>${project.build.outputTimestamp}</outputTimestamp>
                 </configuration>
             </plugin>
@@ -163,6 +178,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven.surefire.plugin.version}</version>
                 <configuration>
+                    <failIfNoTests>true</failIfNoTests>
                     <useModulePath>false</useModulePath>
                 </configuration>
             </plugin>
@@ -388,6 +404,7 @@
                         <artifactId>maven-failsafe-plugin</artifactId>
                         <version>${maven.failsafe.plugin.version}</version>
                         <configuration>
+                            <failIfNoTests>true</failIfNoTests>
                             <useModulePath>false</useModulePath>
                             <includes>
                                 <include>**/*EndToEndIT.java</include>
@@ -415,6 +432,7 @@
                         <artifactId>maven-failsafe-plugin</artifactId>
                         <version>${maven.failsafe.plugin.version}</version>
                         <configuration>
+                            <failIfNoTests>true</failIfNoTests>
                             <useModulePath>false</useModulePath>
                             <includes>
                                 <include>**/BootstrapRegistrationConcurrencyIT.java</include>
@@ -442,6 +460,7 @@
                         <artifactId>maven-failsafe-plugin</artifactId>
                         <version>${maven.failsafe.plugin.version}</version>
                         <configuration>
+                            <failIfNoTests>true</failIfNoTests>
                             <useModulePath>false</useModulePath>
                             <includes>
                                 <include>**/PreviewDeploymentAuthenticationIT.java</include>

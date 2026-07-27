@@ -57,6 +57,24 @@
             focusElementByIdSuffix(idSuffix);
         }
 
+        function focusAfterLoadingEvents() {
+            window.requestAnimationFrame(function () {
+                var paginationAnnouncement = document.querySelector(
+                    "[id$='eventPaginationAnnouncement']");
+                var firstNewEventId = paginationAnnouncement
+                    ? paginationAnnouncement.getAttribute("data-first-new-event-id")
+                    : null;
+                var firstNewEvent = firstNewEventId
+                    ? document.getElementById("event-" + firstNewEventId)
+                    : null;
+                var focusTarget = firstNewEvent
+                    || document.querySelector("[id$='events-heading']");
+                if (focusTarget) {
+                    focusTarget.focus();
+                }
+            });
+        }
+
         function focusConfirmationCancelButton() {
             window.setTimeout(function () {
                 var cancelButton = document.querySelector(".ui-confirmdialog-no");

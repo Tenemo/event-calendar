@@ -279,6 +279,10 @@ button,
     font-size: 1.05rem;
 }
 
+.description-text {
+    white-space: pre-wrap;
+}
+
 .notice-message {
     padding: 0.9rem 1rem;
     border: 1px solid var(--border);
@@ -490,6 +494,18 @@ button,
 
 .event-pagination {
     margin-top: 0.75rem;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
 }
 
 .event-editor {

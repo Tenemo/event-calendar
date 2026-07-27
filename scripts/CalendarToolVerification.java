@@ -6,23 +6,36 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.function.LongSupplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 final class CalendarToolVerification extends CalendarToolProcessRunner {
     private static final String MAVEN_WRAPPER_COMMAND = "mvnw";
     private static final String APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE = "APP_BASE_URL";
     private static final String BROWSER_ENVIRONMENT_VARIABLE = "BROWSER";
     private static final String PORT_ENVIRONMENT_VARIABLE = "PORT";
+    private static final String HTTPS_PORT_ENVIRONMENT_VARIABLE = "HTTPS_PORT";
+    private static final String EXPECTED_DEPLOYMENT_REVISION_ENVIRONMENT_VARIABLE = "EXPECTED_DEPLOYMENT_REVISION";
+    private static final String DEPLOYMENT_REVISION_HEADER = "X-Deployment-Revision";
     private static final String DEFAULT_APPLICATION_PORT = "9080";
+    private static final String DEFAULT_APPLICATION_HTTPS_PORT = "9443";
+    private static final Path LOCAL_IMAGE_BUILD_STATE_PATH =
+            PROJECT_DIRECTORY.resolve(".build/image-state/shared-calendar-local.txt");
     private static final String BOOTSTRAP_VERIFICATION_DATABASE_SERVICE_NAME =
             "postgres-bootstrap-verification";
     private static final String BOOTSTRAP_VERIFICATION_APPLICATION_SERVICE_NAME =
@@ -55,8 +68,6 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
             "END_TO_END_VERIFICATION_HEALTH_URL";
     private static final String END_TO_END_MANAGED_RECOVERY_SCENARIOS_ENVIRONMENT_VARIABLE =
             "END_TO_END_MANAGED_RECOVERY_SCENARIOS";
-    private static final String LIGHTHOUSE_BASE_URL_ENVIRONMENT_VARIABLE =
-            "LIGHTHOUSE_BASE_URL";
     private static final String DEFAULT_BOOTSTRAP_VERIFICATION_APPLICATION_PORT = "9081";
     private static final String DEFAULT_BOOTSTRAP_VERIFICATION_HTTPS_PORT = "9444";
     private static final String DEFAULT_BOOTSTRAP_VERIFICATION_DATABASE_PORT = "55432";
@@ -80,6 +91,9 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
             "SRVE0777E",
             "FFDC1015I",
             "SESN0008E");
+    private static final Pattern COMPOSE_CONFIGURATION_HASH_LABEL_PATTERN = Pattern.compile(
+            "\"com\\.docker\\.compose\\.config-hash\"\\s*:\\s*"
+                    + "\"(?<configurationHash>[0-9a-f]{64})\"");
 
     private CalendarToolVerification() {}
 
@@ -133,66 +147,9 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
         };
     }
 
-    static void runIsolatedEndToEndTest(String selectedTest, String diagnosticDirectoryName)
-            throws IOException, InterruptedException {
-        installPlaywrightBrowsers();
-        verifySharedCalendarEndToEnd(selectedTest, diagnosticDirectoryName);
-    }
-
-    static void runLighthouse(boolean buildImage) throws IOException, InterruptedException {
-        runCommand("Node dependency installation", "npm", "ci", "--ignore-scripts");
-        if (buildImage) {
-            buildDockerImage();
-        }
-
-        VerificationEndpoints endpoints = endToEndVerificationEndpoints(System.getenv());
-        Map<String, String> verificationEnvironment = new HashMap<>();
-        verificationEnvironment.put(
-                END_TO_END_VERIFICATION_APPLICATION_PORT_ENVIRONMENT_VARIABLE,
-                endpoints.healthControlPort());
-        verificationEnvironment.put(
-                END_TO_END_VERIFICATION_HTTPS_PORT_ENVIRONMENT_VARIABLE,
-                endpoints.httpsPort());
-        verificationEnvironment.put(
-                END_TO_END_VERIFICATION_DATABASE_PORT_ENVIRONMENT_VARIABLE,
-                endpoints.databasePort());
-        verificationEnvironment.put(
-                END_TO_END_VERIFICATION_BASE_URL_ENVIRONMENT_VARIABLE,
-                endpoints.applicationBaseUri().toString());
-        verificationEnvironment.put(
-                END_TO_END_VERIFICATION_HEALTH_URL_ENVIRONMENT_VARIABLE,
-                endpoints.healthControlUri().toString());
-        verificationEnvironment.put(
-                LIGHTHOUSE_BASE_URL_ENVIRONMENT_VARIABLE,
-                "http://localhost:" + endpoints.healthControlPort());
-
-        runComposeVerification(new ComposeVerification(
-                "lighthouse",
-                "Lighthouse verification",
-                "Mobile Lighthouse measurements",
-                END_TO_END_VERIFICATION_PROFILE,
-                END_TO_END_VERIFICATION_APPLICATION_SERVICE_NAME,
-                END_TO_END_VERIFICATION_DATABASE_SERVICE_NAME,
-                endpoints.healthControlUri(),
-                verificationEnvironment,
-                END_TO_END_VERIFICATION_DATABASE_USER,
-                END_TO_END_VERIFICATION_DATABASE_NAME,
-                new String[] {"npm", "run", "lighthouse"}));
-    }
-
     private static void runSharedEndToEndSelections() throws IOException, InterruptedException {
-        for (EndToEndSelection selection : sharedEndToEndSelections()) {
-            verifySharedCalendarEndToEnd(selection.selectedTest(), selection.diagnosticDirectoryName());
-        }
+        verifySharedCalendarEndToEnd(null, "end-to-end-shared");
     }
-
-    static List<EndToEndSelection> sharedEndToEndSelections() {
-        return List.of(
-                new EndToEndSelection(null, "end-to-end-shared"),
-                new EndToEndSelection("CalendarLinkRequestThrottleIT", "end-to-end-calendar-link-throttle"));
-    }
-
-    record EndToEndSelection(String selectedTest, String diagnosticDirectoryName) {}
 
     private static void verifySharedCalendarEndToEnd(
             String selectedTest,
@@ -529,15 +486,44 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
     }
 
     static void verifyLocal() throws IOException, InterruptedException {
-        checkApplicationHealth();
-        CalendarToolPostgreSql.checkDatabaseSchema();
-    }
+        URI healthUri = applicationHealthUri();
+        ApplicationHealthResponse healthResponse = requestApplicationHealth(healthUri);
+        validateExpectedDeploymentRevision(
+                System.getenv().get(EXPECTED_DEPLOYMENT_REVISION_ENVIRONMENT_VARIABLE),
+                healthResponse.deploymentRevision());
 
-    private static void checkApplicationHealth() throws IOException, InterruptedException {
-        checkApplicationHealth(applicationHealthUri());
+        boolean composeApplication = runningComposeApplicationUsesPort(healthUri.getPort());
+        if (composeApplication) {
+            CalendarToolPostgreSql.verifyComposeApplicationDatabaseConfiguration();
+            verifyRunningComposeApplicationRuntimeConfigurationIsCurrent();
+            if (System.getenv().get(EXPECTED_DEPLOYMENT_REVISION_ENVIRONMENT_VARIABLE) == null
+                    || System.getenv().get(EXPECTED_DEPLOYMENT_REVISION_ENVIRONMENT_VARIABLE).isBlank()) {
+                verifyRunningComposeImageIsCurrent();
+            }
+        } else {
+            if (System.getenv().get(EXPECTED_DEPLOYMENT_REVISION_ENVIRONMENT_VARIABLE) != null
+                    && !System.getenv().get(EXPECTED_DEPLOYMENT_REVISION_ENVIRONMENT_VARIABLE).isBlank()) {
+                throw new IllegalStateException(
+                        "EXPECTED_DEPLOYMENT_REVISION requires the Compose application on the configured local HTTP port.");
+            }
+            verifyDevelopmentBuildIsCurrent(PROJECT_DIRECTORY);
+        }
+
+        verifyRunningComposeDatabaseServiceIsCurrent();
+        CalendarToolPostgreSql.checkDatabaseSchema();
+        CalendarToolPostgreSql.verifyApplicationConnectionToComposeDatabase(
+                composeApplication
+                        ? composeDatabaseApplicationName(System.getenv())
+                        : developmentDatabaseApplicationName(System.getenv()));
+        System.out.println("Local verification matched the current application build and intended Compose database.");
     }
 
     private static void checkApplicationHealth(URI healthUri) throws IOException, InterruptedException {
+        requestApplicationHealth(healthUri);
+    }
+
+    private static ApplicationHealthResponse requestApplicationHealth(URI healthUri)
+            throws IOException, InterruptedException {
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
                 .build();
@@ -558,7 +544,13 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
 
         validateHealthResponse(healthUri, response.statusCode(), response.body());
         System.out.println("Health check returned HTTP 200 with body 'ok' from " + healthUri + ".");
+        return new ApplicationHealthResponse(
+                response.statusCode(),
+                response.body(),
+                response.headers().firstValue(DEPLOYMENT_REVISION_HEADER).orElse(null));
     }
+
+    record ApplicationHealthResponse(int statusCode, String body, String deploymentRevision) {}
 
     static void validateHealthResponse(URI healthUri, int statusCode, String responseBody) {
         String normalizedResponseBody = responseBody == null ? "" : responseBody.trim();
@@ -574,29 +566,486 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
     }
 
     static URI applicationHealthUri(Map<String, String> environment) {
-        String defaultApplicationBaseUrl = "http://localhost:"
-                + environmentPortValue(environment, PORT_ENVIRONMENT_VARIABLE, DEFAULT_APPLICATION_PORT);
-        String applicationBaseUrl = environmentValueOrDefault(
+        String applicationPort = environmentPortValue(
                 environment,
-                APPLICATION_BASE_URL_ENVIRONMENT_VARIABLE,
-                defaultApplicationBaseUrl);
-        URI baseUri;
-        try {
-            baseUri = URI.create(removeTrailingSlashes(applicationBaseUrl));
-        } catch (IllegalArgumentException exception) {
-            throw new IllegalArgumentException("APP_BASE_URL must be a valid HTTP or HTTPS URL.", exception);
+                PORT_ENVIRONMENT_VARIABLE,
+                DEFAULT_APPLICATION_PORT);
+        return URI.create("http://localhost:" + applicationPort + "/health");
+    }
+
+    static String composeDatabaseApplicationName(Map<String, String> environment) {
+        return "shared-calendar-compose-web-" + environmentPortValue(
+                environment,
+                PORT_ENVIRONMENT_VARIABLE,
+                DEFAULT_APPLICATION_PORT);
+    }
+
+    static String developmentDatabaseApplicationName(Map<String, String> environment) {
+        return "shared-calendar-development-" + environmentPortValue(
+                environment,
+                PORT_ENVIRONMENT_VARIABLE,
+                DEFAULT_APPLICATION_PORT);
+    }
+
+    static void validateExpectedDeploymentRevision(String expectedRevision, String actualRevision) {
+        if (expectedRevision == null || expectedRevision.isBlank()) {
+            return;
         }
-        if (!(baseUri.getScheme() != null
-                        && (baseUri.getScheme().equalsIgnoreCase("http")
-                                || baseUri.getScheme().equalsIgnoreCase("https")))
-                || baseUri.getHost() == null
-                || baseUri.getUserInfo() != null
-                || baseUri.getQuery() != null
-                || baseUri.getFragment() != null) {
+        String normalizedExpectedRevision = expectedRevision.trim().toLowerCase(Locale.ROOT);
+        if (!normalizedExpectedRevision.matches("[0-9a-f]{40}")) {
             throw new IllegalArgumentException(
-                    "APP_BASE_URL must be an HTTP or HTTPS URL without credentials, a query, or a fragment.");
+                    "EXPECTED_DEPLOYMENT_REVISION must be a full 40-character hexadecimal revision.");
         }
-        return URI.create(baseUri + "/health");
+        String normalizedActualRevision = actualRevision == null
+                ? ""
+                : actualRevision.trim().toLowerCase(Locale.ROOT);
+        if (!normalizedExpectedRevision.equals(normalizedActualRevision)) {
+            throw new IllegalStateException(
+                    "The application health response did not identify the expected deployment revision. "
+                            + "Rebuild and restart the application before verification.");
+        }
+    }
+
+    static boolean composePortMappingIncludes(String composePortOutput, int expectedPort) {
+        if (composePortOutput == null || composePortOutput.isBlank()) {
+            return false;
+        }
+        for (String mapping : composePortOutput.lines().toList()) {
+            String trimmedMapping = mapping.trim();
+            int finalColonIndex = trimmedMapping.lastIndexOf(':');
+            if (finalColonIndex < 0 || finalColonIndex == trimmedMapping.length() - 1) {
+                throw new IllegalArgumentException("Docker Compose returned a malformed application port mapping.");
+            }
+            try {
+                if (Integer.parseInt(trimmedMapping.substring(finalColonIndex + 1)) == expectedPort) {
+                    return true;
+                }
+            } catch (NumberFormatException exception) {
+                throw new IllegalArgumentException(
+                        "Docker Compose returned a non-numeric application port mapping.", exception);
+            }
+        }
+        return false;
+    }
+
+    private static boolean runningComposeApplicationUsesPort(int expectedPort)
+            throws IOException, InterruptedException {
+        String runningApplicationService = runCommandAndCapture(
+                "Compose application state verification",
+                "docker",
+                "compose",
+                "--profile",
+                "application",
+                "ps",
+                "--services",
+                "--status",
+                "running",
+                "web").trim();
+        if (!runningApplicationService.lines().anyMatch("web"::equals)) {
+            return false;
+        }
+        String portMapping = runCommandAndCapture(
+                "Compose application port verification",
+                "docker",
+                "compose",
+                "port",
+                "web",
+                "9080");
+        validateComposePortMappingsAreLoopbackOnly(portMapping);
+        if (!composePortMappingIncludes(portMapping, expectedPort)) {
+            throw new IllegalStateException(
+                    "The running Compose application does not own the configured local health port. "
+                            + "Stop stale or additional application instances before verification.");
+        }
+        return true;
+    }
+
+    private static void verifyRunningComposeImageIsCurrent() throws IOException, InterruptedException {
+        String containerIdentifier = runCommandAndCapture(
+                "Compose application container lookup",
+                "docker",
+                "compose",
+                "ps",
+                "--quiet",
+                "web").trim();
+        if (containerIdentifier.isEmpty()) {
+            throw new IllegalStateException("The running Compose application container could not be identified.");
+        }
+        String runningImageIdentifier = runCommandAndCapture(
+                "Compose application image lookup",
+                "docker",
+                "inspect",
+                "--format={{.Image}}",
+                containerIdentifier).trim();
+        String currentImageIdentifier = runCommandAndCapture(
+                "Local application image lookup",
+                "docker",
+                "image",
+                "inspect",
+                "--format={{.Id}}",
+                "shared-calendar:local").trim();
+        if (containerIdentifier.isEmpty()
+                || runningImageIdentifier.isEmpty()
+                || !runningImageIdentifier.equals(currentImageIdentifier)) {
+            throw new IllegalStateException(
+                    "The running Compose application is not using the current shared-calendar:local image.");
+        }
+        verifyRecordedImageBuildState(PROJECT_DIRECTORY, currentImageIdentifier);
+    }
+
+    static void validateComposePortMappingsAreLoopbackOnly(String composePortOutput) {
+        if (composePortOutput == null || composePortOutput.isBlank()) {
+            throw new IllegalStateException(
+                    "The running Compose application did not report its HTTP port binding.");
+        }
+        for (String mapping : composePortOutput.lines().map(String::trim).filter(line -> !line.isEmpty()).toList()) {
+            int finalColonIndex = mapping.lastIndexOf(':');
+            if (finalColonIndex <= 0) {
+                throw new IllegalArgumentException("Docker Compose returned a malformed application port mapping.");
+            }
+            String host = mapping.substring(0, finalColonIndex);
+            if (!host.equals("127.0.0.1") && !host.equals("[::1]")) {
+                throw new IllegalStateException(
+                        "A running Compose service exposes a port beyond loopback. "
+                                + "Recreate it from the current Compose configuration before verification.");
+            }
+        }
+    }
+
+    static void validateComposeServiceConfigurationHash(
+            String serviceName,
+            String currentConfigurationHashOutput,
+            String runningConfigurationHashOutput) {
+        String currentConfigurationHash = currentConfigurationHashOutput == null
+                ? ""
+                : currentConfigurationHashOutput.trim();
+        String expectedPrefix = serviceName + " ";
+        if (!currentConfigurationHash.startsWith(expectedPrefix)
+                || currentConfigurationHash.lines().count() != 1) {
+            throw new IllegalStateException(
+                    "Docker Compose did not report the current " + serviceName + " service configuration hash.");
+        }
+        currentConfigurationHash = currentConfigurationHash.substring(expectedPrefix.length()).trim();
+        String runningConfigurationHash = runningConfigurationHashOutput == null
+                ? ""
+                : runningConfigurationHashOutput.trim();
+        if (!currentConfigurationHash.matches("[0-9a-f]{64}")
+                || !runningConfigurationHash.matches("[0-9a-f]{64}")) {
+            throw new IllegalStateException(
+                    "Docker Compose returned an invalid " + serviceName + " service configuration hash.");
+        }
+        if (!currentConfigurationHash.equals(runningConfigurationHash)) {
+            throw new IllegalStateException(
+                    "The running Compose application was created from stale service configuration. "
+                            + "Recreate it before verification.");
+        }
+    }
+
+    static String composeConfigurationHashFromLabelsJson(String labelsJson) {
+        if (labelsJson == null) {
+            return "";
+        }
+        Matcher configurationHashMatcher =
+                COMPOSE_CONFIGURATION_HASH_LABEL_PATTERN.matcher(labelsJson);
+        if (!configurationHashMatcher.find()) {
+            return "";
+        }
+        String configurationHash = configurationHashMatcher.group("configurationHash");
+        return configurationHashMatcher.find() ? "" : configurationHash;
+    }
+
+    static String[] composeServiceLabelsInspectionCommand(String containerIdentifier) {
+        return new String[] {
+            "docker",
+            "inspect",
+            "--format={{json .Config.Labels}}",
+            containerIdentifier
+        };
+    }
+
+    private static void verifyRunningComposeServiceConfigurationIsCurrent(
+            String serviceName,
+            String containerIdentifier) throws IOException, InterruptedException {
+        String currentServiceHash = runCommandAndCapture(
+                "Current Compose " + serviceName + " configuration lookup",
+                "docker",
+                "compose",
+                "--profile",
+                "application",
+                "config",
+                "--hash",
+                serviceName);
+        String runningServiceLabelsJson = runCommandAndCapture(
+                "Running Compose " + serviceName + " configuration lookup",
+                composeServiceLabelsInspectionCommand(containerIdentifier));
+        String runningServiceHash =
+                composeConfigurationHashFromLabelsJson(runningServiceLabelsJson);
+        validateComposeServiceConfigurationHash(serviceName, currentServiceHash, runningServiceHash);
+    }
+
+    private static void verifyRunningComposeApplicationRuntimeConfigurationIsCurrent()
+            throws IOException, InterruptedException {
+        String applicationContainerIdentifier = runCommandAndCapture(
+                "Compose application container lookup",
+                "docker",
+                "compose",
+                "ps",
+                "--quiet",
+                "web").trim();
+        if (applicationContainerIdentifier.isEmpty()) {
+            throw new IllegalStateException("The running Compose application container could not be identified.");
+        }
+        verifyRunningComposeServiceConfigurationIsCurrent("web", applicationContainerIdentifier);
+
+        String httpsPortMapping = runCommandAndCapture(
+                "Compose application HTTPS port verification",
+                "docker",
+                "compose",
+                "port",
+                "web",
+                "9443");
+        validateExpectedLoopbackPortMapping(
+                httpsPortMapping,
+                Integer.parseInt(environmentPortValue(
+                        HTTPS_PORT_ENVIRONMENT_VARIABLE,
+                        DEFAULT_APPLICATION_HTTPS_PORT)),
+                "application HTTPS");
+    }
+
+    private static void verifyRunningComposeDatabaseServiceIsCurrent()
+            throws IOException, InterruptedException {
+        String databasePortMapping = runCommandAndCapture(
+                "Compose PostgreSQL port verification",
+                "docker",
+                "compose",
+                "port",
+                "postgres",
+                "5432");
+        validateExpectedLoopbackPortMapping(
+                databasePortMapping,
+                Integer.parseInt(environmentPortValue(
+                        CalendarToolPostgreSql.POSTGRESQL_PORT_ENVIRONMENT_VARIABLE,
+                        "5432")),
+                "PostgreSQL");
+
+        String databaseContainerIdentifier = runCommandAndCapture(
+                "Compose PostgreSQL container lookup",
+                "docker",
+                "compose",
+                "ps",
+                "--quiet",
+                "postgres").trim();
+        if (databaseContainerIdentifier.isEmpty()) {
+            throw new IllegalStateException("The running Compose PostgreSQL container could not be identified.");
+        }
+        verifyRunningComposeServiceConfigurationIsCurrent("postgres", databaseContainerIdentifier);
+    }
+
+    static void validateExpectedLoopbackPortMapping(
+            String portMapping,
+            int expectedPort,
+            String bindingName) {
+        validateComposePortMappingsAreLoopbackOnly(portMapping);
+        if (!composePortMappingIncludes(portMapping, expectedPort)) {
+            throw new IllegalStateException(
+                    "The running Compose " + bindingName + " binding does not use the configured local port.");
+        }
+    }
+
+    static void recordCurrentImageBuildState(String inputDigest) throws IOException, InterruptedException {
+        String imageIdentifier = runCommandAndCapture(
+                "Local application image lookup",
+                "docker",
+                "image",
+                "inspect",
+                "--format={{.Id}}",
+                "shared-calendar:local").trim();
+        validateImageBuildStateValues(imageIdentifier, inputDigest);
+        Files.createDirectories(LOCAL_IMAGE_BUILD_STATE_PATH.getParent());
+        Path temporaryStatePath = Files.createTempFile(
+                LOCAL_IMAGE_BUILD_STATE_PATH.getParent(),
+                "shared-calendar-local-",
+                ".tmp");
+        Throwable primaryFailure = null;
+        try {
+            Files.writeString(
+                    temporaryStatePath,
+                    imageBuildStateContents(imageIdentifier, inputDigest),
+                    StandardCharsets.UTF_8,
+                    StandardOpenOption.TRUNCATE_EXISTING);
+            try {
+                Files.move(
+                        temporaryStatePath,
+                        LOCAL_IMAGE_BUILD_STATE_PATH,
+                        StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException exception) {
+                Files.move(
+                        temporaryStatePath,
+                        LOCAL_IMAGE_BUILD_STATE_PATH,
+                        StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException | RuntimeException | Error exception) {
+            primaryFailure = exception;
+            throw exception;
+        } finally {
+            try {
+                Files.deleteIfExists(temporaryStatePath);
+            } catch (IOException cleanupFailure) {
+                if (primaryFailure == null) {
+                    throw cleanupFailure;
+                }
+                primaryFailure.addSuppressed(cleanupFailure);
+            }
+        }
+    }
+
+    static void validateStableImageBuildInputs(String inputDigestBeforeBuild, String inputDigestAfterBuild) {
+        validateImageBuildInputDigest(inputDigestBeforeBuild);
+        validateImageBuildInputDigest(inputDigestAfterBuild);
+        if (!inputDigestBeforeBuild.equals(inputDigestAfterBuild)) {
+            throw new IllegalStateException(
+                    "Production-image inputs changed while Docker was building. Re-run the image build from stable sources.");
+        }
+    }
+
+    private static void verifyRecordedImageBuildState(Path projectDirectory, String imageIdentifier)
+            throws IOException {
+        Path statePath = projectDirectory.resolve(".build/image-state/shared-calendar-local.txt");
+        if (!Files.isRegularFile(statePath)) {
+            throw new IllegalStateException(
+                    "The local image has no verified build-state record. Rebuild it with 'mise run docker-build'.");
+        }
+        validateRecordedImageBuildState(
+                Files.readString(statePath),
+                imageIdentifier,
+                imageBuildInputDigest(projectDirectory));
+    }
+
+    static void validateRecordedImageBuildState(
+            String stateContents,
+            String expectedImageIdentifier,
+            String expectedInputDigest) {
+        validateImageBuildStateValues(expectedImageIdentifier, expectedInputDigest);
+        if (!imageBuildStateContents(expectedImageIdentifier, expectedInputDigest).equals(stateContents)) {
+            throw new IllegalStateException(
+                    "The local shared-calendar:local image does not match current Docker build inputs. "
+                            + "Rebuild and restart it before verification.");
+        }
+    }
+
+    private static void validateImageBuildStateValues(String imageIdentifier, String inputDigest) {
+        if (imageIdentifier == null
+                || !imageIdentifier.matches("sha256:[0-9a-f]{64}")) {
+            throw new IllegalStateException("The local image build state contains invalid identity values.");
+        }
+        validateImageBuildInputDigest(inputDigest);
+    }
+
+    private static void validateImageBuildInputDigest(String inputDigest) {
+        if (inputDigest == null || !inputDigest.matches("[0-9a-f]{64}")) {
+            throw new IllegalStateException("The local image build state contains an invalid input digest.");
+        }
+    }
+
+    private static String imageBuildStateContents(String imageIdentifier, String inputDigest) {
+        return "image-id=" + imageIdentifier + System.lineSeparator()
+                + "inputs-sha256=" + inputDigest + System.lineSeparator();
+    }
+
+    static String imageBuildInputDigest(Path projectDirectory) throws IOException {
+        return imageBuildInputDigest(projectDirectory, System.getenv());
+    }
+
+    static String imageBuildInputDigest(
+            Path projectDirectory,
+            Map<String, String> environment) throws IOException {
+        List<Path> buildInputFiles = new ArrayList<>();
+        for (Path input : List.of(
+                projectDirectory.resolve("Dockerfile"),
+                projectDirectory.resolve(".dockerignore"),
+                projectDirectory.resolve(".mvn"),
+                projectDirectory.resolve("mvnw"),
+                projectDirectory.resolve("pom.xml"),
+                projectDirectory.resolve("docker-compose.yml"),
+                projectDirectory.resolve("src/main"))) {
+            if (!Files.exists(input)) {
+                throw new IllegalStateException("A required production-image build input is missing: " + input + ".");
+            }
+            try (var paths = Files.isDirectory(input) ? Files.walk(input) : java.util.stream.Stream.of(input)) {
+                buildInputFiles.addAll(paths.filter(Files::isRegularFile).toList());
+            }
+        }
+        buildInputFiles.sort((firstPath, secondPath) -> normalizedRelativePath(projectDirectory, firstPath)
+                .compareTo(normalizedRelativePath(projectDirectory, secondPath)));
+
+        MessageDigest digest = sha256Digest();
+        byte[] buffer = new byte[8192];
+        for (Path buildInputFile : buildInputFiles) {
+            String relativePath = normalizedRelativePath(projectDirectory, buildInputFile);
+            digest.update(relativePath.getBytes(StandardCharsets.UTF_8));
+            digest.update((byte) 0);
+            digest.update(Long.toString(Files.size(buildInputFile)).getBytes(StandardCharsets.UTF_8));
+            digest.update((byte) 0);
+            try (var inputStream = Files.newInputStream(buildInputFile)) {
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    digest.update(buffer, 0, bytesRead);
+                }
+            }
+            digest.update((byte) 0);
+        }
+        String deploymentRevision = environment.get("RAILWAY_GIT_COMMIT_SHA");
+        if (deploymentRevision == null) {
+            deploymentRevision = "";
+        }
+        digest.update("build-argument:RAILWAY_GIT_COMMIT_SHA".getBytes(StandardCharsets.UTF_8));
+        digest.update((byte) 0);
+        digest.update(deploymentRevision.getBytes(StandardCharsets.UTF_8));
+        digest.update((byte) 0);
+        return HexFormat.of().formatHex(digest.digest());
+    }
+
+    private static String normalizedRelativePath(Path projectDirectory, Path path) {
+        return projectDirectory.toAbsolutePath().normalize()
+                .relativize(path.toAbsolutePath().normalize())
+                .toString()
+                .replace('\\', '/');
+    }
+
+    static void verifyDevelopmentBuildIsCurrent(Path projectDirectory) throws IOException {
+        Path descriptor = projectDirectory.resolve(
+                ".liberty/user/servers/defaultServer/apps/shared-calendar.war.xml");
+        Path compiledClasses = projectDirectory.resolve(".build/development/classes");
+        Path webApplicationSource = projectDirectory.resolve("src/main/webapp");
+        Path generatedServerConfiguration = projectDirectory.resolve(
+                ".liberty/user/servers/defaultServer/server.xml");
+        Path sourceServerConfiguration = projectDirectory.resolve("src/main/liberty/config/server.xml");
+        if (!Files.isRegularFile(descriptor)
+                || !Files.isDirectory(compiledClasses)
+                || !Files.isRegularFile(generatedServerConfiguration)) {
+            throw new IllegalStateException(
+                    "The Liberty development build is missing. Start it with 'mise run dev' before verification.");
+        }
+
+        String descriptorContents = Files.readString(descriptor);
+        if (!descriptorContents.contains(webApplicationSource.toAbsolutePath().normalize().toString())
+                || !descriptorContents.contains(compiledClasses.toAbsolutePath().normalize().toString())) {
+            throw new IllegalStateException(
+                    "The running Liberty loose application does not point at this repository's current build outputs.");
+        }
+        if (Files.mismatch(sourceServerConfiguration, generatedServerConfiguration) != -1) {
+            throw new IllegalStateException(
+                    "The Liberty development server configuration is stale. Restart 'mise run dev'.");
+        }
+    }
+
+    private static MessageDigest sha256Digest() {
+        try {
+            return MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("The Java runtime does not provide SHA-256.", exception);
+        }
     }
 
     static String configuredBrowserName() {
@@ -647,14 +1096,6 @@ final class CalendarToolVerification extends CalendarToolProcessRunner {
             throw new IllegalArgumentException(variableName + " must be a port number from 1 through 65535.");
         }
         return Integer.toString(port);
-    }
-
-    private static String removeTrailingSlashes(String value) {
-        String normalizedValue = value;
-        while (normalizedValue.endsWith("/")) {
-            normalizedValue = normalizedValue.substring(0, normalizedValue.length() - 1);
-        }
-        return normalizedValue;
     }
 
     private static void clearVerificationDiagnostics(String diagnosticDirectoryName) throws IOException {

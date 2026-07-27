@@ -6,6 +6,7 @@
 
     <variable name="PORT" defaultValue="9080"/>
     <variable name="HTTPS_PORT" defaultValue="9443"/>
+    <variable name="HTTP_HOST" defaultValue="127.0.0.1"/>
     <variable name="APP_LTPA_KEYS_PASSWORD" defaultValue="local-development-only"/>
 
     <variable name="PGHOST" defaultValue="localhost"/>
@@ -13,11 +14,13 @@
     <variable name="PGDATABASE" defaultValue="calendar"/>
     <variable name="PGUSER" defaultValue="calendar"/>
     <variable name="PGPASSWORD" defaultValue="calendar"/>
+    <variable name="PGAPPLICATIONNAME" defaultValue="shared-calendar-application"/>
 
     <httpEndpoint id="defaultHttpEndpoint"
-                  host="*"
+                  host="${HTTP_HOST}"
                   httpPort="${PORT}"
-                  httpsPort="${HTTPS_PORT}">
+                  httpsPort="${HTTPS_PORT}"
+                  httpOptionsRef="boundedHttpOptions">
         <compression serverPreferredAlgorithm="gzip">
             <types>+application/*</types>
             <types>+image/svg+xml</types>
@@ -32,6 +35,10 @@
         </headers>
     </httpEndpoint>
 
+    <httpOptions id="boundedHttpOptions"
+                 AutoDecompression="false"
+                 MessageSizeLimit="1048576"/>
+
     <httpDispatcher trustedHeaderOrigin="100.*.*.*"/>
     <webContainer redirectToRelativeUrl="true"
                   httpsIndicatorHeader="X-Railway-Edge"/>
@@ -45,7 +52,9 @@
     <httpSession cookieHttpOnly="true"
                  cookieSecure="true"
                  cookieSameSite="Lax"
-                 invalidationTimeout="30m"
+                 allowOverflow="false"
+                 maxInMemorySessionCount="1000"
+                 invalidationTimeout="10m"
                  urlRewritingEnabled="false"/>
 
     <library id="postgresqlDriver">
@@ -60,6 +69,7 @@
                                databaseName="${PGDATABASE}"
                                user="${PGUSER}"
                                password="${PGPASSWORD}"
+                               ApplicationName="${PGAPPLICATIONNAME}"
                                connectTimeout="2s"
                                loginTimeout="2s"/>
     </dataSource>

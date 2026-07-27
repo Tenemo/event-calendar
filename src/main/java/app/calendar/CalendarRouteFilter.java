@@ -1,7 +1,6 @@
 package app.calendar;
 
 import app.membership.CalendarAccessService;
-import app.security.ClientRequestSourceResolver;
 import app.security.CurrentUser;
 import app.util.NotFoundException;
 import jakarta.inject.Inject;
@@ -24,19 +23,11 @@ public class CalendarRouteFilter implements Filter {
             "anonymousCalendarPostbackRequired";
 
     private static final String CALENDAR_TEMPLATE_PATH = "/calendar.xhtml";
-    private static final String RATE_LIMIT_MESSAGE = "Too many calendar link requests. Try again later.";
-
     @Inject
     private CalendarAccessService calendarAccessService;
 
     @Inject
     private CurrentUser currentUser;
-
-    @Inject
-    private CalendarLinkRequestThrottle calendarLinkRequestThrottle;
-
-    @Inject
-    private ClientRequestSourceResolver clientRequestSourceResolver;
 
     @Override
     public void doFilter(
@@ -61,18 +52,11 @@ public class CalendarRouteFilter implements Filter {
             return;
         }
 
-        String sourceIdentifier = clientRequestSourceResolver.resolve(request);
-        try (CalendarLinkRequestThrottle.RequestPermit requestPermit = calendarLinkRequestThrottle.tryAcquire(sourceIdentifier)) {
-            if (!requestPermit.isAccepted()) {
-                sendRateLimitResponse(response, requestPermit.getRetryAfterSeconds());
-                return;
-            }
-            if (!isReadOnlyRequest(request)) {
-                filterChain.doFilter(request, response);
-                return;
-            }
-            forwardCalendar(request, response, calendarLinkToken);
+        if (!isReadOnlyRequest(request)) {
+            filterChain.doFilter(request, response);
+            return;
         }
+        forwardCalendar(request, response, calendarLinkToken);
     }
 
     private static boolean isReadOnlyRequest(HttpServletRequest request) {
@@ -108,14 +92,6 @@ public class CalendarRouteFilter implements Filter {
 
         request.setAttribute(CALENDAR_REQUEST_ATTRIBUTE, calendar);
         requestDispatcher.forward(request, response);
-    }
-
-    private void sendRateLimitResponse(HttpServletResponse response, int retryAfterSeconds) throws IOException {
-        response.setStatus(429);
-        response.setHeader("Retry-After", Integer.toString(retryAfterSeconds));
-        response.setHeader("Cache-Control", "no-store");
-        response.setContentType("text/plain;charset=UTF-8");
-        response.getWriter().write(RATE_LIMIT_MESSAGE);
     }
 
     private static final class FixedStatusResponse extends HttpServletResponseWrapper {

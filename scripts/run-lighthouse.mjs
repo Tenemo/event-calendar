@@ -1,163 +1,108 @@
-import { spawn, spawnSync } from "node:child_process";
-import fs from "node:fs";
+import {mkdir, writeFile} from "node:fs/promises";
 import path from "node:path";
-import process from "node:process";
-import { browserArguments, parseDevToolsPort, resolveChromePath } from "./lighthouse-browser.mjs";
 
-const PROJECT_DIRECTORY = path.resolve(import.meta.dirname, "..");
-const LIGHTHOUSE_CLI_PATH = path.join(
-    PROJECT_DIRECTORY,
-    "node_modules",
-    "@lhci",
-    "cli",
-    "src",
-    "cli.js",
-);
-const BROWSER_PROFILE_PARENT_DIRECTORY = path.join(PROJECT_DIRECTORY, ".build");
-const LIGHTHOUSE_OUTPUT_DIRECTORY = path.join(
-    BROWSER_PROFILE_PARENT_DIRECTORY,
-    "lighthouse",
-);
-const LIGHTHOUSE_WORKING_DIRECTORY = path.join(
-    PROJECT_DIRECTORY,
-    ".lighthouseci",
-);
-const BROWSER_READY_TIMEOUT_MILLISECONDS = 30_000;
-const BROWSER_READY_POLL_INTERVAL_MILLISECONDS = 100;
-const BROWSER_EXIT_TIMEOUT_MILLISECONDS = 10_000;
+import {launch} from "chrome-launcher";
+import lighthouse from "lighthouse";
 
-await runLighthouse();
+const applicationBaseUrl = process.env.APP_BASE_URL ?? "https://localhost:9443";
+const auditedPages = [
+  {name: "Landing page", url: new URL("/", applicationBaseUrl), fileName: "landing"},
+  {name: "Sign-in page", url: new URL("/login", applicationBaseUrl), fileName: "sign-in"},
+];
 
-async function runLighthouse() {
-    fs.mkdirSync(BROWSER_PROFILE_PARENT_DIRECTORY, { recursive: true });
-    fs.rmSync(LIGHTHOUSE_OUTPUT_DIRECTORY, { recursive: true, force: true });
-    const browserProfileDirectory = fs.mkdtempSync(
-        path.join(BROWSER_PROFILE_PARENT_DIRECTORY, "lighthouse-browser-"),
-    );
-    const browserProcess = spawn(
-        resolveChromePath(),
-        browserArguments(browserProfileDirectory),
-        {
-            cwd: PROJECT_DIRECTORY,
-            detached: process.platform !== "win32",
-            stdio: "ignore",
-            windowsHide: true,
-        },
-    );
-    let browserExited = false;
-    const browserExitPromise = new Promise((resolve) => {
-        browserProcess.once("exit", (exitCode, signal) => {
-            browserExited = true;
-            resolve({ exitCode, signal });
-        });
-    });
+const outputDirectory = path.resolve(".build", "lighthouse");
+const browserProfileDirectory = path.resolve(".build", "lighthouse-browser-profile");
+const runCount = 3;
+const budgets = [
+  {name: "Performance score", minimum: 0.9, value: result => result.categories.performance.score},
+  {name: "First contentful paint", audit: "first-contentful-paint", maximum: 2_000, unit: "ms"},
+  {name: "Largest contentful paint", audit: "largest-contentful-paint", maximum: 2_500, unit: "ms"},
+  {name: "Total blocking time", audit: "total-blocking-time", maximum: 300, unit: "ms"},
+  {name: "Cumulative layout shift", audit: "cumulative-layout-shift", maximum: 0.1},
+];
 
-    let lighthouseExitCode = 1;
-    let primaryFailure;
-    try {
-        const devToolsPort = await waitForDevToolsPort(
-            browserProfileDirectory,
-            browserExitPromise,
-        );
-        lighthouseExitCode = await runLighthouseCi(devToolsPort);
-    } catch (error) {
-        primaryFailure = error;
-    }
-
-    try {
-        await stopBrowser(browserProcess, browserExitPromise, () => browserExited);
-        fs.rmSync(browserProfileDirectory, {
-            recursive: true,
-            force: true,
-            maxRetries: 20,
-            retryDelay: 100,
-        });
-    } catch (cleanupFailure) {
-        if (primaryFailure === undefined) {
-            primaryFailure = cleanupFailure;
-        } else if (primaryFailure instanceof Error) {
-            primaryFailure.cause = cleanupFailure;
-        }
-    }
-
-    if (primaryFailure !== undefined) {
-        throw primaryFailure;
-    }
-    if (lighthouseExitCode !== 0) {
-        process.exitCode = lighthouseExitCode;
-        return;
-    }
-    fs.rmSync(LIGHTHOUSE_WORKING_DIRECTORY, { recursive: true, force: true });
+function median(values) {
+  return [...values].sort((left, right) => left - right)[Math.floor(values.length / 2)];
 }
 
-async function waitForDevToolsPort(browserProfileDirectory, browserExitPromise) {
-    const devToolsActivePortPath = path.join(browserProfileDirectory, "DevToolsActivePort");
-    const deadline = Date.now() + BROWSER_READY_TIMEOUT_MILLISECONDS;
-    while (Date.now() < deadline) {
-        if (fs.existsSync(devToolsActivePortPath)) {
-            return parseDevToolsPort(fs.readFileSync(devToolsActivePortPath, "utf8"));
-        }
-        const result = await Promise.race([
-            browserExitPromise.then((browserExit) => ({ browserExit })),
-            delay(BROWSER_READY_POLL_INTERVAL_MILLISECONDS).then(() => ({ browserExit: null })),
-        ]);
-        if (result.browserExit !== null) {
-            throw new Error("Chrome exited before its DevTools endpoint became ready.");
-        }
-    }
-    throw new Error("Chrome did not expose its DevTools endpoint within 30 seconds.");
+function budgetValue(budget, result) {
+  const value = budget.value?.(result) ?? result.audits[budget.audit]?.numericValue;
+  if (!Number.isFinite(value)) {
+    throw new Error(`Lighthouse did not produce ${budget.name}.`);
+  }
+  return value;
 }
 
-function runLighthouseCi(devToolsPort) {
-    return new Promise((resolve, reject) => {
-        const lighthouseProcess = spawn(
-            process.execPath,
-            [LIGHTHOUSE_CLI_PATH, "autorun", "--config=lighthouserc.cjs"],
-            {
-                cwd: PROJECT_DIRECTORY,
-                env: {
-                    ...process.env,
-                    LIGHTHOUSE_CHROME_PORT: String(devToolsPort),
-                },
-                stdio: "inherit",
-                windowsHide: true,
-            },
-        );
-        lighthouseProcess.once("error", reject);
-        lighthouseProcess.once("exit", (exitCode, signal) => {
-            if (signal !== null) {
-                reject(new Error("Lighthouse CI was terminated before completing."));
-                return;
-            }
-            resolve(exitCode ?? 1);
-        });
-    });
+function formatValue(value, budget) {
+  if (budget.name === "Performance score") {
+    return `${Math.round(value * 100)}/100`;
+  }
+  return `${Math.round(value * 100) / 100}${budget.unit ?? ""}`;
 }
 
-async function stopBrowser(browserProcess, browserExitPromise, hasBrowserExited) {
-    if (!hasBrowserExited()) {
-        if (process.platform === "win32") {
-            const taskkillResult = spawnSync(
-                "taskkill.exe",
-                ["/PID", String(browserProcess.pid), "/T", "/F"],
-                { encoding: "utf8", windowsHide: true },
-            );
-            if (taskkillResult.error || taskkillResult.status !== 0) {
-                throw new Error("Could not stop the Lighthouse Chrome process tree.");
-            }
-        } else {
-            process.kill(-browserProcess.pid, "SIGKILL");
-        }
+await Promise.all([
+  mkdir(outputDirectory, {recursive: true}),
+  mkdir(browserProfileDirectory, {recursive: true}),
+]);
+const chrome = await launch({
+  chromeFlags: ["--headless=new", "--no-sandbox", "--ignore-certificate-errors"],
+  userDataDir: browserProfileDirectory,
+});
+
+const pageResults = [];
+try {
+  for (const page of auditedPages) {
+    const results = [];
+    for (let runNumber = 1; runNumber <= runCount; runNumber++) {
+      const lighthouseRun = await lighthouse(page.url.href, {
+        port: chrome.port,
+        output: "html",
+        logLevel: "error",
+        onlyCategories: ["performance"],
+      });
+      if (!lighthouseRun || lighthouseRun.lhr.runtimeError) {
+        const runtimeMessage = lighthouseRun?.lhr.runtimeError?.message ?? "Lighthouse returned no result.";
+        throw new Error(runtimeMessage);
+      }
+
+      results.push(lighthouseRun.lhr);
+      const reportName = `${page.fileName}-run-${runNumber}.report`;
+      await Promise.all([
+        writeFile(path.join(outputDirectory, `${reportName}.html`), lighthouseRun.report, "utf8"),
+        writeFile(
+            path.join(outputDirectory, `${reportName}.json`),
+            JSON.stringify(lighthouseRun.lhr, null, 2),
+            "utf8"),
+      ]);
     }
-    const browserExitResult = await Promise.race([
-        browserExitPromise.then(() => "exited"),
-        delay(BROWSER_EXIT_TIMEOUT_MILLISECONDS).then(() => "timeout"),
-    ]);
-    if (browserExitResult !== "exited") {
-        throw new Error("The Lighthouse Chrome process did not exit within 10 seconds.");
-    }
+    pageResults.push({...page, results});
+  }
+} finally {
+  await chrome.kill();
 }
 
-function delay(milliseconds) {
-    return new Promise((resolve) => setTimeout(resolve, milliseconds));
+const summary = pageResults.flatMap(page => budgets.map(budget => {
+  const measured = median(page.results.map(result => budgetValue(budget, result)));
+  const usesMaximum = budget.minimum === undefined;
+  const passed = usesMaximum ? measured <= budget.maximum : measured >= budget.minimum;
+  const threshold = usesMaximum ? budget.maximum : budget.minimum;
+  const limit = `${usesMaximum ? "at most" : "at least"} ${formatValue(threshold, budget)}`;
+  return {page: page.name, url: page.url.href, ...budget, measured, passed, limit};
+}));
+
+await writeFile(
+    path.join(outputDirectory, "summary.json"),
+    JSON.stringify({runCount, metrics: summary.map(
+        ({page, url, name, measured, passed, limit}) => (
+          {page, url, name, measured, passed, limit}))}, null, 2),
+    "utf8");
+
+for (const metric of summary) {
+  console.log(`${metric.page}: ${metric.name}: ${formatValue(metric.measured, metric)} (${metric.limit})`);
+}
+
+const failures = summary.filter(metric => !metric.passed);
+if (failures.length > 0) {
+  console.error(`Lighthouse failed ${failures.length} performance budget${failures.length === 1 ? "" : "s"}.`);
+  process.exitCode = 1;
 }

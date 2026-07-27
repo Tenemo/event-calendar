@@ -214,11 +214,13 @@ final class SessionCookieRefreshFilterTest {
             throws Exception {
         for (String requestUri : List.of("/app/calendars", "/calendar.xhtml")) {
             StaleSessionCleanup sessionCleanup = new StaleSessionCleanup();
+            RecordingAuthenticationAuditService authenticationAuditService =
+                    new RecordingAuthenticationAuditService();
             AtomicReference<String> redirectLocation = new AtomicReference<>();
             AtomicInteger filterChainCalls = new AtomicInteger();
             List<Cookie> responseCookies = new ArrayList<>();
 
-            new SessionCookieRefreshFilter(currentUser(false))
+            new SessionCookieRefreshFilter(currentUser(false), authenticationAuditService)
                     .doFilter(
                             staleSessionRequest(requestUri, sessionCleanup, null, "POST"),
                             redirectResponse(redirectLocation, responseCookies),
@@ -230,6 +232,9 @@ final class SessionCookieRefreshFilterTest {
                     () -> assertEquals(List.of("logout", "session invalidated"), sessionCleanup.operations),
                     () -> assertEquals("/login?reauthenticationRequired=true", redirectLocation.get()),
                     () -> assertEquals(0, filterChainCalls.get()),
+                    () -> assertEquals(
+                            1,
+                            authenticationAuditService.forcedInvalidationCount),
                     () -> assertExpiredSessionCookie(responseCookies));
         }
     }
@@ -414,6 +419,16 @@ final class SessionCookieRefreshFilterTest {
                 return signedIn;
             }
         };
+    }
+
+    private static final class RecordingAuthenticationAuditService
+            extends AuthenticationAuditService {
+        private int forcedInvalidationCount;
+
+        @Override
+        public void recordForcedSessionInvalidation() {
+            forcedInvalidationCount++;
+        }
     }
 
     private AnonymousCalendarRequest anonymousCalendarRequest(

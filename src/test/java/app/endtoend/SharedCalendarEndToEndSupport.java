@@ -43,9 +43,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.TestInstance;
-import org.junit.jupiter.api.TestInfo;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 abstract class SharedCalendarEndToEndSupport {
@@ -77,9 +75,7 @@ abstract class SharedCalendarEndToEndSupport {
 
     Playwright playwright;
     final BearerSecretRedactor bearerSecretRedactor = new BearerSecretRedactor();
-    final EndToEndBrowserDiagnostics browserDiagnostics =
-            new EndToEndBrowserDiagnostics(getClass());
-    EndToEndBrowserDiagnostics.RecordedBrowser browser;
+    EndToEndBrowser browser;
     URI applicationBaseUri;
 
     @BeforeAll
@@ -87,14 +83,10 @@ abstract class SharedCalendarEndToEndSupport {
         applicationBaseUri = resolveApplicationBaseUri();
         waitForApplicationHealth();
         playwright = Playwright.create();
-        browser = browserDiagnostics.launch(selectedBrowser(playwright), shouldRunHeadless());
-    }
-
-    @BeforeEach
-    void prepareBrowserDiagnostics(TestInfo testInfo) {
-        browserDiagnostics.startTest(testInfo.getTestMethod()
-                .map(java.lang.reflect.Method::getName)
-                .orElse(testInfo.getDisplayName()));
+        browser = EndToEndBrowser.launch(
+                selectedBrowser(playwright),
+                shouldRunHeadless(),
+                applicationBaseUri);
     }
 
     @AfterAll
@@ -196,6 +188,7 @@ abstract class SharedCalendarEndToEndSupport {
         page.locator("input[id$='displayName']").fill(displayName);
         page.locator("input[id$='calendarName']").fill(calendarName);
         page.locator("input[id$='password']").fill(password);
+        page.locator("input[id$='passwordConfirmation']").fill(password);
     }
 
     void signIn(Page page, String username, String password) {
@@ -328,8 +321,8 @@ abstract class SharedCalendarEndToEndSupport {
             String password,
             String expectedMessage) {
         navigateToBearerLink(page, invitationLink);
-        fillRegistrationForm(page, username, "Rejected user", "Rejected calendar", password);
-        page.locator("button:has-text('Register')").click();
+        assertEquals("Invitation unavailable", page.locator("h1").textContent().trim());
+        assertEquals(0, page.locator("button:has-text('Register')").count());
         assertBodyContains(page, expectedMessage);
     }
 
@@ -768,6 +761,13 @@ abstract class SharedCalendarEndToEndSupport {
                 "calendar " + calendarId);
     }
 
+    Connection lockUserRowForConcurrentRequests(String username) throws SQLException {
+        return lockDatabaseRow(
+                "select id from app_user where username = ? for update",
+                username,
+                "user " + username);
+    }
+
     Connection lockInvitationRowForConcurrentRequests(String invitationLink) throws SQLException {
         String invitationToken = invitationTokenFromLink(invitationLink);
         return lockDatabaseRow(
@@ -787,9 +787,10 @@ abstract class SharedCalendarEndToEndSupport {
             blockingProcessIdentifier = resultSet.getInt(1);
         }
 
+        long lastBlockedRequestCount = 0;
         long deadlineNanos = System.nanoTime() + BLOCKED_DATABASE_REQUEST_TIMEOUT.toNanos();
         while (System.nanoTime() < deadlineNanos) {
-            long blockedRequestCount = queryLong(
+            lastBlockedRequestCount = queryLong(
                     "with recursive blocked_processes(pid) as ("
                             + "select pid from pg_stat_activity "
                             + "where ? = any(pg_blocking_pids(pid)) "
@@ -799,7 +800,7 @@ abstract class SharedCalendarEndToEndSupport {
                             + "on blocking_process.pid = any(pg_blocking_pids(activity.pid))) "
                             + "select count(*) from blocked_processes",
                     blockingProcessIdentifier);
-            if (blockedRequestCount >= expectedBlockedRequests) {
+            if (lastBlockedRequestCount >= expectedBlockedRequests) {
                 return;
             }
             Thread.sleep(BLOCKED_DATABASE_REQUEST_POLL_INTERVAL.toMillis());
@@ -810,7 +811,55 @@ abstract class SharedCalendarEndToEndSupport {
                 + operationDescription
                 + " to be blocked concurrently within "
                 + BLOCKED_DATABASE_REQUEST_TIMEOUT.toSeconds()
-                + " seconds.");
+                + " seconds. Last blocked request count: "
+                + lastBlockedRequestCount
+                + ". Database activity: "
+                + databaseActivitySummarySafely());
+    }
+
+    private String databaseActivitySummarySafely() {
+        try {
+            return databaseActivitySummary();
+        } catch (SQLException exception) {
+            return "<unavailable: " + exception.getClass().getSimpleName() + ">";
+        }
+    }
+
+    private String databaseActivitySummary() throws SQLException {
+        try (Connection connection = openDatabaseConnection();
+                PreparedStatement statement = connection.prepareStatement(
+                        "select pid, application_name, state, wait_event_type, wait_event, "
+                                + "pg_blocking_pids(pid) "
+                                + "from pg_stat_activity "
+                                + "where datname = current_database() "
+                                + "and backend_type = 'client backend' "
+                                + "and pid <> pg_backend_pid() "
+                                + "order by pid");
+                java.sql.ResultSet resultSet = statement.executeQuery()) {
+            StringBuilder summary = new StringBuilder();
+            while (resultSet.next()) {
+                if (!summary.isEmpty()) {
+                    summary.append("; ");
+                }
+                summary.append("pid=")
+                        .append(resultSet.getInt("pid"))
+                        .append(", application=")
+                        .append(databaseActivityValue(resultSet.getString("application_name")))
+                        .append(", state=")
+                        .append(databaseActivityValue(resultSet.getString("state")))
+                        .append(", wait=")
+                        .append(databaseActivityValue(resultSet.getString("wait_event_type")))
+                        .append(':')
+                        .append(databaseActivityValue(resultSet.getString("wait_event")))
+                        .append(", blocked-by=")
+                        .append(databaseActivityValue(resultSet.getString("pg_blocking_pids")));
+            }
+            return summary.isEmpty() ? "<no other client backends>" : summary.toString();
+        }
+    }
+
+    private String databaseActivityValue(String value) {
+        return value == null || value.isBlank() ? "<none>" : value;
     }
 
     private Connection lockDatabaseRow(
@@ -906,6 +955,72 @@ abstract class SharedCalendarEndToEndSupport {
             }
             for (int updateCount : statement.executeBatch()) {
                 assertEquals(1, updateCount, "Expected each paginated invitation fixture to be inserted.");
+            }
+        }
+    }
+
+    void insertRevokedEditorInvitations(
+            String creatorUsername,
+            long calendarId,
+            int invitationCount) throws SQLException {
+        try (Connection connection = openDatabaseConnection();
+                PreparedStatement statement = connection.prepareStatement(
+                        "insert into app_invitation "
+                                + "(invite_token, calendar_id, role_name, created_by_user_id, "
+                                + "revoked_at, expires_at, created_at) "
+                                + "select ?, ?, 'EDITOR', app_user.id, fixture.created_at, "
+                                + "fixture.created_at + interval '7 days', fixture.created_at "
+                                + "from app_user cross join "
+                                + "(select now() - (? * interval '1 second') as created_at) fixture "
+                                + "where app_user.username = ?")) {
+            for (int invitationIndex = 0; invitationIndex < invitationCount; invitationIndex++) {
+                statement.setString(
+                        1,
+                        "calendar-limit-test-"
+                                + UUID.randomUUID().toString().replace("-", ""));
+                statement.setLong(2, calendarId);
+                statement.setInt(3, invitationIndex);
+                statement.setString(4, creatorUsername);
+                statement.addBatch();
+            }
+            for (int updateCount : statement.executeBatch()) {
+                assertEquals(
+                        1,
+                        updateCount,
+                        "Expected each calendar invitation limit fixture to be inserted.");
+            }
+        }
+    }
+
+    void insertPendingEditorInvitations(
+            String creatorUsername,
+            long calendarId,
+            int invitationCount) throws SQLException {
+        try (Connection connection = openDatabaseConnection();
+                PreparedStatement statement = connection.prepareStatement(
+                        "insert into app_invitation "
+                                + "(invite_token, calendar_id, role_name, created_by_user_id, "
+                                + "expires_at, created_at) "
+                                + "select ?, ?, 'EDITOR', app_user.id, "
+                                + "fixture.created_at + interval '7 days', fixture.created_at "
+                                + "from app_user cross join "
+                                + "(select now() - (? * interval '1 second') as created_at) fixture "
+                                + "where app_user.username = ?")) {
+            for (int invitationIndex = 0; invitationIndex < invitationCount; invitationIndex++) {
+                statement.setString(
+                        1,
+                        "pending-calendar-limit-test-"
+                                + UUID.randomUUID().toString().replace("-", ""));
+                statement.setLong(2, calendarId);
+                statement.setInt(3, invitationIndex);
+                statement.setString(4, creatorUsername);
+                statement.addBatch();
+            }
+            for (int updateCount : statement.executeBatch()) {
+                assertEquals(
+                        1,
+                        updateCount,
+                        "Expected each pending editor invitation fixture to be inserted.");
             }
         }
     }

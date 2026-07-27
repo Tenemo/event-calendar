@@ -166,14 +166,6 @@ final class AuthenticationAndRegistrationEndToEndIT extends SharedCalendarEndToE
             fillPasswordChangeForm(
                     changingPage,
                     TEST_PASSWORD,
-                    "lowercase password 2026",
-                    "lowercase password 2026");
-            changingPage.locator("button:has-text('Change password')").click();
-            assertBodyContains(changingPage, "Password must contain at least one uppercase letter.");
-
-            fillPasswordChangeForm(
-                    changingPage,
-                    TEST_PASSWORD,
                     TEST_PASSWORD,
                     TEST_PASSWORD);
             changingPage.locator("button:has-text('Change password')").click();
@@ -246,7 +238,7 @@ final class AuthenticationAndRegistrationEndToEndIT extends SharedCalendarEndToE
         try (BrowserContext ownerContext = browser.newContext()) {
             Page ownerPage = ownerContext.newPage();
             signIn(ownerPage, ownerUsername, TEST_PASSWORD);
-            for (int invitationIndex = 0; invitationIndex < 4; invitationIndex++) {
+            for (int invitationIndex = 0; invitationIndex < 5; invitationIndex++) {
                 invitationLinks.add(createRegistrationInvitation(ownerPage));
             }
         }
@@ -256,7 +248,7 @@ final class AuthenticationAndRegistrationEndToEndIT extends SharedCalendarEndToE
             navigateToBearerLink(registrationPage, invitationLinks.get(0));
             assertBodyContains(
                     registrationPage,
-                    "Use at least 8 characters, including one uppercase letter and one digit.");
+                    "Use at least 15 characters.");
             fillRegistrationForm(
                     registrationPage,
                     "weak-user-" + uniqueSuffix,
@@ -264,16 +256,26 @@ final class AuthenticationAndRegistrationEndToEndIT extends SharedCalendarEndToE
                     "Weak password calendar",
                     "Short1");
             registrationPage.locator("button:has-text('Register')").click();
-            assertBodyContains(registrationPage, "Password must be at least 8 characters.");
+            assertBodyContains(registrationPage, "Password must be at least 15 characters.");
 
             Locator passwordInput = registrationPage.locator("input[id$='password']");
-            passwordInput.fill("lowercase9");
+            Locator passwordConfirmationInput = registrationPage.locator(
+                    "input[id$='passwordConfirmation']");
+            passwordInput.fill("a valid lowercase passphrase " + uniqueSuffix);
+            passwordConfirmationInput.fill("a different confirmation " + uniqueSuffix);
             registrationPage.locator("button:has-text('Register')").click();
-            assertBodyContains(registrationPage, "Password must contain at least one uppercase letter.");
-
-            passwordInput.fill("NoDigitsHere");
-            registrationPage.locator("button:has-text('Register')").click();
-            assertBodyContains(registrationPage, "Password must contain at least one digit.");
+            assertBodyContains(registrationPage, "Password confirmation does not match.");
+            assertEquals(
+                    0L,
+                    queryLong(
+                            "select count(*) from app_user where username = ?",
+                            "weak-user-" + uniqueSuffix));
+            assertEquals(
+                    0L,
+                    queryLong(
+                            "select count(*) from app_invitation where created_by_user_id = "
+                                    + "(select id from app_user where username = ?) and accepted_at is not null",
+                            ownerUsername));
 
             String matchingUsername = "matching-password-" + uniqueSuffix;
             navigateToBearerLink(registrationPage, invitationLinks.get(1));
@@ -298,9 +300,9 @@ final class AuthenticationAndRegistrationEndToEndIT extends SharedCalendarEndToE
 
             navigateToBearerLink(registrationPage, invitationLinks.get(3));
             passwordInput = registrationPage.locator("input[id$='password']");
-            assertEquals("512", passwordInput.getAttribute("maxlength"));
-            passwordInput.fill("p".repeat(513));
-            assertEquals(512, passwordInput.inputValue().length());
+            assertEquals("1024", passwordInput.getAttribute("maxlength"));
+            passwordInput.fill("p".repeat(1_025));
+            assertEquals(1_024, passwordInput.inputValue().length());
             fillRegistrationForm(
                     registrationPage,
                     "oversized-password-" + uniqueSuffix,
@@ -308,8 +310,44 @@ final class AuthenticationAndRegistrationEndToEndIT extends SharedCalendarEndToE
                     "Oversized password calendar",
                     "Valid-placeholder-password-1");
             setRawInputValue(passwordInput, "p".repeat(513));
+            setRawInputValue(
+                    registrationPage.locator("input[id$='passwordConfirmation']"),
+                    "p".repeat(513));
             registrationPage.locator("button:has-text('Register')").click();
             assertBodyContains(registrationPage, "Password must be 512 characters or fewer.");
+
+            String maximumUnicodeUsername = "unicode-password-" + uniqueSuffix;
+            String supplementaryCharacter = new String(Character.toChars(0x1F600));
+            String maximumUnicodePassword = supplementaryCharacter.repeat(512);
+            navigateToBearerLink(registrationPage, invitationLinks.get(4));
+            passwordInput = registrationPage.locator("input[id$='password']");
+            passwordConfirmationInput = registrationPage.locator(
+                    "input[id$='passwordConfirmation']");
+            assertEquals("1024", passwordInput.getAttribute("maxlength"));
+            assertEquals("1024", passwordConfirmationInput.getAttribute("maxlength"));
+            assertEquals(1_024, maximumUnicodePassword.length());
+            fillRegistrationForm(
+                    registrationPage,
+                    maximumUnicodeUsername,
+                    "Maximum Unicode password user",
+                    "Maximum Unicode password calendar",
+                    maximumUnicodePassword);
+            assertEquals(1_024, passwordInput.inputValue().length());
+            registrationPage.locator("button:has-text('Register')").click();
+            waitForUrlOrFail(
+                    registrationPage,
+                    "**/app/calendars",
+                    "maximum Unicode password registration");
+            signOut(registrationPage);
+            navigateToBearerLink(registrationPage, route("/login"));
+            assertEquals(
+                    "1024",
+                    registrationPage.locator("input[id$='password']").getAttribute("maxlength"));
+            submitSignInAndWaitForUrl(
+                    registrationPage,
+                    maximumUnicodeUsername,
+                    maximumUnicodePassword,
+                    "**/app/calendars");
         }
 
         try (BrowserContext inactiveContext = browser.newContext()) {

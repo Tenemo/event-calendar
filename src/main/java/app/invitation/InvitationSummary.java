@@ -9,5 +9,6 @@ public record InvitationSummary(
         OffsetDateTime revokedAt,
         OffsetDateTime acceptedAt,
         OffsetDateTime expiresAt,
-        OffsetDateTime createdAt) {
+        OffsetDateTime createdAt,
+        boolean admissionAvailable) {
 }

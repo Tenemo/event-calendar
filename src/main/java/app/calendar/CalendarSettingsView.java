@@ -68,7 +68,13 @@ public class CalendarSettingsView implements Serializable {
                     version);
             copyCalendar(calendar);
             addMessage(FacesMessage.SEVERITY_INFO, "Calendar settings saved.", "The calendar has been updated.");
-        } catch (AuthorizationException | ConflictException | NotFoundException | ValidationException exception) {
+        } catch (ValidationException exception) {
+            addMessage(FacesMessage.SEVERITY_ERROR, "Settings could not be saved.", exception.getMessage());
+        } catch (ConflictException exception) {
+            reloadAfterConflict();
+            addMessage(FacesMessage.SEVERITY_ERROR, "Settings could not be saved.", exception.getMessage());
+        } catch (AuthorizationException | NotFoundException exception) {
+            markNotFound();
             addMessage(FacesMessage.SEVERITY_ERROR, "Settings could not be saved.", exception.getMessage());
         }
     }
@@ -84,6 +90,15 @@ public class CalendarSettingsView implements Serializable {
         publicAccessEnabled = calendar.isPublicAccessEnabled();
         calendarLinkToken = calendar.getCalendarLinkToken();
         version = calendar.getVersion();
+    }
+
+    private void reloadAfterConflict() {
+        try {
+            Calendar calendar = calendarService.requireAdminCalendar(currentUser.require(), calendarId);
+            copyCalendar(calendar);
+        } catch (AuthorizationException | NotFoundException exception) {
+            markNotFound();
+        }
     }
 
     private void markNotFound() {

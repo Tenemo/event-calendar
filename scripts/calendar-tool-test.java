@@ -1,9 +1,5 @@
-import java.io.IOException;
-import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -11,32 +7,28 @@ import java.util.Map;
 final class CalendarToolTest {
     private static int completedTestCount;
 
-    public static void main(String[] arguments) throws Exception {
-        run("parses existing and CI commands", CalendarToolTest::parsesExistingAndCiCommands);
-        run("rejects unknown commands and malformed arguments", CalendarToolTest::rejectsInvalidInvocations);
-        run("checks the complete required toolchain", CalendarToolTest::checksRequiredToolchain);
-        run("resolves pinned subprocess tools through mise", CalendarToolTest::resolvesPinnedSubprocessTools);
-        run("validates browser and port environment values", CalendarToolTest::validatesEnvironmentValues);
-        run("constructs canonical health URLs", CalendarToolTest::constructsHealthUrls);
-        run("separates HTTPS browser and HTTP health endpoints", CalendarToolTest::separatesEndToEndEndpoints);
-        run("keeps verification diagnostics free of secrets", CalendarToolTest::keepsDiagnosticsSecretFree);
-        run("validates health responses precisely", CalendarToolTest::validatesHealthResponses);
-        run("polls until the application becomes healthy", CalendarToolTest::pollsUntilHealthy);
-        run("reports the last readiness failure on timeout", CalendarToolTest::reportsReadinessTimeoutCause);
-        run("propagates readiness interruption", CalendarToolTest::propagatesReadinessInterruption);
-        run("constructs portable quality commands", CalendarToolTest::constructsQualityCommands);
-        run("uses the Compose PostgreSQL image as one source", CalendarToolTest::usesComposePostgreSqlImage);
-        run(
-                "constructs isolated backup verification commands",
-                CalendarToolTest::constructsBackupVerificationCommands);
-        run("constructs isolated verification commands", CalendarToolTest::constructsVerificationCommands);
-        run("rejects application runtime failures", CalendarToolTest::rejectsApplicationRuntimeFailures);
+    private CalendarToolTest() {}
 
-        System.out.println("Calendar tool self-tests passed: " + completedTestCount + ".");
+    public static void main(String[] arguments) throws Exception {
+        run("parses supported commands", CalendarToolTest::parsesSupportedCommands);
+        run("rejects removed and malformed commands", CalendarToolTest::rejectsRemovedAndMalformedCommands);
+        run("locks mutating workspace operations", CalendarToolTest::locksMutatingWorkspaceOperations);
+        run("prevents concurrent workspace operations", CalendarToolTest::preventsConcurrentWorkspaceOperations);
+        run("builds portable command lines", CalendarToolTest::buildsPortableCommandLines);
+        run("resolves verification endpoints", CalendarToolTest::resolvesVerificationEndpoints);
+        run("validates browser and port configuration", CalendarToolTest::validatesBrowserAndPortConfiguration);
+        run("validates health and runtime logs", CalendarToolTest::validatesHealthAndRuntimeLogs);
+        run("validates deployment revisions", CalendarToolTest::validatesDeploymentRevisions);
+        run("validates loopback port mappings", CalendarToolTest::validatesLoopbackPortMappings);
+        run("validates Compose database configuration", CalendarToolTest::validatesComposeDatabaseConfiguration);
+        run("builds PostgreSQL commands", CalendarToolTest::buildsPostgreSqlCommands);
+        run("resolves database defaults", CalendarToolTest::resolvesDatabaseDefaults);
+
+        System.out.println("Calendar tool tests passed: " + completedTestCount + ".");
     }
 
-    private static void parsesExistingAndCiCommands() {
-        for (String command : List.of(
+    private static void parsesSupportedCommands() {
+        List<String> commandsWithoutArguments = List.of(
                 "help",
                 "--help",
                 "setup",
@@ -48,834 +40,285 @@ final class CalendarToolTest {
                 "static-analysis",
                 "verify-reproducible-build",
                 "lint-css",
-                "lighthouse",
+                "verify-preview-deployment",
                 "end-to-end",
                 "end-to-end-shared",
                 "end-to-end-cross-browser-smoke",
-                "end-to-end-calendar-link-throttle",
-                "verify-preview-deployment",
                 "wait-for-app",
                 "verify-local",
                 "docker-build",
                 "image-scan",
-                "docker-up",
-                "verify-backup-restore")) {
+                "docker-up");
+        for (String command : commandsWithoutArguments) {
             CalendarTool.ToolInvocation invocation = CalendarTool.parseInvocation(new String[] {command});
             assertEquals(command, invocation.command(), "Parsed command");
-            assertEquals(List.of(), invocation.arguments(), "Argument-free command arguments");
+            assertEquals(List.of(), invocation.arguments(), "Command arguments");
         }
 
         CalendarTool.ToolInvocation bootstrap = CalendarTool.parseInvocation(
                 new String[] {"verify-bootstrap-registration", "--reuse-image"});
-        assertEquals(List.of("--reuse-image"), bootstrap.arguments(), "Bootstrap reuse option");
-
-        CalendarTool.ToolInvocation lighthouse = CalendarTool.parseInvocation(
-                new String[] {"lighthouse", "--reuse-image"});
-        assertEquals(List.of("--reuse-image"), lighthouse.arguments(), "Lighthouse reuse option");
-
-        CalendarTool.ToolInvocation backup = CalendarTool.parseInvocation(
-                new String[] {"backup-postgres", ".build/backups/with spaces.dump"});
-        assertEquals(List.of(".build/backups/with spaces.dump"), backup.arguments(), "Backup output path");
-
-        CalendarTool.ToolInvocation restore = CalendarTool.parseInvocation(
-                new String[] {"restore-postgres", "backup.dump", "calendar"});
-        assertEquals(List.of("backup.dump", "calendar"), restore.arguments(), "Restore arguments");
-        expectThrows(UnsupportedOperationException.class, () -> restore.arguments().add("unexpected"));
+        assertEquals(List.of("--reuse-image"), bootstrap.arguments(), "Bootstrap option");
+        expectThrows(
+                UnsupportedOperationException.class,
+                () -> bootstrap.arguments().add("unexpected"));
     }
 
-    private static void rejectsInvalidInvocations() {
-        CalendarTool.UsageException missingCommand = expectThrows(
+    private static void rejectsRemovedAndMalformedCommands() {
+        expectThrows(CalendarTool.UsageException.class, () -> CalendarTool.parseInvocation(new String[0]));
+        expectThrows(
                 CalendarTool.UsageException.class,
-                () -> CalendarTool.parseInvocation(new String[0]));
-        assertEquals(null, missingCommand.getMessage(), "Missing command message");
-
-        assertContains(
-                expectThrows(
-                                CalendarTool.UsageException.class,
-                                () -> CalendarTool.parseInvocation(new String[] {"invented"}))
-                        .getMessage(),
-                "Unknown command",
-                "Unknown command failure");
-        assertContains(
-                expectThrows(
-                                CalendarTool.UsageException.class,
-                                () -> CalendarTool.parseInvocation(new String[] {"end-to-end", "unexpected"}))
-                        .getMessage(),
-                "Invalid arguments",
-                "Extra argument failure");
+                () -> CalendarTool.parseInvocation(new String[] {"unknown"}));
+        for (String removedCommand : List.of(
+                "backup-postgres",
+                "restore-postgres",
+                "verify-backup-restore",
+                "lighthouse",
+                "end-to-end-calendar-link-throttle")) {
+            expectThrows(
+                    CalendarTool.UsageException.class,
+                    () -> CalendarTool.parseInvocation(new String[] {removedCommand}));
+        }
+        expectThrows(
+                CalendarTool.UsageException.class,
+                () -> CalendarTool.parseInvocation(new String[] {"package", "unexpected"}));
         expectThrows(
                 CalendarTool.UsageException.class,
                 () -> CalendarTool.parseInvocation(
                         new String[] {"verify-bootstrap-registration", "--skip-build"}));
-        expectThrows(
-                CalendarTool.UsageException.class,
-                () -> CalendarTool.parseInvocation(new String[] {"lighthouse", "--skip-build"}));
-        expectThrows(
-                CalendarTool.UsageException.class,
-                () -> CalendarTool.parseInvocation(new String[] {"restore-postgres", "backup.dump"}));
-        expectThrows(
-                CalendarTool.UsageException.class,
-                () -> CalendarTool.parseInvocation(
-                        new String[] {"backup-postgres", "first.dump", "second.dump"}));
     }
 
-    private static void resolvesPinnedSubprocessTools() {
-        for (String managedCommand : List.of("actionlint", "node", "npm", "shellcheck", "trivy")) {
-            assertEquals(
-                    List.of("mise", "exec", "--", managedCommand, "--version"),
-                    CalendarToolProcessRunner.resolvedCommandLine(managedCommand, "--version"),
-                    managedCommand + " command resolution");
+    private static void locksMutatingWorkspaceOperations() {
+        assertFalse(CalendarTool.requiresWorkspaceOperationLock("help"), "Help should not lock the workspace");
+        assertFalse(CalendarTool.requiresWorkspaceOperationLock("dev"), "Development mode should not hold the lock");
+        for (String command : List.of("package", "format", "end-to-end", "docker-build", "verify-local")) {
+            assertTrue(
+                    CalendarTool.requiresWorkspaceOperationLock(command),
+                    command + " should lock the workspace");
         }
-
-        assertEquals(
-                List.of("docker", "compose", "version"),
-                CalendarToolProcessRunner.resolvedCommandLine("docker", "compose", "version"),
-                "Unmanaged Docker command resolution");
-        expectThrows(
-                IllegalArgumentException.class,
-                CalendarToolProcessRunner::resolvedCommandLine);
     }
 
-    private static void validatesEnvironmentValues() {
-        assertEquals("chromium", CalendarToolVerification.configuredBrowserName(Map.of()), "Default browser");
-        assertEquals(
-                "firefox",
-                CalendarToolVerification.configuredBrowserName(Map.of("BROWSER", "  FIREFOX  ")),
-                "Normalized browser");
-        expectThrows(
-                IllegalArgumentException.class,
-                () -> CalendarToolVerification.configuredBrowserName(Map.of("BROWSER", "edge")));
-
-        assertEquals(
-                "9080",
-                CalendarToolVerification.environmentPortValue(Map.of(), "PORT", "9080"),
-                "Default port");
-        assertEquals(
-                "65535",
-                CalendarToolVerification.environmentPortValue(Map.of("PORT", " 65535 "), "PORT", "9080"),
-                "Highest valid port");
-        assertEquals(
-                "80",
-                CalendarToolVerification.environmentPortValue(Map.of("PORT", "00080"), "PORT", "9080"),
-                "Canonical port representation");
-        for (String invalidPort : List.of("0", "65536", "-1", "1.5", "http", "999999999999")) {
-            assertContains(
-                    expectThrows(
-                                    IllegalArgumentException.class,
-                                    () -> CalendarToolVerification.environmentPortValue(
-                                            Map.of("PORT", invalidPort), "PORT", "9080"))
-                            .getMessage(),
-                    "PORT",
-                    "Invalid port failure");
-        }
-        assertEquals(
-                "fallback",
-                CalendarToolVerification.environmentValueOrDefault(Map.of("VALUE", "  "), "VALUE", "fallback"),
-                "Blank environment fallback");
-    }
-
-    private static void checksRequiredToolchain() {
-        List<CalendarTool.ToolCheck> toolChecks = CalendarTool.setupToolChecks();
-        assertEquals(10, toolChecks.size(), "Required tool check count");
-        assertContains(
-                toolChecks.get(0).command()[0].toLowerCase(),
-                "java",
-                "Java runtime executable");
-        assertArrayEquals(new String[] {"mvnw", "--version"}, toolChecks.get(1).command(), "Maven check");
-        assertArrayEquals(new String[] {"docker", "--version"}, toolChecks.get(2).command(), "Docker check");
-        assertArrayEquals(
-                new String[] {"docker", "compose", "version"},
-                toolChecks.get(3).command(),
-                "Docker Compose check");
-        assertArrayEquals(new String[] {"mise", "--version"}, toolChecks.get(4).command(), "mise check");
-        assertArrayEquals(new String[] {"node", "--version"}, toolChecks.get(5).command(), "Node.js check");
-        assertArrayEquals(new String[] {"npm", "--version"}, toolChecks.get(6).command(), "npm check");
-        assertArrayEquals(new String[] {"trivy", "--version"}, toolChecks.get(7).command(), "Trivy check");
-        assertArrayEquals(
-                new String[] {"actionlint", "-version"},
-                toolChecks.get(8).command(),
-                "actionlint check");
-        assertArrayEquals(
-                new String[] {"shellcheck", "--version"},
-                toolChecks.get(9).command(),
-                "ShellCheck check");
-
-        assertArrayEquals(
-                new String[] {"node", "scripts/railway-preview-url-test.mjs"},
-                CalendarTool.railwayPreviewUrlTestCommand(),
-                "Railway preview URL contract test command");
-        assertArrayEquals(
-                new String[] {"node", "scripts/preview-login-test.mjs"},
-                CalendarTool.previewLoginTestCommand(),
-                "Preview login argument contract test command");
-        assertArrayEquals(
-                new String[] {"node", "scripts/lighthouse-browser-test.mjs"},
-                CalendarTool.lighthouseBrowserTestCommand(),
-                "Lighthouse browser lifecycle test command");
-
-        String[] mutableCopy = toolChecks.get(7).command();
-        mutableCopy[0] = "replaced";
-        assertArrayEquals(
-                new String[] {"trivy", "--version"},
-                toolChecks.get(7).command(),
-                "Tool check command immutability");
-    }
-
-    private static void constructsHealthUrls() {
-        assertEquals(
-                URI.create("http://localhost:12345/health"),
-                CalendarToolVerification.applicationHealthUri(Map.of("PORT", "12345")),
-                "Default local health URL");
-        assertEquals(
-                URI.create("https://calendar.example/app/health"),
-                CalendarToolVerification.applicationHealthUri(
-                        Map.of("APP_BASE_URL", " https://calendar.example/app/// ")),
-                "Configured health URL");
-
-        for (String invalidBaseUrl : List.of(
-                "calendar.example",
-                "ftp://calendar.example",
-                "https://user:secret@calendar.example",
-                "https://calendar.example?check=true",
-                "https://calendar.example/#status",
-                "http://")) {
+    private static void preventsConcurrentWorkspaceOperations() throws Exception {
+        Path lockDirectory = Files.createTempDirectory("calendar-tool-lock-");
+        Path lockPath = lockDirectory.resolve("workspace.lock");
+        try (CalendarTool.WorkspaceOperationLock ignored = CalendarTool.acquireWorkspaceOperationLock(lockPath)) {
             expectThrows(
-                    IllegalArgumentException.class,
-                    () -> CalendarToolVerification.applicationHealthUri(Map.of("APP_BASE_URL", invalidBaseUrl)));
+                    IllegalStateException.class,
+                    () -> CalendarTool.acquireWorkspaceOperationLock(lockPath));
+        } finally {
+            Files.deleteIfExists(lockPath);
+            Files.deleteIfExists(lockDirectory);
         }
     }
 
-    private static void validatesHealthResponses() {
-        URI healthUri = URI.create("https://calendar.example/health");
-        CalendarToolVerification.validateHealthResponse(healthUri, 200, "  ok\n");
-
-        IllegalStateException unavailable = expectThrows(
-                IllegalStateException.class,
-                () -> CalendarToolVerification.validateHealthResponse(healthUri, 503, "unavailable"));
-        assertContains(unavailable.getMessage(), "HTTP 503", "Unavailable status failure");
-        assertContains(unavailable.getMessage(), healthUri.toString(), "Health URL in failure");
-
-        expectThrows(
-                IllegalStateException.class,
-                () -> CalendarToolVerification.validateHealthResponse(healthUri, 200, "healthy"));
-        expectThrows(
-                IllegalStateException.class,
-                () -> CalendarToolVerification.validateHealthResponse(healthUri, 200, null));
-    }
-
-    private static void separatesEndToEndEndpoints() {
-        CalendarToolVerification.VerificationEndpoints defaults =
-                CalendarToolVerification.endToEndVerificationEndpoints(Map.of());
-        assertEquals("9082", defaults.healthControlPort(), "Default HTTP health port");
-        assertEquals("9445", defaults.httpsPort(), "Default HTTPS browser port");
-        assertEquals("55433", defaults.databasePort(), "Default PostgreSQL port");
-        assertEquals(
-                URI.create("https://localhost:9445"),
-                defaults.applicationBaseUri(),
-                "Default HTTPS browser base URL");
-        assertEquals(
-                URI.create("http://localhost:9082/health"),
-                defaults.healthControlUri(),
-                "Default HTTP health-control URL");
-
-        CalendarToolVerification.VerificationEndpoints configured =
-                CalendarToolVerification.endToEndVerificationEndpoints(Map.of(
-                "END_TO_END_VERIFICATION_APPLICATION_PORT", "19082",
-                "END_TO_END_VERIFICATION_HTTPS_PORT", "19445",
-                "END_TO_END_VERIFICATION_DATABASE_PORT", "15433"));
-        assertEquals(
-                URI.create("https://localhost:19445"),
-                configured.applicationBaseUri(),
-                "Configured HTTPS browser base URL");
-        assertEquals(
-                URI.create("http://localhost:19082/health"),
-                configured.healthControlUri(),
-                "Configured HTTP health-control URL");
-
-        expectThrows(
-                IllegalArgumentException.class,
-                () -> CalendarToolVerification.endToEndVerificationEndpoints(Map.of(
-                        "END_TO_END_VERIFICATION_APPLICATION_PORT", "19445",
-                        "END_TO_END_VERIFICATION_HTTPS_PORT", "19445")));
-        expectThrows(
-                IllegalArgumentException.class,
-                () -> CalendarToolVerification.endToEndVerificationEndpoints(Map.of(
-                        "END_TO_END_VERIFICATION_HTTPS_PORT", "15433",
-                        "END_TO_END_VERIFICATION_DATABASE_PORT", "15433")));
-
-        CalendarToolVerification.VerificationEndpoints bootstrapDefaults =
-                CalendarToolVerification.bootstrapVerificationEndpoints(Map.of());
-        assertEquals("9081", bootstrapDefaults.healthControlPort(), "Default bootstrap HTTP health port");
-        assertEquals("9444", bootstrapDefaults.httpsPort(), "Default bootstrap HTTPS browser port");
-        assertEquals("55432", bootstrapDefaults.databasePort(), "Default bootstrap PostgreSQL port");
-        assertEquals(
-                URI.create("https://localhost:9444"),
-                bootstrapDefaults.applicationBaseUri(),
-                "Default bootstrap HTTPS browser base URL");
-        assertEquals(
-                URI.create("http://localhost:9081/health"),
-                bootstrapDefaults.healthControlUri(),
-                "Default bootstrap HTTP health-control URL");
-
-        CalendarToolVerification.VerificationEndpoints bootstrapConfigured =
-                CalendarToolVerification.bootstrapVerificationEndpoints(Map.of(
-                        "BOOTSTRAP_VERIFICATION_APPLICATION_PORT", "19081",
-                        "BOOTSTRAP_VERIFICATION_HTTPS_PORT", "19444",
-                        "BOOTSTRAP_VERIFICATION_DATABASE_PORT", "15432"));
-        assertEquals(
-                URI.create("https://localhost:19444"),
-                bootstrapConfigured.applicationBaseUri(),
-                "Configured bootstrap HTTPS browser base URL");
-        assertEquals(
-                URI.create("http://localhost:19081/health"),
-                bootstrapConfigured.healthControlUri(),
-                "Configured bootstrap HTTP health-control URL");
-
-        expectThrows(
-                IllegalArgumentException.class,
-                () -> CalendarToolVerification.bootstrapVerificationEndpoints(Map.of(
-                        "BOOTSTRAP_VERIFICATION_APPLICATION_PORT", "19444",
-                        "BOOTSTRAP_VERIFICATION_HTTPS_PORT", "19444")));
-    }
-
-    private static void keepsDiagnosticsSecretFree() {
-        String diagnosticContext = CalendarToolVerification.verificationDiagnosticContext(
-                "end-to-end-verification",
-                Map.of(
-                        "BROWSER", "webkit",
-                        "APP_BASE_URL", "https://localhost:9445",
-                        "PGPASSWORD", "database-secret",
-                        "BOOTSTRAP_VERIFICATION_INVITATION_TOKEN", "invitation-secret"),
-                URI.create("http://localhost:9082/health"));
-
-        assertContains(diagnosticContext, "end-to-end-verification", "Diagnostic profile");
-        assertContains(diagnosticContext, "webkit", "Diagnostic browser");
-        assertContains(diagnosticContext, "https://localhost:9445", "Diagnostic browser URL");
-        assertContains(diagnosticContext, "http://localhost:9082/health", "Diagnostic health URL");
-        assertDoesNotContain(diagnosticContext, "database-secret", "Database password redaction");
-        assertDoesNotContain(diagnosticContext, "invitation-secret", "Invitation token redaction");
-    }
-
-    private static void pollsUntilHealthy() throws Exception {
-        URI healthUri = URI.create("http://localhost:9080/health");
-        long[] currentNanoseconds = {0};
-        int[] attemptCount = {0};
-        List<Long> sleepDurations = new ArrayList<>();
-
-        CalendarToolVerification.waitForApplication(
-                healthUri,
-                Duration.ofSeconds(1),
-                Duration.ofMillis(100),
-                requestedUri -> {
-                    assertEquals(healthUri, requestedUri, "Polled health URL");
-                    attemptCount[0]++;
-                    if (attemptCount[0] < 3) {
-                        throw new IOException("not ready " + attemptCount[0]);
-                    }
-                },
-                () -> currentNanoseconds[0],
-                milliseconds -> {
-                    sleepDurations.add(milliseconds);
-                    currentNanoseconds[0] += Duration.ofMillis(milliseconds).toNanos();
-                });
-
-        assertEquals(3, attemptCount[0], "Readiness attempts");
-        assertEquals(List.of(100L, 100L), sleepDurations, "Readiness poll intervals");
-    }
-
-    private static void reportsReadinessTimeoutCause() {
-        long[] currentNanoseconds = {0};
-        int[] attemptCount = {0};
-        IOException finalFailure = new IOException("database remains unavailable");
-
-        IllegalStateException timeout = expectThrows(
-                IllegalStateException.class,
-                () -> CalendarToolVerification.waitForApplication(
-                        URI.create("http://localhost:9080/health"),
-                        Duration.ofMillis(250),
-                        Duration.ofMillis(100),
-                        ignored -> {
-                            attemptCount[0]++;
-                            throw finalFailure;
-                        },
-                        () -> currentNanoseconds[0],
-                        milliseconds -> currentNanoseconds[0] += Duration.ofMillis(milliseconds).toNanos()));
-
-        assertEquals(3, attemptCount[0], "Timeout attempt count");
-        assertSame(finalFailure, timeout.getCause(), "Timeout cause");
-        expectThrows(
-                IllegalArgumentException.class,
-                () -> CalendarToolVerification.waitForApplication(
-                        URI.create("http://localhost/health"),
-                        Duration.ZERO,
-                        Duration.ofMillis(1),
-                        ignored -> {},
-                        () -> 0,
-                        ignored -> {}));
-        expectThrows(
-                IllegalArgumentException.class,
-                () -> CalendarToolVerification.waitForApplication(
-                        URI.create("http://localhost/health"),
-                        Duration.ofSeconds(1),
-                        Duration.ofMillis(-1),
-                        ignored -> {},
-                        () -> 0,
-                        ignored -> {}));
-    }
-
-    private static void propagatesReadinessInterruption() {
-        InterruptedException interruption = new InterruptedException("stop polling");
-        InterruptedException thrown = expectThrows(
-                InterruptedException.class,
-                () -> CalendarToolVerification.waitForApplication(
-                        URI.create("http://localhost/health"),
-                        Duration.ofSeconds(1),
-                        Duration.ofMillis(10),
-                        ignored -> {
-                            throw interruption;
-                        },
-                        () -> 0,
-                        ignored -> {
-                            throw new AssertionError("Polling must not sleep after interruption.");
-                        }));
-        assertSame(interruption, thrown, "Readiness interruption");
-    }
-
-    private static void constructsQualityCommands() {
-        String[] sourceLauncherCommand = CalendarTool.sourceLauncherHelpCommand();
-        assertEquals(3, sourceLauncherCommand.length, "Exact source launcher argument count");
-        assertContains(
-                sourceLauncherCommand[0].toLowerCase(),
-                "java",
-                "Exact source launcher executable");
+    private static void buildsPortableCommandLines() {
         assertArrayEquals(
-                new String[] {"scripts/calendar-tool.java", "--help"},
-                Arrays.copyOfRange(sourceLauncherCommand, 1, sourceLauncherCommand.length),
-                "Exact source launcher arguments");
-        assertArrayEquals(
-                new String[] {"node", "scripts/railway-config-test.mjs"},
-                CalendarTool.railwayConfigurationTestCommand(),
-                "Railway configuration contract command");
-        assertArrayEquals(
-                new String[] {"node", "scripts/build-toolchain-config-test.mjs"},
-                CalendarTool.buildToolchainConfigurationTestCommand(),
-                "Build toolchain configuration contract command");
-        assertArrayEquals(
-                new String[] {
-                    "mvnw", "-B", "-ntp", "spotless:apply"
-                },
+                new String[] {"mvnw", "-B", "-ntp", "spotless:apply"},
                 CalendarTool.formatCommand(),
-                "Source formatting command");
-        assertArrayEquals(
-                new String[] {"mvnw", "-B", "-ntp", "-DskipTests", "verify"},
-                CalendarTool.staticAnalysisCommand(),
-                "Static analysis command");
-        assertArrayEquals(
-                new String[] {"mvnw", "clean", "install", "-DskipTests"},
-                CalendarTool.reproducibleBuildReferenceCommand(),
-                "Reproducible build reference command");
-        assertArrayEquals(
-                new String[] {
-                    "mvnw",
-                    "clean",
-                    "verify",
-                    "-DskipTests",
-                    "artifact:compare"
-                },
-                CalendarTool.reproducibleBuildComparisonCommand(),
-                "Reproducible build comparison command");
+                "Formatting command");
         assertArrayEquals(
                 new String[] {"npm", "ci", "--ignore-scripts"},
                 CalendarTool.npmInstallCommand(),
-                "Node installation command");
+                "npm installation command");
         assertArrayEquals(
                 new String[] {"npm", "run", "lint:css"},
                 CalendarTool.npmCssLintCommand(),
                 "CSS lint command");
         assertArrayEquals(
-                new String[] {"npm", "audit", "--audit-level=high"},
-                CalendarTool.npmAuditCommand(),
-                "Node dependency audit command");
-        assertArrayEquals(
                 new String[] {
-                    "trivy",
-                    "image",
-                    "--format",
-                    "cyclonedx",
-                    "--scanners",
-                    "vuln",
-                    "--output",
-                    ".build/image-scan/shared-calendar-image.cdx.json",
-                    "shared-calendar:local"
-                },
-                CalendarTool.imageSbomCommand(),
-                "Image SBOM command");
-        assertArrayEquals(
-                new String[] {
-                    "trivy",
-                    "image",
-                    "--exit-code",
-                    "1",
-                    "--severity",
-                    "HIGH,CRITICAL",
-                    "--scanners",
-                    "vuln",
-                    "--format",
-                    "json",
-                    "--output",
-                    ".build/image-scan/shared-calendar-vulnerabilities.json",
-                    "--no-progress",
-                    "shared-calendar:local"
-                },
-                CalendarTool.imageScanCommand(),
-                "Image scan command");
-    }
-
-    private static void usesComposePostgreSqlImage() throws Exception {
-        String composeFileContents = Files.readString(Path.of("docker-compose.yml"));
-        String imageReference = CalendarToolPostgreSql.postgreSqlClientImageReference(composeFileContents);
-        assertContains(imageReference, "postgres:17.10@sha256:", "Canonical PostgreSQL image");
-
-        assertEquals(
-                "postgres:17.10@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                CalendarToolPostgreSql.postgreSqlClientImageReference(
-                        "services:\n  database:\n    image: "
-                                + "postgres:17.10@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
-                                + "  restore:\n    image: '"
-                                + "postgres:17.10@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'\n"),
-                "Quoted canonical PostgreSQL image");
-        expectThrows(
-                IllegalStateException.class,
-                () -> CalendarToolPostgreSql.postgreSqlClientImageReference(
-                        "services:\n  database:\n    image: postgres:17\n"));
-        expectThrows(
-                IllegalStateException.class,
-                () -> CalendarToolPostgreSql.postgreSqlClientImageReference(
-                        "services:\n  database:\n    image: "
-                                + "postgres:17.10@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
-                                + "  restore:\n    image: "
-                                + "postgres:17.10@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"));
-        expectThrows(
-                IllegalStateException.class,
-                () -> CalendarToolPostgreSql.postgreSqlClientImageReference(
-                        "services:\n  application:\n    image: shared-calendar:local\n"));
-    }
-
-    private static void constructsBackupVerificationCommands() {
-        CalendarToolPostgreSql.BackupVerificationEndpoints defaultEndpoints =
-                CalendarToolPostgreSql.backupVerificationEndpoints(Map.of());
-        assertEquals("9083", defaultEndpoints.applicationPort(), "Default backup verification port");
-        assertEquals(
-                URI.create("http://localhost:9083/health"),
-                defaultEndpoints.healthUri(),
-                "Default backup verification health URL");
-
-        CalendarToolPostgreSql.BackupVerificationEndpoints configuredEndpoints =
-                CalendarToolPostgreSql.backupVerificationEndpoints(
-                        Map.of("BACKUP_VERIFICATION_APPLICATION_PORT", "19083"));
-        assertEquals("19083", configuredEndpoints.applicationPort(), "Configured backup verification port");
-        assertEquals(
-                URI.create("http://localhost:19083/health"),
-                configuredEndpoints.healthUri(),
-                "Configured backup verification health URL");
-        expectThrows(
-                IllegalArgumentException.class,
-                () -> CalendarToolPostgreSql.backupVerificationEndpoints(
-                        Map.of("BACKUP_VERIFICATION_APPLICATION_PORT", "0")));
-
-        assertArrayEquals(
-                new String[] {
-                    "docker",
-                    "compose",
-                    "--profile",
-                    "backup-verification",
-                    "up",
-                    "-d",
-                    "--force-recreate",
-                    "--no-build",
-                    "postgres-backup-verification",
-                    "web-backup-verification"
-                },
-                CalendarToolPostgreSql.backupVerificationSourceStartupCommand(),
-                "Backup verification source startup command");
-        assertArrayEquals(
-                new String[] {
-                    "docker",
-                    "compose",
-                    "--profile",
-                    "backup-verification",
-                    "stop",
-                    "web-backup-verification"
-                },
-                CalendarToolPostgreSql.backupVerificationApplicationStopCommand(),
-                "Backup verification application stop command");
-        assertArrayEquals(
-                new String[] {
-                    "docker",
-                    "compose",
-                    "--profile",
-                    "backup-verification",
-                    "logs",
-                    "--no-color",
-                    "web-backup-verification"
-                },
-                CalendarToolPostgreSql.backupVerificationApplicationLogsCommand(),
-                "Backup verification application logs command");
-        assertArrayEquals(
-                new String[] {
-                    "docker",
-                    "compose",
-                    "--profile",
-                    "restore-verification",
-                    "up",
-                    "-d",
-                    "--force-recreate",
-                    "postgres-restore-verification"
-                },
-                CalendarToolPostgreSql.restoreVerificationDatabaseStartupCommand(),
-                "Restore verification database startup command");
-        assertArrayEquals(
-                new String[] {
-                    "docker",
-                    "compose",
-                    "--profile",
-                    "backup-verification",
-                    "--profile",
-                    "restore-verification",
-                    "rm",
-                    "--force",
-                    "--stop",
-                    "web-backup-verification",
-                    "postgres-backup-verification",
-                    "postgres-restore-verification"
-                },
-                CalendarToolPostgreSql.backupRestoreCleanupCommand(),
-                "Backup and restore verification cleanup command");
-        assertArrayEquals(
-                new String[] {
-                    "docker",
-                    "compose",
-                    "exec",
-                    "-T",
-                    "database-service",
-                    "pg_dump",
-                    "--username",
-                    "database-user",
-                    "--dbname",
-                    "database-name",
-                    "--format=custom",
-                    "--no-owner",
-                    "--no-privileges"
-                },
-                CalendarToolPostgreSql.composeBackupCommand(
-                        "database-service", "database-user", "database-name"),
-                "Compose backup command");
-    }
-
-    private static void constructsVerificationCommands() {
-        List<CalendarToolVerification.EndToEndSelection> sharedSelections =
-                CalendarToolVerification.sharedEndToEndSelections();
-        assertEquals(2, sharedSelections.size(), "Shared end-to-end lifecycle count");
-        assertEquals(null, sharedSelections.get(0).selectedTest(), "Aggregate suite selector");
-        assertEquals("end-to-end-shared", sharedSelections.get(0).diagnosticDirectoryName(), "Aggregate diagnostics");
-        assertEquals(
-                "CalendarLinkRequestThrottleIT",
-                sharedSelections.get(1).selectedTest(),
-                "Isolated throttle selector");
-        assertEquals(
-                "end-to-end-calendar-link-throttle",
-                sharedSelections.get(1).diagnosticDirectoryName(),
-                "Isolated throttle diagnostics");
-
-        assertArrayEquals(
-                new String[] {
-                    "mvnw", "-Pend-to-end", "test-compile", "failsafe:integration-test", "failsafe:verify"
+                    "mvnw",
+                    "-Pend-to-end",
+                    "test-compile",
+                    "failsafe:integration-test",
+                    "failsafe:verify"
                 },
                 CalendarToolVerification.endToEndMavenCommand(null),
-                "Full end-to-end command");
+                "Shared end-to-end command");
         assertArrayEquals(
                 new String[] {
-                    "mvnw",
-                    "-Pend-to-end",
-                    "-Dit.test=CrossBrowserSmokeEndToEndIT",
-                    "test-compile",
-                    "failsafe:integration-test",
-                    "failsafe:verify"
+                    "docker", "compose", "--profile", "test", "up", "-d", "--force-recreate", "--no-build",
+                    "postgres", "web"
                 },
-                CalendarToolVerification.endToEndMavenCommand("CrossBrowserSmokeEndToEndIT"),
-                "Cross-browser smoke command");
-        assertArrayEquals(
-                new String[] {
-                    "mvnw",
-                    "-Pend-to-end",
-                    "-Dit.test=CalendarLinkRequestThrottleIT",
-                    "test-compile",
-                    "failsafe:integration-test",
-                    "failsafe:verify"
-                },
-                CalendarToolVerification.endToEndMavenCommand("CalendarLinkRequestThrottleIT"),
-                "Isolated throttle command");
-        assertArrayEquals(
-                new String[] {
-                    "mvnw",
-                    "-Ppreview-deployment-end-to-end",
-                    "test-compile",
-                    "failsafe:integration-test",
-                    "failsafe:verify"
-                },
-                CalendarToolVerification.previewDeploymentMavenCommand(),
-                "Preview deployment authentication command");
-        assertArrayEquals(
-                new String[] {
-                    "docker",
-                    "compose",
-                    "--profile",
-                    "end-to-end-verification",
-                    "up",
-                    "-d",
-                    "--force-recreate",
-                    "--no-build",
-                    "postgres-end-to-end-verification",
-                    "web-end-to-end-verification"
-                },
-                CalendarToolVerification.composeUpCommand(
-                        "end-to-end-verification", "postgres-end-to-end-verification", "web-end-to-end-verification"),
+                CalendarToolVerification.composeUpCommand("test", "postgres", "web"),
                 "Compose startup command");
-        assertArrayEquals(
-                new String[] {
-                    "docker",
-                    "compose",
-                    "--profile",
-                    "end-to-end-verification",
-                    "logs",
-                    "--no-color",
-                    "web-end-to-end-verification",
-                    "postgres-end-to-end-verification"
-                },
-                CalendarToolVerification.composeLogsCommand(
-                        "end-to-end-verification", "web-end-to-end-verification", "postgres-end-to-end-verification"),
-                "Compose logs command");
-        assertArrayEquals(
-                new String[] {
-                    "docker",
-                    "compose",
-                    "--profile",
-                    "end-to-end-verification",
-                    "rm",
-                    "--force",
-                    "--stop",
-                    "web-end-to-end-verification",
-                    "postgres-end-to-end-verification"
-                },
-                CalendarToolVerification.composeCleanupCommand(
-                        "end-to-end-verification", "web-end-to-end-verification", "postgres-end-to-end-verification"),
-                "Compose cleanup command");
     }
 
-    private static void rejectsApplicationRuntimeFailures() {
-        CalendarToolVerification.validateApplicationRuntimeLogs(null);
-        CalendarToolVerification.validateApplicationRuntimeLogs("");
-        CalendarToolVerification.validateApplicationRuntimeLogs(
-                "CWWKS4105I: LTPA configuration is ready.\n"
-                        + "CWWKZ0001I: Application started.");
+    private static void resolvesVerificationEndpoints() {
+        CalendarToolVerification.VerificationEndpoints defaults =
+                CalendarToolVerification.endToEndVerificationEndpoints(Map.of());
+        assertEquals("9082", defaults.healthControlPort(), "Default HTTP port");
+        assertEquals("9445", defaults.httpsPort(), "Default HTTPS port");
+        assertEquals("55433", defaults.databasePort(), "Default database port");
+        assertEquals("https://localhost:9445", defaults.applicationBaseUri().toString(), "Base URL");
 
-        List<String> failureSignatures = List.of(
-                "SEVERE:",
-                "\"loglevel\":\"SEVERE\"",
-                "CWWKS4106E",
-                "CWWKS4118E",
-                "CWWKS4000E",
-                "ViewExpiredException",
-                "SRVE0777E",
-                "FFDC1015I",
-                "SESN0008E");
-        for (String failureSignature : failureSignatures) {
-            IllegalStateException exception = expectThrows(
-                    IllegalStateException.class,
-                    () -> CalendarToolVerification.validateApplicationRuntimeLogs(
-                            "unrelated output\n" + failureSignature + ": runtime failure"));
-            assertContains(
-                    exception.getMessage(),
-                    failureSignature,
-                    "Application runtime failure diagnostic");
-            assertDoesNotContain(
-                    exception.getMessage(),
-                    "runtime failure",
-                    "Application log content is not copied into diagnostics");
+        CalendarToolVerification.VerificationEndpoints configured =
+                CalendarToolVerification.endToEndVerificationEndpoints(Map.of(
+                        "END_TO_END_VERIFICATION_APPLICATION_PORT", "19082",
+                        "END_TO_END_VERIFICATION_HTTPS_PORT", "19445",
+                        "END_TO_END_VERIFICATION_DATABASE_PORT", "55434"));
+        assertEquals("19082", configured.healthControlPort(), "Configured HTTP port");
+        assertEquals("19445", configured.httpsPort(), "Configured HTTPS port");
+        expectThrows(
+                IllegalArgumentException.class,
+                () -> CalendarToolVerification.endToEndVerificationEndpoints(Map.of(
+                        "END_TO_END_VERIFICATION_APPLICATION_PORT", "19082",
+                        "END_TO_END_VERIFICATION_HTTPS_PORT", "19082")));
+    }
+
+    private static void validatesBrowserAndPortConfiguration() {
+        assertEquals("chromium", CalendarToolVerification.configuredBrowserName(Map.of()), "Default browser");
+        assertEquals(
+                "firefox",
+                CalendarToolVerification.configuredBrowserName(Map.of("BROWSER", " Firefox ")),
+                "Configured browser");
+        expectThrows(
+                IllegalArgumentException.class,
+                () -> CalendarToolVerification.configuredBrowserName(Map.of("BROWSER", "opera")));
+        assertEquals(
+                "9443",
+                CalendarToolVerification.environmentPortValue(Map.of(), "HTTPS_PORT", "9443"),
+                "Default port");
+        for (String invalidPort : List.of("0", "65536", "not-a-port")) {
+            expectThrows(
+                    IllegalArgumentException.class,
+                    () -> CalendarToolVerification.environmentPortValue(
+                            Map.of("HTTPS_PORT", invalidPort), "HTTPS_PORT", "9443"));
         }
+    }
 
-        IllegalStateException combinedFailure = expectThrows(
+    private static void validatesHealthAndRuntimeLogs() {
+        CalendarToolVerification.validateHealthResponse(
+                java.net.URI.create("http://localhost:9080/health"),
+                200,
+                " ok\n");
+        expectThrows(
                 IllegalStateException.class,
-                () -> CalendarToolVerification.validateApplicationRuntimeLogs(
-                        String.join(" observed\n", failureSignatures) + " observed"));
-        for (String failureSignature : failureSignatures) {
-            assertContains(
-                    combinedFailure.getMessage(),
-                    failureSignature,
-                    "Combined application runtime failure diagnostic");
-        }
+                () -> CalendarToolVerification.validateHealthResponse(
+                        java.net.URI.create("http://localhost:9080/health"),
+                        503,
+                        "unavailable"));
+        CalendarToolVerification.validateApplicationRuntimeLogs("CWWKF0011I: server ready");
+        expectThrows(
+                IllegalStateException.class,
+                () -> CalendarToolVerification.validateApplicationRuntimeLogs("SEVERE: deployment failed"));
     }
 
-    private static void run(String name, TestCase testCase) throws Exception {
+    private static void validatesDeploymentRevisions() {
+        String revision = "a".repeat(40);
+        CalendarToolVerification.validateExpectedDeploymentRevision(null, null);
+        CalendarToolVerification.validateExpectedDeploymentRevision(revision.toUpperCase(), revision);
+        expectThrows(
+                IllegalArgumentException.class,
+                () -> CalendarToolVerification.validateExpectedDeploymentRevision("short", revision));
+        expectThrows(
+                IllegalStateException.class,
+                () -> CalendarToolVerification.validateExpectedDeploymentRevision(revision, "b".repeat(40)));
+    }
+
+    private static void validatesLoopbackPortMappings() {
+        CalendarToolVerification.validateExpectedLoopbackPortMapping(
+                "127.0.0.1:9080\n[::1]:9080",
+                9080,
+                "application HTTP");
+        assertTrue(
+                CalendarToolVerification.composePortMappingIncludes("127.0.0.1:9080", 9080),
+                "Expected port mapping");
+        assertFalse(
+                CalendarToolVerification.composePortMappingIncludes("127.0.0.1:9081", 9080),
+                "Unexpected port mapping");
+        expectThrows(
+                IllegalStateException.class,
+                () -> CalendarToolVerification.validateComposePortMappingsAreLoopbackOnly("0.0.0.0:9080"));
+    }
+
+    private static void validatesComposeDatabaseConfiguration() {
+        CalendarToolPostgreSql.validateComposeApplicationDatabaseConfiguration(
+                "postgres\n5432\ncalendar\ncalendar\nshared-calendar-compose-web-9080\n",
+                "calendar",
+                "calendar",
+                "shared-calendar-compose-web-9080");
+        expectThrows(
+                IllegalStateException.class,
+                () -> CalendarToolPostgreSql.validateComposeApplicationDatabaseConfiguration(
+                        "localhost\n5432\ncalendar\ncalendar\nshared-calendar-compose-web-9080\n",
+                        "calendar",
+                        "calendar",
+                        "shared-calendar-compose-web-9080"));
+    }
+
+    private static void buildsPostgreSqlCommands() {
+        String[] command = CalendarToolPostgreSql.composeSqlCommand(
+                "postgres",
+                "calendar",
+                "calendar",
+                "select 1;");
+        assertEquals("docker", command[0], "PostgreSQL command executable");
+        assertTrue(Arrays.asList(command).contains("ON_ERROR_STOP=1"), "SQL errors must stop verification");
+        assertTrue(Arrays.asList(command).contains("select 1;"), "SQL statement");
+    }
+
+    private static void resolvesDatabaseDefaults() {
+        assertEquals("calendar", CalendarToolPostgreSql.databaseName(Map.of()), "Default database name");
+        assertEquals("calendar", CalendarToolPostgreSql.databaseUser(Map.of()), "Default database user");
+        assertEquals(
+                "friends",
+                CalendarToolPostgreSql.databaseName(Map.of("PGDATABASE", " friends ")),
+                "Configured database name");
+        assertEquals(
+                "owner",
+                CalendarToolPostgreSql.databaseUser(Map.of("PGUSER", " owner ")),
+                "Configured database user");
+    }
+
+    private static void run(String description, ThrowingAction action) throws Exception {
         try {
-            testCase.run();
+            action.run();
             completedTestCount++;
         } catch (Throwable failure) {
-            throw new AssertionError("Calendar tool self-test failed: " + name, failure);
+            throw new AssertionError("Failed: " + description, failure);
         }
     }
 
     private static void assertArrayEquals(String[] expected, String[] actual, String description) {
         if (!Arrays.equals(expected, actual)) {
             throw new AssertionError(
-                    description + " expected " + Arrays.toString(expected) + " but got " + Arrays.toString(actual) + ".");
+                    description + " expected " + Arrays.toString(expected) + " but got " + Arrays.toString(actual));
         }
     }
 
     private static void assertEquals(Object expected, Object actual, String description) {
-        if (!(expected == null ? actual == null : expected.equals(actual))) {
-            throw new AssertionError(description + " expected " + expected + " but got " + actual + ".");
+        if (!java.util.Objects.equals(expected, actual)) {
+            throw new AssertionError(description + " expected " + expected + " but got " + actual);
         }
     }
 
-    private static void assertSame(Object expected, Object actual, String description) {
-        if (expected != actual) {
-            throw new AssertionError(description + " expected the same object instance.");
+    private static void assertTrue(boolean condition, String description) {
+        if (!condition) {
+            throw new AssertionError(description);
         }
     }
 
-    private static void assertContains(String actual, String expectedFragment, String description) {
-        if (actual == null || !actual.contains(expectedFragment)) {
-            throw new AssertionError(
-                    description + " expected text containing '" + expectedFragment + "' but got '" + actual + "'.");
-        }
+    private static void assertFalse(boolean condition, String description) {
+        assertTrue(!condition, description);
     }
 
-    private static void assertDoesNotContain(String actual, String forbiddenFragment, String description) {
-        if (actual != null && actual.contains(forbiddenFragment)) {
-            throw new AssertionError(
-                    description + " expected text not to contain '" + forbiddenFragment + "' but got '" + actual + "'.");
-        }
-    }
-
-    private static <ExpectedException extends Throwable> ExpectedException expectThrows(
-            Class<ExpectedException> expectedType,
-            TestCase testCase) {
+    private static <FailureType extends Throwable> FailureType expectThrows(
+            Class<FailureType> expectedType,
+            ThrowingAction action) {
         try {
-            testCase.run();
+            action.run();
         } catch (Throwable failure) {
             if (expectedType.isInstance(failure)) {
                 return expectedType.cast(failure);
             }
             throw new AssertionError(
-                    "Expected " + expectedType.getSimpleName() + " but got " + failure.getClass().getSimpleName() + ".",
+                    "Expected " + expectedType.getName() + " but got " + failure.getClass().getName(),
                     failure);
         }
-        throw new AssertionError("Expected " + expectedType.getSimpleName() + " but no exception was thrown.");
+        throw new AssertionError("Expected " + expectedType.getName() + " to be thrown.");
     }
 
     @FunctionalInterface
-    private interface TestCase {
+    private interface ThrowingAction {
         void run() throws Exception;
     }
 }

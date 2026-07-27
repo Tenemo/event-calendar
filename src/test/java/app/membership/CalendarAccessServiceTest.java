@@ -1,6 +1,7 @@
 package app.membership;
 
 import static app.testsupport.ServiceTestSupport.entityManagerStub;
+import static app.testsupport.ServiceTestSupport.queryParameter;
 import static app.testsupport.ServiceTestSupport.setEntityId;
 import static app.testsupport.ServiceTestSupport.setField;
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -13,6 +14,7 @@ import app.testsupport.ServiceTestSupport.EntityManagerStub;
 import app.user.ApplicationUser;
 import app.util.AuthorizationException;
 import app.util.NotFoundException;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 final class CalendarAccessServiceTest {
@@ -39,7 +41,10 @@ final class CalendarAccessServiceTest {
     @Test
     void missingMembershipRejectsEditorAccess() {
         EntityManagerStub entityManagerStub = entityManagerStub()
-                .singleResultNotFound("from CalendarMembership");
+                .singleResultNotFound(
+                        "from CalendarMembership",
+                        queryParameter("userId", 20L),
+                        queryParameter("calendarId", 10L));
         CalendarAccessService accessService = accessService(entityManagerStub);
 
         assertThrows(AuthorizationException.class, () -> accessService.requireCanEdit(activeUser(), 10L));
@@ -49,7 +54,10 @@ final class CalendarAccessServiceTest {
     void enabledCalendarTokenAllowsAnonymousReadOnlyAccess() {
         Calendar calendar = activeCalendar(true);
         CalendarAccessService accessService = accessService(
-                entityManagerStub().singleResult("from Calendar calendarEntity", calendar));
+                entityManagerStub().singleResult(
+                        "from Calendar calendarEntity",
+                        calendar,
+                        queryParameter("calendarLinkToken", calendar.getCalendarLinkToken())));
 
         assertEquals(calendar, accessService.requireCalendarReadableByLinkToken(null, calendar.getCalendarLinkToken()));
         assertEquals(calendar, accessService.requirePublicReadableCalendar(calendar.getCalendarLinkToken()));
@@ -59,13 +67,29 @@ final class CalendarAccessServiceTest {
     void disabledCalendarTokenAllowsMembersButRejectsAnonymousAndUnrelatedUsers() {
         Calendar calendar = activeCalendar(false);
         CalendarAccessService memberAccessService = accessService(entityManagerStub()
-                .singleResult("from Calendar calendarEntity", calendar)
-                .singleResult("select calendarMembership.role", CalendarRole.EDITOR));
+                .singleResult(
+                        "from Calendar calendarEntity",
+                        calendar,
+                        queryParameter("calendarLinkToken", calendar.getCalendarLinkToken()))
+                .singleResult(
+                        "select calendarMembership.role",
+                        CalendarRole.EDITOR,
+                        queryParameter("userId", 20L),
+                        queryParameter("calendarId", calendar.getId())));
         CalendarAccessService anonymousAccessService = accessService(
-                entityManagerStub().singleResult("from Calendar calendarEntity", calendar));
+                entityManagerStub().singleResult(
+                        "from Calendar calendarEntity",
+                        calendar,
+                        queryParameter("calendarLinkToken", calendar.getCalendarLinkToken())));
         CalendarAccessService unrelatedAccessService = accessService(entityManagerStub()
-                .singleResult("from Calendar calendarEntity", calendar)
-                .singleResultNotFound("select calendarMembership.role"));
+                .singleResult(
+                        "from Calendar calendarEntity",
+                        calendar,
+                        queryParameter("calendarLinkToken", calendar.getCalendarLinkToken()))
+                .singleResultNotFound(
+                        "select calendarMembership.role",
+                        queryParameter("userId", 20L),
+                        queryParameter("calendarId", calendar.getId())));
 
         assertAll(
                 () -> assertEquals(
@@ -86,7 +110,9 @@ final class CalendarAccessServiceTest {
     @Test
     void blankAndUnknownTokensReturnTheSameNotFoundResult() {
         CalendarAccessService accessService = accessService(
-                entityManagerStub().singleResultNotFound("from Calendar calendarEntity"));
+                entityManagerStub().singleResultNotFound(
+                        "from Calendar calendarEntity",
+                        queryParameter("calendarLinkToken", "unknown-token")));
 
         assertAll(
                 () -> assertThrows(NotFoundException.class, () -> accessService.requireCalendarReadableByLinkToken(null, null)),
@@ -96,8 +122,28 @@ final class CalendarAccessServiceTest {
                         () -> accessService.requireCalendarReadableByLinkToken(null, "unknown-token")));
     }
 
+    @Test
+    void membershipLookupKeepsDistinctUserAndCalendarBindings() {
+        EntityManagerStub entityManagerStub = entityManagerStub().singleResult(
+                "select calendarMembership.role",
+                CalendarRole.EDITOR,
+                queryParameter("userId", 20L),
+                queryParameter("calendarId", 10L));
+        CalendarAccessService accessService = accessService(entityManagerStub);
+
+        accessService.requireCanEdit(activeUser(), 10L);
+
+        assertEquals(
+                Map.of("userId", 20L, "calendarId", 10L),
+                entityManagerStub.queryExecutions().getFirst().parameterValues());
+    }
+
     private static CalendarAccessService accessServiceReturningRole(CalendarRole role) {
-        return accessService(entityManagerStub().singleResult("select calendarMembership.role", role));
+        return accessService(entityManagerStub().singleResult(
+                "select calendarMembership.role",
+                role,
+                queryParameter("userId", 20L),
+                queryParameter("calendarId", 10L)));
     }
 
     private static CalendarAccessService accessService(EntityManagerStub entityManagerStub) {

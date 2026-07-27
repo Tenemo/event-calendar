@@ -313,10 +313,9 @@ final class RecoveryAndAccessibilityEndToEndIT extends SharedCalendarEndToEndSup
             assertEquals("Sign in", page.locator("h1").textContent().trim());
             navigateToBearerLink(page, route("/register"));
             assertEquals(1, page.locator("h1").count());
-            assertEquals("Create your calendar", page.locator("h1").textContent().trim());
-            assertEquals(
-                    "passwordRequirements",
-                    page.locator("input[id$='password']").getAttribute("aria-describedby"));
+            assertEquals("Invitation unavailable", page.locator("h1").textContent().trim());
+            assertBodyContains(page, "Invitation is invalid or no longer available.");
+            assertEquals(0, page.locator("input[id$='password']").count());
             assertRegionsHaveAccessibleNames(page);
             navigateToBearerLink(page, route("/sign-in-error"));
             assertEquals(1, page.locator("h1").count());

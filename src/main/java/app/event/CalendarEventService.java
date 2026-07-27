@@ -16,6 +16,7 @@ import jakarta.ejb.Stateless;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.TypedQuery;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -50,19 +51,21 @@ public class CalendarEventService {
 
     public CalendarEventPage findPublicEvents(
             String calendarLinkToken,
-            int firstResult,
+            CalendarEventCursor afterCursor,
+            CalendarEventRevision expectedRevision,
             int pageSize) {
         Calendar calendar = calendarAccessService.requirePublicReadableCalendar(calendarLinkToken);
-        return findEvents(calendar.getId(), firstResult, pageSize);
+        return findEvents(calendar.getId(), afterCursor, expectedRevision, pageSize);
     }
 
     public CalendarEventPage findEventsForMember(
             ApplicationUser user,
             Long calendarId,
-            int firstResult,
+            CalendarEventCursor afterCursor,
+            CalendarEventRevision expectedRevision,
             int pageSize) {
         calendarAccessService.requireCanEdit(user, calendarId);
-        return findEvents(calendarId, firstResult, pageSize);
+        return findEvents(calendarId, afterCursor, expectedRevision, pageSize);
     }
 
     public CalendarEvent createEvent(
@@ -84,6 +87,10 @@ public class CalendarEventService {
                 location,
                 MAXIMUM_EVENT_LOCATION_LENGTH,
                 "Event location must be 200 characters or fewer.");
+        String normalizedDescription = TextNormalizer.normalizeOptionalMultilineText(
+                description,
+                TextNormalizer.MAXIMUM_DESCRIPTION_LENGTH,
+                "Event description must be 4,000 characters or fewer.");
 
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         Calendar calendar = calendarService.requireActiveCalendarForChildMutation(calendarId);
@@ -95,7 +102,7 @@ public class CalendarEventService {
         CalendarEvent event = new CalendarEvent();
         event.setCalendar(calendar);
         event.setTitle(normalizedTitle);
-        event.setDescription(TextNormalizer.normalizeOptionalText(description));
+        event.setDescription(normalizedDescription);
         event.setLocation(normalizedLocation);
         event.setStartTime(normalizedTimeRange.startTime());
         event.setEndTime(normalizedTimeRange.endTime());
@@ -130,6 +137,10 @@ public class CalendarEventService {
                 location,
                 MAXIMUM_EVENT_LOCATION_LENGTH,
                 "Event location must be 200 characters or fewer.");
+        String normalizedDescription = TextNormalizer.normalizeOptionalMultilineText(
+                description,
+                TextNormalizer.MAXIMUM_DESCRIPTION_LENGTH,
+                "Event description must be 4,000 characters or fewer.");
         Calendar calendar = calendarService.requireActiveCalendarForChildMutation(event.getCalendar().getId());
         // Deliberate second check: the acting user's role can be revoked between the first check
         // and the lock, so authorization is confirmed again once the calendar row is held.
@@ -139,7 +150,7 @@ public class CalendarEventService {
         EventTimeRange normalizedTimeRange = normalizeEventTimes(calendar, eventTimeInput);
 
         event.setTitle(normalizedTitle);
-        event.setDescription(TextNormalizer.normalizeOptionalText(description));
+        event.setDescription(normalizedDescription);
         event.setLocation(normalizedLocation);
         event.setStartTime(normalizedTimeRange.startTime());
         event.setEndTime(normalizedTimeRange.endTime());
@@ -216,30 +227,87 @@ public class CalendarEventService {
         }
     }
 
-    private CalendarEventPage findEvents(Long calendarId, int firstResult, int pageSize) {
-        if (firstResult < 0) {
-            throw new IllegalArgumentException("The first event result must not be negative.");
-        }
+    private CalendarEventPage findEvents(
+            Long calendarId,
+            CalendarEventCursor afterCursor,
+            CalendarEventRevision expectedRevision,
+            int pageSize) {
         if (pageSize < 1 || pageSize > MAXIMUM_EVENT_PAGE_SIZE) {
             throw new IllegalArgumentException(
                     "The event page size must be between 1 and " + MAXIMUM_EVENT_PAGE_SIZE + ".");
         }
 
-        List<CalendarEvent> loadedEvents = entityManager
+        CalendarEventRevision revisionBeforeQuery = findEventRevision(calendarId);
+        if (expectedRevision != null && !expectedRevision.equals(revisionBeforeQuery)) {
+            return CalendarEventPage.restartRequired(revisionBeforeQuery);
+        }
+
+        String cursorPredicate = afterCursor == null
+                ? ""
+                : "and calendarEvent.startTime >= :afterStartTime "
+                        + "and (calendarEvent.startTime > :afterStartTime "
+                        + "or (calendarEvent.startTime = :afterStartTime "
+                        + "and calendarEvent.id > :afterEventId)) ";
+        TypedQuery<CalendarEvent> eventQuery = entityManager
                 .createQuery(
                         "select calendarEvent from CalendarEvent calendarEvent "
                                 + "where calendarEvent.calendar.id = :calendarId "
+                                + cursorPredicate
                                 + "order by calendarEvent.startTime, calendarEvent.id",
                         CalendarEvent.class)
-                .setParameter("calendarId", calendarId)
-                .setFirstResult(firstResult)
+                .setParameter("calendarId", calendarId);
+        if (afterCursor != null) {
+            eventQuery
+                    .setParameter("afterStartTime", afterCursor.startTime())
+                    .setParameter("afterEventId", afterCursor.eventId());
+        }
+        List<CalendarEvent> loadedEvents = eventQuery
                 .setMaxResults(pageSize + 1)
                 .getResultList();
+        CalendarEventRevision revisionAfterQuery = findEventRevision(calendarId);
+        if (!revisionBeforeQuery.equals(revisionAfterQuery)) {
+            return CalendarEventPage.restartRequired(revisionAfterQuery);
+        }
         boolean hasMore = loadedEvents.size() > pageSize;
         List<CalendarEvent> pageEvents = hasMore
                 ? List.copyOf(loadedEvents.subList(0, pageSize))
                 : List.copyOf(loadedEvents);
-        return new CalendarEventPage(pageEvents, hasMore);
+        CalendarEventCursor nextCursor = pageEvents.isEmpty()
+                ? null
+                : CalendarEventCursor.after(pageEvents.getLast());
+        return new CalendarEventPage(
+                pageEvents,
+                hasMore,
+                nextCursor,
+                revisionAfterQuery,
+                false);
+    }
+
+    CalendarEventRevision findEventRevision(Long calendarId) {
+        // This reads one constant-size aggregate instead of retaining an unbounded identifier
+        // snapshot. It scans one calendar's indexed event rows twice per explicit page request,
+        // which is a deliberate v1 trade-off for friend-group calendars; a stored counter would
+        // require schema state and would serialize otherwise independent event mutations.
+        Object[] eventRevisionValues = entityManager
+                .createQuery(
+                        "select count(calendarEvent), max(calendarEvent.id), "
+                                + "sum(calendarEvent.version) "
+                                + "from CalendarEvent calendarEvent "
+                                + "where calendarEvent.calendar.id = :calendarId",
+                        Object[].class)
+                .setParameter("calendarId", calendarId)
+                .getSingleResult();
+        long numberOfEvents = ((Number) eventRevisionValues[0]).longValue();
+        long maximumEventId = eventRevisionValues[1] == null
+                ? 0L
+                : ((Number) eventRevisionValues[1]).longValue();
+        long accumulatedEventVersions = eventRevisionValues[2] == null
+                ? 0L
+                : ((Number) eventRevisionValues[2]).longValue();
+        return new CalendarEventRevision(
+                numberOfEvents,
+                maximumEventId,
+                accumulatedEventVersions);
     }
 
     private CalendarEvent requireEvent(Long eventId) {

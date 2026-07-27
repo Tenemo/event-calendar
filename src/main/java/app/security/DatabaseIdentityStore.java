@@ -31,6 +31,9 @@ public class DatabaseIdentityStore implements IdentityStore {
     @Inject
     private PasswordValidationState passwordValidationState;
 
+    @Inject
+    private AuthenticationAuditService authenticationAuditService;
+
     @Override
     public CredentialValidationResult validate(Credential credential) {
         passwordValidationState.clear();
@@ -42,21 +45,38 @@ public class DatabaseIdentityStore implements IdentityStore {
         String password = usernamePasswordCredential.getPasswordAsString();
         String sourceIdentifier = sourceIdentifier();
         if (!signInAttemptThrottle.reserveAuthenticationAttempt(username, sourceIdentifier)) {
+            authenticationAuditService.recordSignInThrottled();
             return CredentialValidationResult.INVALID_RESULT;
         }
 
-        // Reserving first means the key derivation below runs without holding the throttle, so one
-        // slow verification cannot delay unrelated sign-ins.
-        CredentialValidationResult validationResult = userService.findActiveByUsername(username)
-                .map(user -> validatePassword(user, password))
-                .orElseGet(() -> validateMissingUserPassword(password));
+        CredentialValidationResult validationResult;
+        try {
+            validationResult = userService.findActiveByUsername(username)
+                    .map(user -> validatePassword(user, password))
+                    .orElseGet(() -> validateMissingUserPassword(password));
+        } catch (RuntimeException exception) {
+            signInAttemptThrottle.withdrawAuthenticationAttempt(
+                    username,
+                    sourceIdentifier);
+            try {
+                authenticationAuditService.recordSignInFailed();
+            } catch (RuntimeException auditException) {
+                exception.addSuppressed(auditException);
+            }
+            throw exception;
+        }
         if (validationResult.getStatus() == CredentialValidationResult.Status.VALID) {
             signInAttemptThrottle.releaseSuccessfulAttempt(username, sourceIdentifier);
+            authenticationAuditService.recordSignInSucceeded();
+        } else {
+            authenticationAuditService.recordSignInFailed();
         }
         return validationResult;
     }
 
-    private CredentialValidationResult validatePassword(ApplicationUser user, String password) {
+    private CredentialValidationResult validatePassword(
+            ApplicationUser user,
+            String password) {
         String validatedUsername = user.getUsername();
         String validatedPasswordHash = user.getPasswordHash();
         long validatedPasswordVersion = user.getPasswordVersion();

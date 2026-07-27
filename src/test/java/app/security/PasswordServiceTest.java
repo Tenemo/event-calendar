@@ -73,10 +73,18 @@ final class PasswordServiceTest {
     }
 
     @Test
-    void acceptsAnEightCharacterPasswordWithAnUppercaseLetterAndDigit() {
+    void acceptsLongPasswordsWithoutCompositionOrCorpusRules() {
         PasswordService passwordService = passwordService();
 
-        assertDoesNotThrow(() -> passwordService.validatePasswordPolicy("piotr", "A1234567"));
+        assertAll(
+                () -> assertDoesNotThrow(() -> passwordService.validatePasswordPolicy(
+                        "piotr", "a long lowercase passphrase")),
+                () -> assertDoesNotThrow(() -> passwordService.validatePasswordPolicy(
+                        "piotr", "letterswithoutdigits")),
+                () -> assertDoesNotThrow(() -> passwordService.validatePasswordPolicy(
+                        "piotr", "PASSWORDPASSWORD")),
+                () -> assertDoesNotThrow(() -> passwordService.validatePasswordPolicy(
+                        "piotr", "correcthorsebatterystaple")));
     }
 
     @Test
@@ -84,17 +92,24 @@ final class PasswordServiceTest {
         RecordingPasswordHash passwordHash = new RecordingPasswordHash();
         PasswordService passwordService = passwordService(passwordHash);
         String supplementaryCharacter = new String(Character.toChars(0x1F600));
-        String maximumLengthPassword = "A1" + supplementaryCharacter.repeat(PasswordService.MAXIMUM_PASSWORD_LENGTH - 2);
+        String maximumLengthPassword =
+                supplementaryCharacter.repeat(PasswordService.MAXIMUM_PASSWORD_LENGTH);
 
         String hash = assertDoesNotThrow(() -> passwordService.hashPassword("piotr", maximumLengthPassword));
 
         assertAll(
+                () -> assertEquals(
+                        PasswordService.MAXIMUM_PASSWORD_TRANSPORT_LENGTH,
+                        maximumLengthPassword.length()),
+                () -> assertEquals(
+                        1_024,
+                        passwordService.getMaximumPasswordTransportLength()),
                 () -> assertTrue(passwordService.verifyPassword(maximumLengthPassword, hash)),
                 () -> assertPasswordRejected(
                         passwordService,
                         "piotr",
-                        "A1" + supplementaryCharacter.repeat(3),
-                        "Password must be at least 8 characters."),
+                        supplementaryCharacter.repeat(14),
+                        "Password must be at least 15 characters."),
                 () -> assertPasswordRejected(
                         passwordService,
                         "piotr",
@@ -103,25 +118,58 @@ final class PasswordServiceTest {
     }
 
     @Test
-    void rejectsPasswordsThatViolateEachPolicyRequirementBeforeHashing() {
+    void rejectsPasswordsThatBecomeBlankAfterPolicyNormalization() {
+        PasswordService passwordService = passwordService();
+
+        assertAll(
+                () -> assertPasswordRejected(
+                        passwordService,
+                        "piotr",
+                        "\u00A0".repeat(PasswordService.MINIMUM_PASSWORD_LENGTH),
+                        "Password is required."),
+                () -> assertPasswordRejected(
+                        passwordService,
+                        "piotr",
+                        "\u2007".repeat(PasswordService.MINIMUM_PASSWORD_LENGTH),
+                        "Password is required."),
+                () -> assertPasswordRejected(
+                        passwordService,
+                        "piotr",
+                        "\u3000".repeat(PasswordService.MINIMUM_PASSWORD_LENGTH),
+                        "Password is required."));
+    }
+
+    @Test
+    void comparesUsernamesAndPasswordsWithTheSamePolicyNormalization() {
+        PasswordService passwordService = passwordService();
+        String username = "long-account-name";
+
+        assertAll(
+                () -> assertPasswordRejected(
+                        passwordService,
+                        username,
+                        " \u00A0LONG-ACCOUNT-NAME\u3000 ",
+                        "Password must not match the username."),
+                () -> assertPasswordRejected(
+                        passwordService,
+                        username,
+                        toFullWidthAscii(username),
+                        "Password must not match the username."));
+    }
+
+    @Test
+    void rejectsPasswordsThatViolateLengthOrIdentityRequirementsBeforeHashing() {
         PasswordService passwordService = passwordService();
 
         assertAll(
                 () -> assertPasswordRejected(passwordService, "piotr", "", "Password is required."),
                 () -> assertPasswordRejected(
-                        passwordService, "piotr", "Abc1234", "Password must be at least 8 characters."),
+                        passwordService, "piotr", "fourteen-chars", "Password must be at least 15 characters."),
                 () -> assertPasswordRejected(
                         passwordService,
-                        "piotr",
-                        "abcdefgh1",
-                        "Password must contain at least one uppercase letter."),
-                () -> assertPasswordRejected(
-                        passwordService,
-                        "piotr",
-                        "Abcdefgh",
-                        "Password must contain at least one digit."),
-                () -> assertPasswordRejected(
-                        passwordService, "piotr2026", "Piotr2026", "Password must not match the username."),
+                        "long-account-password",
+                        "LONG-ACCOUNT-PASSWORD",
+                        "Password must not match the username."),
                 () -> assertPasswordRejected(
                         passwordService,
                         "piotr",
@@ -200,6 +248,15 @@ final class PasswordServiceTest {
                 ValidationException.class,
                 () -> passwordService.hashPassword(username, password));
         assertEquals(expectedMessage, exception.getMessage());
+    }
+
+    private static String toFullWidthAscii(String value) {
+        StringBuilder fullWidthValue = new StringBuilder(value.length());
+        value.codePoints().forEach(character -> fullWidthValue.appendCodePoint(
+                character >= '!' && character <= '~'
+                        ? character + 0xFEE0
+                        : character));
+        return fullWidthValue.toString();
     }
 
     private static final class MalformedHashRejectingPasswordHash implements Pbkdf2PasswordHash {

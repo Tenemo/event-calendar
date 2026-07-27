@@ -1,13 +1,21 @@
 package app.event;
 
 import java.io.Serializable;
+import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.zone.ZoneOffsetTransition;
+import java.time.zone.ZoneRules;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 
 public final class EventFormState implements Serializable {
+    private static final int MAXIMUM_DEFAULT_TIME_SEARCH_HOURS = 72;
+
     private Long selectedEventId;
     private Integer selectedEventVersion;
     private String title;
@@ -21,20 +29,48 @@ public final class EventFormState implements Serializable {
     private boolean allDaySelection;
 
     public void reset(String timeZone) {
+        reset(timeZone, Clock.systemUTC());
+    }
+
+    void reset(String timeZone, Clock clock) {
         selectedEventId = null;
         selectedEventVersion = null;
         title = null;
         description = null;
         location = null;
-        LocalDateTime nextHour = LocalDateTime.now(
-                        ZoneId.of(timeZone == null ? "UTC" : timeZone))
+        ZoneId zoneId = ZoneId.of(timeZone == null ? "UTC" : timeZone);
+        LocalDateTime nextHour = LocalDateTime.now(clock.withZone(zoneId))
                 .plusHours(1)
                 .truncatedTo(ChronoUnit.HOURS);
+        nextHour = nextValidUnambiguousTime(nextHour, zoneId);
         startTime = nextHour;
         endTime = nextHour.plusHours(1);
         firstDay = nextHour.toLocalDate();
         lastDay = nextHour.toLocalDate();
         setAllDay(false);
+    }
+
+    private LocalDateTime nextValidUnambiguousTime(
+            LocalDateTime initialCandidate,
+            ZoneId zoneId) {
+        LocalDateTime candidate = initialCandidate;
+        for (int searchedHours = 0;
+                searchedHours < MAXIMUM_DEFAULT_TIME_SEARCH_HOURS;
+                searchedHours++) {
+            LocalDateTime candidateEndTime = candidate.plusHours(1);
+            List<ZoneOffset> candidateOffsets = zoneId.getRules().getValidOffsets(candidate);
+            List<ZoneOffset> candidateEndOffsets = zoneId.getRules()
+                    .getValidOffsets(candidateEndTime);
+            if (candidateOffsets.size() == 1
+                    && candidateEndOffsets.size() == 1
+                    && candidate.toInstant(candidateOffsets.getFirst()).plus(Duration.ofHours(1))
+                            .equals(candidateEndTime.toInstant(candidateEndOffsets.getFirst()))) {
+                return candidate;
+            }
+            candidate = candidate.plusHours(1);
+        }
+        throw new IllegalStateException(
+                "Could not find an unambiguous default event time in the calendar time zone.");
     }
 
     public void select(CalendarEventRow event) {
@@ -50,13 +86,13 @@ public final class EventFormState implements Serializable {
         setAllDay(event.isAllDay());
     }
 
-    public void applyAllDaySelection() {
+    public void applyAllDaySelection(String timeZone) {
         if (allDay != allDaySelection) {
-            changeAllDayMode();
+            changeAllDayMode(timeZone);
         }
     }
 
-    public void changeAllDayMode() {
+    public void changeAllDayMode(String timeZone) {
         allDay = allDaySelection;
         if (allDay) {
             LocalDate selectedFirstDay =
@@ -72,12 +108,37 @@ public final class EventFormState implements Serializable {
             return;
         }
 
+        ZoneId zoneId = ZoneId.of(timeZone);
         if (firstDay != null) {
-            startTime = firstDay.atStartOfDay();
+            startTime = firstUnambiguousTimeAtOrAfterStartOfDay(firstDay, zoneId);
         }
         if (lastDay != null) {
-            endTime = lastDay.plusDays(1).atStartOfDay();
+            endTime = firstUnambiguousTimeAtOrAfterStartOfDay(lastDay.plusDays(1), zoneId);
         }
+    }
+
+    private LocalDateTime firstUnambiguousTimeAtOrAfterStartOfDay(
+            LocalDate calendarDate,
+            ZoneId zoneId) {
+        ZoneRules zoneRules = zoneId.getRules();
+        LocalDateTime candidate = calendarDate.atStartOfDay();
+        for (int transitionCount = 0; transitionCount < 4; transitionCount++) {
+            List<ZoneOffset> validOffsets = zoneRules.getValidOffsets(candidate);
+            if (validOffsets.size() == 1) {
+                return candidate;
+            }
+
+            ZoneOffsetTransition transition = zoneRules.getTransition(candidate);
+            if (transition == null) {
+                throw new IllegalStateException(
+                        "Could not resolve the all-day boundary in the calendar time zone.");
+            }
+            candidate = transition.isGap()
+                    ? transition.getDateTimeAfter()
+                    : transition.getDateTimeBefore();
+        }
+        throw new IllegalStateException(
+                "Could not find an unambiguous all-day boundary in the calendar time zone.");
     }
 
     public EventTimeInput toTimeInput() {

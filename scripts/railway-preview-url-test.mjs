@@ -1,4 +1,9 @@
 import assert from "node:assert/strict";
+import { Readable } from "node:stream";
+import {
+    DEFAULT_MAXIMUM_STANDARD_INPUT_BYTES,
+    readBoundedUtf8Input,
+} from "./bounded-standard-input.mjs";
 import { resolveRailwayPreviewUrl } from "./railway-preview-url.mjs";
 
 const validBody = `<!-- railway-bot-comment-version=2 -->
@@ -74,5 +79,16 @@ for (const invalidPullRequestNumber of [undefined, "", "0", "-1", "19x", "1.5"])
         /positive integer/,
     );
 }
+
+assert.equal(DEFAULT_MAXIMUM_STANDARD_INPUT_BYTES, 64 * 1024 * 1024);
+const inputLargerThanOneMegabyte = "x".repeat(1_250_000);
+assert.equal(
+    await readBoundedUtf8Input(Readable.from([inputLargerThanOneMegabyte])),
+    inputLargerThanOneMegabyte,
+);
+await assert.rejects(
+    readBoundedUtf8Input(Readable.from(["123", "\u20ac"]), 5),
+    /exceeded the 5-byte safety limit/,
+);
 
 process.stdout.write("Railway preview URL tests passed.\n");

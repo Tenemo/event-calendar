@@ -11,7 +11,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.membership.CalendarAccessService;
-import app.security.ClientRequestSourceResolver;
 import app.security.CurrentUser;
 import app.user.ApplicationUser;
 import app.util.NotFoundException;
@@ -21,13 +20,7 @@ import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.lang.reflect.Proxy;
-import java.time.Clock;
-import java.time.Duration;
-import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.Collections;
 import java.util.Map;
@@ -74,9 +67,8 @@ final class CalendarRouteFilterTest {
     }
 
     @Test
-    void keepsValidNonGetCanonicalRequestsInsideRequestPermitUntilDownstreamWorkCompletes() throws Exception {
-        CalendarLinkRequestThrottle throttle = throttle(1, 10);
-        CalendarRouteFilter filter = filter(new CalendarAccessService(), null, throttle);
+    void sendsValidNonGetCanonicalRequestsToTheNormalFilterChain() throws Exception {
+        CalendarRouteFilter filter = filter(new CalendarAccessService(), null);
         AtomicInteger filterChainCalls = new AtomicInteger();
 
         filter.doFilter(
@@ -87,24 +79,18 @@ final class CalendarRouteFilterTest {
                         new HashMap<>(),
                         "192.0.2.10"),
                 response(new ResponseState()),
-                (request, response) -> {
-                    assertEquals(0, throttle.availableConcurrentRequestPermits());
-                    filterChainCalls.incrementAndGet();
-                });
+                (request, response) -> filterChainCalls.incrementAndGet());
 
-        assertAll(
-                () -> assertEquals(1, filterChainCalls.get()),
-                () -> assertEquals(1, throttle.availableConcurrentRequestPermits()));
+        assertEquals(1, filterChainCalls.get());
     }
 
     @Test
-    void passesTheCurrentUserToCanonicalCalendarAccessAndReleasesCapacity() throws Exception {
+    void passesTheCurrentUserToCanonicalCalendarAccess() throws Exception {
         ApplicationUser user = activeUser();
         Calendar calendar = new Calendar();
         AtomicReference<ApplicationUser> receivedUser = new AtomicReference<>();
         AtomicReference<String> receivedToken = new AtomicReference<>();
         AtomicInteger forwardCount = new AtomicInteger();
-        CalendarLinkRequestThrottle throttle = throttle(1, 10);
         CalendarRouteFilter filter = filter(new CalendarAccessService() {
             @Override
             public Calendar requireCalendarReadableByLinkToken(ApplicationUser candidate, String calendarLinkToken) {
@@ -112,7 +98,7 @@ final class CalendarRouteFilterTest {
                 receivedToken.set(calendarLinkToken);
                 return calendar;
             }
-        }, user, throttle);
+        }, user);
         Map<String, Object> requestAttributes = new HashMap<>();
 
         filter.doFilter(
@@ -124,8 +110,7 @@ final class CalendarRouteFilterTest {
                 () -> assertSame(user, receivedUser.get()),
                 () -> assertEquals(CALENDAR_LINK_TOKEN, receivedToken.get()),
                 () -> assertSame(calendar, requestAttributes.get(CalendarRouteFilter.CALENDAR_REQUEST_ATTRIBUTE)),
-                () -> assertEquals(1, forwardCount.get()),
-                () -> assertEquals(1, throttle.availableConcurrentRequestPermits()));
+                () -> assertEquals(1, forwardCount.get()));
     }
 
     @Test
@@ -140,7 +125,7 @@ final class CalendarRouteFilterTest {
                 accessCalls.incrementAndGet();
                 return new Calendar();
             }
-        }, null, throttle(1, 10));
+        }, null);
 
         filter.doFilter(
                 request(
@@ -158,7 +143,7 @@ final class CalendarRouteFilterTest {
     }
 
     @Test
-    void doesNotTreatAnExceptionFromTheForwardedViewAsAFailedCalendarLookupAndReleasesCapacity() {
+    void doesNotTreatAnExceptionFromTheForwardedViewAsAFailedCalendarLookup() {
         AtomicInteger forwardCount = new AtomicInteger();
         RequestDispatcher requestDispatcher = new RequestDispatcher() {
             @Override
@@ -171,13 +156,12 @@ final class CalendarRouteFilterTest {
             public void include(ServletRequest request, ServletResponse response) {
             }
         };
-        CalendarLinkRequestThrottle throttle = throttle(1, 10);
         CalendarRouteFilter filter = filter(new CalendarAccessService() {
             @Override
             public Calendar requireCalendarReadableByLinkToken(ApplicationUser user, String calendarLinkToken) {
                 return new Calendar();
             }
-        }, null, throttle);
+        }, null);
 
         assertThrows(
                 NotFoundException.class,
@@ -185,9 +169,7 @@ final class CalendarRouteFilterTest {
                         request("GET", "/" + CALENDAR_LINK_TOKEN, requestDispatcher, new HashMap<>(), "192.0.2.10"),
                         response(new ResponseState()),
                         filterChain(new AtomicInteger())));
-        assertAll(
-                () -> assertEquals(1, forwardCount.get()),
-                () -> assertEquals(1, throttle.availableConcurrentRequestPermits()));
+        assertEquals(1, forwardCount.get());
     }
 
     @Test
@@ -214,7 +196,7 @@ final class CalendarRouteFilterTest {
             public Calendar requireCalendarReadableByLinkToken(ApplicationUser user, String calendarLinkToken) {
                 throw new NotFoundException("Calendar was not found.");
             }
-        }, null, throttle(1, 10));
+        }, null);
 
         filter.doFilter(
                 request("GET", "/" + CALENDAR_LINK_TOKEN, requestDispatcher, requestAttributes, "192.0.2.10"),
@@ -232,126 +214,21 @@ final class CalendarRouteFilterTest {
                 () -> assertEquals(HttpServletResponse.SC_NOT_FOUND, responseState.status.get()));
     }
 
-    @Test
-    void returnsAGenericRetryableResponseBeforeCalendarLookupWhenTheSourceLimitIsReached() throws Exception {
-        AtomicInteger accessCalls = new AtomicInteger();
-        CountingCurrentUser currentUser = new CountingCurrentUser(null);
-        CalendarLinkRequestThrottle throttle = throttle(2, 1);
-        CalendarRouteFilter filter = filterWithCurrentUser(
-                new CalendarAccessService() {
-                    @Override
-                    public Calendar requireCalendarReadableByLinkToken(
-                            ApplicationUser user,
-                            String calendarLinkToken) {
-                        accessCalls.incrementAndGet();
-                        return new Calendar();
-                    }
-                },
-                currentUser,
-                throttle,
-                new ClientRequestSourceResolver(null));
-        RequestDispatcher requestDispatcher = forwardingDispatcher(new AtomicInteger());
-
-        filter.doFilter(
-                request("GET", "/" + CALENDAR_LINK_TOKEN, requestDispatcher, new HashMap<>(), "192.0.2.10"),
-                response(new ResponseState()),
-                filterChain(new AtomicInteger()));
-        ResponseState rejectedResponse = new ResponseState();
-        filter.doFilter(
-                request("GET", "/" + CALENDAR_LINK_TOKEN, requestDispatcher, new HashMap<>(), "192.0.2.10"),
-                response(rejectedResponse),
-                filterChain(new AtomicInteger()));
-
-        assertAll(
-                () -> assertEquals(1, accessCalls.get()),
-                () -> assertEquals(1, currentUser.findCalls),
-                () -> assertEquals(429, rejectedResponse.status.get()),
-                () -> assertEquals("60", rejectedResponse.headers.get("Retry-After")),
-                () -> assertEquals("no-store", rejectedResponse.headers.get("Cache-Control")),
-                () -> assertEquals("text/plain;charset=UTF-8", rejectedResponse.contentType),
-                () -> assertEquals("Too many calendar link requests. Try again later.", rejectedResponse.body.toString()),
-                () -> assertTrue(!rejectedResponse.body.toString().contains(CALENDAR_LINK_TOKEN)));
-    }
-
-    @Test
-    void railwayClientsBehindTheSameProxyReceiveIndependentCalendarLimits() throws Exception {
-        AtomicInteger accessCalls = new AtomicInteger();
-        CalendarRouteFilter filter = filter(new CalendarAccessService() {
-            @Override
-            public Calendar requireCalendarReadableByLinkToken(ApplicationUser user, String calendarLinkToken) {
-                accessCalls.incrementAndGet();
-                return new Calendar();
-            }
-        }, null, throttle(1, 1), new ClientRequestSourceResolver("production-environment-id"));
-        RequestDispatcher requestDispatcher = forwardingDispatcher(new AtomicInteger());
-
-        filter.doFilter(
-                request(
-                        "GET",
-                        "/" + CALENDAR_LINK_TOKEN,
-                        requestDispatcher,
-                        new HashMap<>(),
-                        "100.64.8.9",
-                        "198.51.100.10"),
-                response(new ResponseState()),
-                filterChain(new AtomicInteger()));
-        filter.doFilter(
-                request(
-                        "GET",
-                        "/" + CALENDAR_LINK_TOKEN,
-                        requestDispatcher,
-                        new HashMap<>(),
-                        "100.64.8.9",
-                        "198.51.100.11"),
-                response(new ResponseState()),
-                filterChain(new AtomicInteger()));
-
-        assertEquals(2, accessCalls.get());
-    }
-
     private static CalendarRouteFilter filter(
             CalendarAccessService calendarAccessService,
-            ApplicationUser user,
-            CalendarLinkRequestThrottle throttle) {
-        return filter(
-                calendarAccessService,
-                user,
-                throttle,
-                new ClientRequestSourceResolver(null));
-    }
-
-    private static CalendarRouteFilter filter(
-            CalendarAccessService calendarAccessService,
-            ApplicationUser user,
-            CalendarLinkRequestThrottle throttle,
-            ClientRequestSourceResolver clientRequestSourceResolver) {
+            ApplicationUser user) {
         return filterWithCurrentUser(
                 calendarAccessService,
-                new FixedCurrentUser(user),
-                throttle,
-                clientRequestSourceResolver);
+                new FixedCurrentUser(user));
     }
 
     private static CalendarRouteFilter filterWithCurrentUser(
             CalendarAccessService calendarAccessService,
-            CurrentUser currentUser,
-            CalendarLinkRequestThrottle throttle,
-            ClientRequestSourceResolver clientRequestSourceResolver) {
+            CurrentUser currentUser) {
         CalendarRouteFilter filter = new CalendarRouteFilter();
         setField(filter, "calendarAccessService", calendarAccessService);
         setField(filter, "currentUser", currentUser);
-        setField(filter, "calendarLinkRequestThrottle", throttle);
-        setField(filter, "clientRequestSourceResolver", clientRequestSourceResolver);
         return filter;
-    }
-
-    private static CalendarLinkRequestThrottle throttle(int maximumConcurrentRequests, int maximumRequestsPerSource) {
-        return new CalendarLinkRequestThrottle(
-                Clock.fixed(Instant.parse("2026-07-16T10:00:00Z"), ZoneOffset.UTC),
-                maximumRequestsPerSource,
-                Duration.ofMinutes(1),
-                100,
-                maximumConcurrentRequests);
     }
 
     private static RequestDispatcher forwardingDispatcher(AtomicInteger forwardCount) {
@@ -424,19 +301,8 @@ final class CalendarRouteFilterTest {
                         responseState.status.set((Integer) arguments[0]);
                         yield null;
                     }
-                    case "setHeader" -> {
-                        responseState.headers.put((String) arguments[0], (String) arguments[1]);
-                        yield null;
-                    }
-                    case "setContentType" -> {
-                        responseState.contentType = (String) arguments[0];
-                        yield null;
-                    }
-                    case "getWriter" -> new PrintWriter(responseState.body, true);
                     case "reset" -> {
                         responseState.status.set(HttpServletResponse.SC_OK);
-                        responseState.headers.clear();
-                        responseState.body.getBuffer().setLength(0);
                         yield null;
                     }
                     default -> defaultValue(method.getReturnType());
@@ -469,26 +335,8 @@ final class CalendarRouteFilterTest {
         }
     }
 
-    private static final class CountingCurrentUser extends CurrentUser {
-        private final ApplicationUser user;
-        private int findCalls;
-
-        private CountingCurrentUser(ApplicationUser user) {
-            this.user = user;
-        }
-
-        @Override
-        public Optional<ApplicationUser> find() {
-            findCalls++;
-            return Optional.ofNullable(user);
-        }
-    }
-
     private static final class ResponseState {
         private final AtomicInteger status = new AtomicInteger(HttpServletResponse.SC_OK);
-        private final Map<String, String> headers = new HashMap<>();
-        private final StringWriter body = new StringWriter();
-        private String contentType;
     }
 
     private record RequestCase(String method, String path) {

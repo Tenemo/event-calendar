@@ -67,12 +67,17 @@ final class PostgreSqlApplicationContractEndToEndIT {
         }
 
         assertEquals(
-                List.of(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15),
+                List.of(
+                        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+                        12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+                        22, 23, 24, 25, 26, 27, 28),
                 installedRanks,
                 "The isolated database must contain one ordered history row for every migration.");
         assertEquals(
                 List.of(
-                        "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"),
+                        "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11",
+                        "12", "13", "14", "15", "16", "17", "18", "19", "20", "21",
+                        "22", "23", "24", "25", "26", "27", "28"),
                 installedVersions,
                 "No versioned SQL or Java migration may be missing from the deployed schema.");
     }
@@ -85,6 +90,8 @@ final class PostgreSqlApplicationContractEndToEndIT {
                 "app_invitation_scope_check",
                 "app_registration_bootstrap_singleton_check",
                 "app_user_password_version_check",
+                "calendar_description_maximum_length_check",
+                "calendar_event_description_maximum_length_check",
                 "calendar_event_check",
                 "calendar_member_role_name_check",
                 "calendar_public_token_check");
@@ -108,6 +115,23 @@ final class PostgreSqlApplicationContractEndToEndIT {
                     "update calendar set public_token = ? where id = ?",
                     "AAAAAAAAAAB",
                     calendarId);
+            assertCheckConstraintRejects(
+                    connection,
+                    "calendar_description_maximum_length_check",
+                    "update calendar set description = ? where id = ?",
+                    "c".repeat(4001),
+                    calendarId);
+            assertCheckConstraintRejects(
+                    connection,
+                    "calendar_event_description_maximum_length_check",
+                    "insert into calendar_event "
+                            + "(calendar_id, title, description, start_at, end_at, created_by_user_id) "
+                            + "values (?, ?, ?, timestamptz '2026-07-17 10:00:00+00', "
+                            + "timestamptz '2026-07-17 11:00:00+00', ?)",
+                    calendarId,
+                    "Over-limit event description",
+                    "e".repeat(4001),
+                    ownerUserId);
             assertCheckConstraintRejects(
                     connection,
                     "calendar_member_role_name_check",
@@ -183,10 +207,68 @@ final class PostgreSqlApplicationContractEndToEndIT {
         assertIndex(databaseIndexes, "calendar_member", "calendar_id,user_id", true);
         assertIndex(databaseIndexes, "calendar_member", "user_id", false);
         assertIndex(databaseIndexes, "app_invitation", "invite_token", true);
-        assertIndex(databaseIndexes, "app_invitation", "calendar_id", false);
-        assertIndex(databaseIndexes, "app_invitation", "created_by_user_id", false);
-        assertIndex(databaseIndexes, "calendar_event", "calendar_id,start_at", false);
+        assertIndex(
+                databaseIndexes,
+                "app_invitation",
+                "idx_app_invitation_created_by_user_created_at_id",
+                "created_by_user_id,created_at,id",
+                "ASC,DESC,DESC",
+                "",
+                false);
+        assertIndex(
+                databaseIndexes,
+                "app_invitation",
+                "idx_app_invitation_calendar_created_at_id",
+                "calendar_id,created_at,id",
+                "ASC,DESC,DESC",
+                "(calendar_id IS NOT NULL)",
+                false);
+        assertIndex(
+                databaseIndexes,
+                "app_invitation",
+                "idx_app_invitation_registration_creator_expires",
+                "created_by_user_id,expires_at",
+                "ASC,ASC",
+                "((calendar_id IS NULL) AND (role_name IS NULL) AND (accepted_at IS NULL) "
+                        + "AND (revoked_at IS NULL))",
+                false);
+        assertIndex(
+                databaseIndexes,
+                "app_invitation",
+                "idx_app_invitation_editor_calendar_expires",
+                "calendar_id,expires_at",
+                "ASC,ASC",
+                "((calendar_id IS NOT NULL) AND (accepted_at IS NULL) AND (revoked_at IS NULL))",
+                false);
+        assertIndex(
+                databaseIndexes,
+                "calendar_event",
+                "idx_calendar_event_calendar_start_id",
+                "calendar_id,start_at,id",
+                "ASC,ASC,ASC",
+                "",
+                false);
+        assertIndex(
+                databaseIndexes,
+                "calendar_event",
+                "idx_calendar_event_all_day_calendar",
+                "calendar_id",
+                "ASC",
+                "(all_day = true)",
+                false);
         assertIndex(databaseIndexes, "calendar_event", "calendar_id,end_at", false);
+        assertFalse(
+                databaseIndexes.stream().anyMatch(databaseIndex -> databaseIndex.indexName().equals(
+                        "idx_app_invitation_calendar_id")),
+                "The calendar invitation prefix index must be removed after its replacement exists.");
+        assertFalse(
+                databaseIndexes.stream().anyMatch(databaseIndex -> databaseIndex.indexName().equals(
+                        "idx_app_invitation_created_by_user_id")),
+                "The creator invitation prefix index must be removed after its replacement exists.");
+        assertFalse(
+                databaseIndexes.stream().anyMatch(databaseIndex -> databaseIndex.indexName().equals(
+                        "idx_calendar_event_calendar_start")),
+                "The event start prefix index must be removed after its replacement exists.");
     }
 
     @Test
@@ -310,7 +392,13 @@ final class PostgreSqlApplicationContractEndToEndIT {
                                 + "index_record.relname as index_name, "
                                 + "index_state.indisunique as unique_index, "
                                 + "string_agg(table_attribute.attname, ',' order by index_column.ordinality) "
-                                + "as indexed_columns "
+                                + "as indexed_columns, "
+                                + "string_agg(case "
+                                + "when (index_state.indoption[index_column.ordinality - 1]::integer & 1) = 1 "
+                                + "then 'DESC' else 'ASC' end, ',' order by index_column.ordinality) "
+                                + "as sort_directions, "
+                                + "coalesce(pg_get_expr(index_state.indpred, index_state.indrelid), '') "
+                                + "as index_predicate "
                                 + "from pg_index index_state "
                                 + "join pg_class table_record on table_record.oid = index_state.indrelid "
                                 + "join pg_class index_record on index_record.oid = index_state.indexrelid "
@@ -324,7 +412,8 @@ final class PostgreSqlApplicationContractEndToEndIT {
                                 + "and index_state.indisvalid = true "
                                 + "and index_state.indisready = true "
                                 + "and index_column.ordinality <= index_state.indnkeyatts "
-                                + "group by table_record.relname, index_record.relname, index_state.indisunique "
+                                + "group by table_record.relname, index_record.relname, "
+                                + "index_state.indisunique, index_state.indpred, index_state.indrelid "
                                 + "order by table_record.relname, index_record.relname");
                 ResultSet resultSet = statement.executeQuery()) {
             while (resultSet.next()) {
@@ -332,7 +421,9 @@ final class PostgreSqlApplicationContractEndToEndIT {
                         resultSet.getString("table_name"),
                         resultSet.getString("index_name"),
                         resultSet.getBoolean("unique_index"),
-                        resultSet.getString("indexed_columns")));
+                        resultSet.getString("indexed_columns"),
+                        resultSet.getString("sort_directions"),
+                        resultSet.getString("index_predicate")));
             }
         }
         return databaseIndexes;
@@ -349,6 +440,26 @@ final class PostgreSqlApplicationContractEndToEndIT {
                         && databaseIndex.unique() == unique),
                 () -> "Expected a valid, ready " + (unique ? "unique " : "") + "index on "
                         + tableName + " (" + indexedColumns + "). Available indexes: " + databaseIndexes);
+    }
+
+    private void assertIndex(
+            List<DatabaseIndex> databaseIndexes,
+            String tableName,
+            String indexName,
+            String indexedColumns,
+            String sortDirections,
+            String indexPredicate,
+            boolean unique) {
+        assertTrue(
+                databaseIndexes.stream().anyMatch(databaseIndex -> databaseIndex.tableName().equals(tableName)
+                        && databaseIndex.indexName().equals(indexName)
+                        && databaseIndex.indexedColumns().equals(indexedColumns)
+                        && databaseIndex.sortDirections().equals(sortDirections)
+                        && databaseIndex.indexPredicate().equals(indexPredicate)
+                        && databaseIndex.unique() == unique),
+                () -> "Expected exact valid, ready index " + indexName + " on " + tableName
+                        + " with columns " + indexedColumns + ", sort directions " + sortDirections
+                        + ", and predicate '" + indexPredicate + "'. Available indexes: " + databaseIndexes);
     }
 
     private DatabaseFixture createCommittedDatabaseFixture() throws SQLException {
@@ -556,7 +667,9 @@ final class PostgreSqlApplicationContractEndToEndIT {
             String tableName,
             String indexName,
             boolean unique,
-            String indexedColumns) {
+            String indexedColumns,
+            String sortDirections,
+            String indexPredicate) {
     }
 
     private record DatabaseFixture(long ownerUserId, long candidateUserId, long calendarId) {

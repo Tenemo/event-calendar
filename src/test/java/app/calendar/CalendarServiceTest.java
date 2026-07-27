@@ -1,6 +1,7 @@
 package app.calendar;
 
 import static app.testsupport.ServiceTestSupport.entityManagerStub;
+import static app.testsupport.ServiceTestSupport.queryParameter;
 import static app.testsupport.ServiceTestSupport.setEntityId;
 import static app.testsupport.ServiceTestSupport.setField;
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -23,6 +24,7 @@ import app.testsupport.ServiceTestSupport.FindLock;
 import app.user.ApplicationUser;
 import app.util.AuthorizationException;
 import app.util.ConflictException;
+import app.util.TextNormalizer;
 import app.util.ValidationException;
 import jakarta.persistence.LockModeType;
 import java.time.OffsetDateTime;
@@ -85,7 +87,14 @@ final class CalendarServiceTest {
         Calendar calendar = activeCalendar(80L, actingUser);
         EntityManagerStub entityManagerStub = entityManagerStub()
                 .find(Calendar.class, calendar.getId(), calendar)
-                .resultList("calendarEvent.allDay = true", List.of())
+                .singleResult(
+                        "select count(calendarEvent)",
+                        0L,
+                        queryParameter("calendarId", calendar.getId()))
+                .resultList(
+                        "calendarEvent.allDay = true",
+                        List.of(),
+                        queryParameter("calendarId", calendar.getId()))
                 .singleResult("count(calendarEntity)", 0L);
         RecordingAuditService auditService = new RecordingAuditService();
         CalendarService calendarService = new CalendarService();
@@ -122,6 +131,51 @@ final class CalendarServiceTest {
                                 new FindLock(Calendar.class, calendar.getId(), LockModeType.PESSIMISTIC_WRITE)),
                         entityManagerStub.findLocks()),
                 () -> assertEquals(2, entityManagerStub.flushCount()));
+    }
+
+    @Test
+    void calendarDescriptionsPreserveMultilineUnicodeAtTheSharedLimitAndRejectLongerValues() {
+        ApplicationUser actingUser = activeUser(42L);
+        Calendar calendar = activeCalendar(80L, actingUser);
+        EntityManagerStub entityManagerStub = entityManagerStub().find(Calendar.class, calendar.getId(), calendar);
+        CalendarService calendarService = configuredSettingsService(entityManagerStub);
+        String unicodePrefix = "Zażółć gęślą jaźń\n東京\n\uD801\uDC37";
+        String normalizedMaximumLengthDescription = unicodePrefix
+                + "d".repeat(TextNormalizer.MAXIMUM_DESCRIPTION_LENGTH - unicodePrefix.length());
+        String browserPostedMaximumLengthDescription =
+                normalizedMaximumLengthDescription.replace("\n", "\r\n");
+
+        calendarService.updateCalendarSettings(
+                actingUser,
+                calendar.getId(),
+                calendar.getName(),
+                browserPostedMaximumLengthDescription,
+                calendar.getTimeZone(),
+                calendar.isPublicAccessEnabled(),
+                calendar.getVersion());
+        ValidationException exception = assertThrows(
+                ValidationException.class,
+                () -> calendarService.updateCalendarSettings(
+                        actingUser,
+                        calendar.getId(),
+                        calendar.getName(),
+                        browserPostedMaximumLengthDescription + "x",
+                        calendar.getTimeZone(),
+                        calendar.isPublicAccessEnabled(),
+                        calendar.getVersion()));
+
+        assertAll(
+                () -> assertEquals(
+                        TextNormalizer.MAXIMUM_DESCRIPTION_LENGTH,
+                        normalizedMaximumLengthDescription.length()),
+                () -> assertEquals(
+                        TextNormalizer.MAXIMUM_DESCRIPTION_LENGTH + 2,
+                        browserPostedMaximumLengthDescription.length()),
+                () -> assertEquals(normalizedMaximumLengthDescription, calendar.getDescription()),
+                () -> assertEquals(
+                        "Calendar description must be 4,000 characters or fewer.",
+                        exception.getMessage()),
+                () -> assertEquals(1, entityManagerStub.flushCount()));
     }
 
     @Test
@@ -167,7 +221,14 @@ final class CalendarServiceTest {
         OffsetDateTime originalTimedEnd = timedEvent.getEndTime();
         EntityManagerStub entityManagerStub = entityManagerStub()
                 .find(Calendar.class, calendar.getId(), calendar)
-                .resultList("calendarEvent.allDay = true", List.of(allDayEvent));
+                .singleResult(
+                        "select count(calendarEvent)",
+                        1L,
+                        queryParameter("calendarId", calendar.getId()))
+                .resultList(
+                        "calendarEvent.allDay = true",
+                        List.of(allDayEvent),
+                        queryParameter("calendarId", calendar.getId()));
         CalendarService calendarService = configuredSettingsService(entityManagerStub);
 
         calendarService.updateCalendarSettings(
@@ -189,6 +250,9 @@ final class CalendarServiceTest {
                         allDayEvent.getEndTime()),
                 () -> assertEquals(originalTimedStart, timedEvent.getStartTime()),
                 () -> assertEquals(originalTimedEnd, timedEvent.getEndTime()),
+                () -> assertEquals(
+                        1_000,
+                        entityManagerStub.queryPaginations().getFirst().maximumResults()),
                 () -> assertEquals(1, entityManagerStub.flushCount()));
     }
 
@@ -204,7 +268,14 @@ final class CalendarServiceTest {
                 "2011-12-31T00:00:00+14:00");
         EntityManagerStub entityManagerStub = entityManagerStub()
                 .find(Calendar.class, calendar.getId(), calendar)
-                .resultList("calendarEvent.allDay = true", List.of(allDayEvent));
+                .singleResult(
+                        "select count(calendarEvent)",
+                        1L,
+                        queryParameter("calendarId", calendar.getId()))
+                .resultList(
+                        "calendarEvent.allDay = true",
+                        List.of(allDayEvent),
+                        queryParameter("calendarId", calendar.getId()));
         CalendarService calendarService = configuredSettingsService(entityManagerStub);
 
         calendarService.updateCalendarSettings(
@@ -223,6 +294,37 @@ final class CalendarServiceTest {
                 () -> assertEquals(
                         OffsetDateTime.parse("2011-12-30T00:00:00+01:00"),
                         allDayEvent.getEndTime()));
+    }
+
+    @Test
+    void rejectsUnboundedSynchronousTimeZoneChangesBeforeLoadingAllDayEvents() {
+        ApplicationUser actingUser = activeUser(42L);
+        Calendar calendar = activeCalendar(80L, actingUser);
+        EntityManagerStub entityManagerStub = entityManagerStub()
+                .find(Calendar.class, calendar.getId(), calendar)
+                .singleResult(
+                        "select count(calendarEvent)",
+                        1_001L,
+                        queryParameter("calendarId", calendar.getId()));
+        CalendarService calendarService = configuredSettingsService(entityManagerStub);
+
+        ValidationException exception = assertThrows(
+                ValidationException.class,
+                () -> calendarService.updateCalendarSettings(
+                        actingUser,
+                        calendar.getId(),
+                        calendar.getName(),
+                        calendar.getDescription(),
+                        "America/New_York",
+                        calendar.isPublicAccessEnabled(),
+                        calendar.getVersion()));
+
+        assertAll(
+                () -> assertEquals(
+                        "The calendar time zone cannot be changed while it has more than 1000 all-day events.",
+                        exception.getMessage()),
+                () -> assertEquals("Europe/Warsaw", calendar.getTimeZone()),
+                () -> assertEquals(0, entityManagerStub.flushCount()));
     }
 
     @Test
