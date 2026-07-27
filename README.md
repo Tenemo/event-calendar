@@ -154,7 +154,9 @@ Railway builds the committed `Dockerfile`, runs one web replica, and checks `/he
 
 When Railway identifies an environment as non-production, every response is marked `noindex, nofollow`.
 
-Use one application replica because authenticated sessions are stored in memory. A restart or redeploy requires users to sign in again.
+The shared preview bootstrap and verification credentials are intentionally reusable, non-production-only values. Pull-request code may receive them; they are not used as production credentials.
+
+Unauthenticated sessions expire after ten idle minutes. Successful sign-in extends that server-side idle lifetime to 30 days. Use one application replica because sessions are stored in memory; a restart or redeploy requires users to sign in again.
 
 Before the first public deployment of this cleaned schema, recreate only the PostgreSQL database attached to this application. Confirm the Railway project, environment, service, database name, and current connection before deleting anything.
 

@@ -67,15 +67,27 @@ public class CalendarSettingsView implements Serializable {
                     publicAccessEnabled,
                     version);
             copyCalendar(calendar);
-            addMessage(FacesMessage.SEVERITY_INFO, "Calendar settings saved.", "The calendar has been updated.");
+            FacesMessages.add(
+                    FacesMessage.SEVERITY_INFO,
+                    "Calendar settings saved.",
+                    "The calendar has been updated.");
         } catch (ValidationException exception) {
-            addMessage(FacesMessage.SEVERITY_ERROR, "Settings could not be saved.", exception.getMessage());
+            FacesMessages.add(
+                    FacesMessage.SEVERITY_ERROR,
+                    "Settings could not be saved.",
+                    exception.getMessage());
         } catch (ConflictException exception) {
             reloadAfterConflict();
-            addMessage(FacesMessage.SEVERITY_ERROR, "Settings could not be saved.", exception.getMessage());
+            FacesMessages.add(
+                    FacesMessage.SEVERITY_ERROR,
+                    "Settings could not be saved.",
+                    exception.getMessage());
         } catch (AuthorizationException | NotFoundException exception) {
             markNotFound();
-            addMessage(FacesMessage.SEVERITY_ERROR, "Settings could not be saved.", exception.getMessage());
+            FacesMessages.add(
+                    FacesMessage.SEVERITY_ERROR,
+                    "Settings could not be saved.",
+                    exception.getMessage());
         }
     }
 
@@ -107,10 +119,6 @@ public class CalendarSettingsView implements Serializable {
         if (!facesContext.isPostback()) {
             facesContext.getExternalContext().setResponseStatus(HttpServletResponse.SC_NOT_FOUND);
         }
-    }
-
-    private void addMessage(FacesMessage.Severity severity, String summary, String detail) {
-        FacesMessages.add(severity, summary, detail);
     }
 
     public String getCalendarIdParameter() { return calendarIdParameter; }

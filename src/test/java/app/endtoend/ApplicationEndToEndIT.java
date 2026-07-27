@@ -289,20 +289,22 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
 
     @Test
     @Order(5)
-    void editorInvitationAndLastAdminProtectionWork() throws SQLException {
+    void editorInvitationAndLastAdminProtectionWork() throws Exception {
         String suffix = uniqueSuffix();
         String administratorUsername = "administrator-" + suffix;
-        String editorUsername = "editor-" + suffix;
+        String firstEditorUsername = "editor-" + suffix + "-one";
+        String secondEditorUsername = "editor-" + suffix + "-two";
         String administratorDisplayName = "Administrator " + suffix;
-        String editorDisplayName = "Editor " + suffix;
+        String firstEditorDisplayName = "Editor one " + suffix;
+        String secondEditorDisplayName = "Editor two " + suffix;
         long administratorId = seedUser(administratorUsername, administratorDisplayName);
-        seedUser(editorUsername, editorDisplayName);
+        seedUser(firstEditorUsername, firstEditorDisplayName);
+        seedUser(secondEditorUsername, secondEditorDisplayName);
         SeededCalendar calendar = seedCalendar(
                 administratorId,
                 "Membership calendar " + suffix);
 
-        try (BrowserContext administratorContext = newBrowserContext();
-                BrowserContext editorContext = newBrowserContext()) {
+        try (BrowserContext administratorContext = newBrowserContext()) {
             Page administratorPage = administratorContext.newPage();
             signIn(administratorPage, administratorUsername, TEST_PASSWORD);
             navigate(administratorPage, "/app/invitations");
@@ -313,12 +315,55 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             String invitationLink =
                     administratorPage.locator("input[id$='generatedInvitationLink']").inputValue();
 
-            Page editorPage = editorContext.newPage();
-            signIn(editorPage, editorUsername, TEST_PASSWORD);
-            navigateBearerLink(editorPage, invitationLink);
-            editorPage.locator("button:has-text('Accept invitation')").click();
-            editorPage.waitForLoadState();
-            assertThat(editorPage.locator("body")).containsText("Editor");
+            CountDownLatch formsReady = new CountDownLatch(2);
+            CountDownLatch submitForms = new CountDownLatch(1);
+            List<InvitationAcceptanceResult> acceptanceResults;
+            try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+                Future<InvitationAcceptanceResult> firstAcceptance = executor.submit(
+                        () -> attemptEditorInvitationAcceptance(
+                                firstEditorUsername,
+                                invitationLink,
+                                formsReady,
+                                submitForms));
+                Future<InvitationAcceptanceResult> secondAcceptance = executor.submit(
+                        () -> attemptEditorInvitationAcceptance(
+                                secondEditorUsername,
+                                invitationLink,
+                                formsReady,
+                                submitForms));
+
+                assertTrue(
+                        formsReady.await(30, TimeUnit.SECONDS),
+                        "Both editor invitation forms should become ready.");
+                submitForms.countDown();
+                acceptanceResults = List.of(
+                        firstAcceptance.get(90, TimeUnit.SECONDS),
+                        secondAcceptance.get(90, TimeUnit.SECONDS));
+            }
+
+            String acceptedCalendarPath = "/" + calendar.linkToken();
+            assertEquals(
+                    1,
+                    acceptanceResults.stream()
+                            .filter(result -> acceptedCalendarPath.equals(result.resultingPath()))
+                            .count(),
+                    "Exactly one concurrent request should consume the editor invitation.");
+            assertEquals(
+                    1,
+                    acceptanceResults.stream()
+                            .filter(result -> "/register".equals(result.resultingPath())
+                                    && result.pageText().contains("Invitation could not be accepted."))
+                            .count(),
+                    "The request that loses the invitation race should receive a clear rejection.");
+
+            String editorUsername = acceptanceResults.stream()
+                    .filter(result -> acceptedCalendarPath.equals(result.resultingPath()))
+                    .map(InvitationAcceptanceResult::username)
+                    .findFirst()
+                    .orElseThrow();
+            String editorDisplayName = editorUsername.equals(firstEditorUsername)
+                    ? firstEditorDisplayName
+                    : secondEditorDisplayName;
             assertEquals(
                     "EDITOR",
                     queryText(
@@ -329,6 +374,17 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
                                     + "and application_user.username = ?",
                             calendar.id(),
                             editorUsername));
+            assertEquals(
+                    1,
+                    queryLong(
+                            "select count(*) from calendar_membership membership "
+                                    + "join app_user application_user "
+                                    + "on application_user.id = membership.user_id "
+                                    + "where membership.calendar_id = ? "
+                                    + "and application_user.username in (?, ?)",
+                            calendar.id(),
+                            firstEditorUsername,
+                            secondEditorUsername));
             assertEquals(
                     0,
                     queryLong("select count(*) from invitation where calendar_id = ?", calendar.id()));
@@ -386,11 +442,49 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             }
             page.locator("button:has-text('Register')")
                     .click(new Locator.ClickOptions().setTimeout(Duration.ofSeconds(60).toMillis()));
-            page.waitForTimeout(250);
+            page.waitForLoadState();
             return URI.create(page.url()).getPath();
         } catch (Exception exception) {
             throw new IllegalStateException(
-                    "A concurrent disposable registration request failed.");
+                    "A concurrent disposable registration request failed.",
+                    exception);
+        }
+    }
+
+    private InvitationAcceptanceResult attemptEditorInvitationAcceptance(
+            String username,
+            String invitationLink,
+            CountDownLatch formsReady,
+            CountDownLatch submitForms) {
+        try (Playwright isolatedPlaywright = Playwright.create();
+                Browser isolatedBrowser = isolatedPlaywright
+                        .chromium()
+                        .launch(new BrowserType.LaunchOptions().setHeadless(true));
+                BrowserContext context = isolatedBrowser.newContext(
+                        new Browser.NewContextOptions().setIgnoreHTTPSErrors(true))) {
+            Page page = context.newPage();
+            signIn(page, username, TEST_PASSWORD);
+            navigateBearerLink(page, invitationLink);
+            Locator acceptInvitationButton = page.locator("button:has-text('Accept invitation')");
+            if (!acceptInvitationButton.isVisible()) {
+                throw new IllegalStateException("The editor invitation form was not available.");
+            }
+            formsReady.countDown();
+            if (!submitForms.await(30, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Concurrent invitation acceptance was not released.");
+            }
+            acceptInvitationButton.click(
+                    new Locator.ClickOptions().setTimeout(Duration.ofSeconds(60).toMillis()));
+            page.waitForLoadState();
+            return new InvitationAcceptanceResult(
+                    username,
+                    URI.create(page.url()).getPath(),
+                    page.locator("body").innerText());
+        } catch (Exception exception) {
+            formsReady.countDown();
+            throw new IllegalStateException(
+                    "A concurrent editor invitation request failed.",
+                    exception);
         }
     }
 
@@ -409,4 +503,9 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
                 calendarId,
                 username);
     }
+
+    private record InvitationAcceptanceResult(
+            String username,
+            String resultingPath,
+            String pageText) {}
 }

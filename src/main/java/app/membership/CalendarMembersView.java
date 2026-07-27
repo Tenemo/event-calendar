@@ -65,20 +65,20 @@ public class CalendarMembersView implements Serializable {
             calendarMembershipService.changeMemberRole(actingUser, calendarId, userId, role);
         } catch (ValidationException exception) {
             reloadMembersAfterRejectedChange();
-            addMessage(
+            FacesMessages.add(
                     FacesMessage.SEVERITY_ERROR,
                     "Member role could not be saved.",
                     exception.getMessage());
             return;
         } catch (AuthorizationException | NotFoundException exception) {
-            addMessage(
+            FacesMessages.add(
                     FacesMessage.SEVERITY_ERROR,
                     "Member role could not be saved.",
                     exception.getMessage());
             return;
         }
 
-        addMessage(
+        FacesMessages.add(
                 FacesMessage.SEVERITY_INFO,
                 "Member role saved.",
                 "The member's role has been updated.");
@@ -92,14 +92,20 @@ public class CalendarMembersView implements Serializable {
             calendarMembershipService.removeMembership(actingUser, calendarId, userId);
         } catch (ValidationException exception) {
             reloadMembersAfterRejectedChange();
-            addMessage(FacesMessage.SEVERITY_ERROR, "Member access could not be removed.", exception.getMessage());
+            FacesMessages.add(
+                    FacesMessage.SEVERITY_ERROR,
+                    "Member access could not be removed.",
+                    exception.getMessage());
             return;
         } catch (AuthorizationException | NotFoundException exception) {
-            addMessage(FacesMessage.SEVERITY_ERROR, "Member access could not be removed.", exception.getMessage());
+            FacesMessages.add(
+                    FacesMessage.SEVERITY_ERROR,
+                    "Member access could not be removed.",
+                    exception.getMessage());
             return;
         }
 
-        addMessage(
+        FacesMessages.add(
                 FacesMessage.SEVERITY_INFO,
                 "Member access removed.",
                 "The member can no longer edit this calendar. Public access through the calendar link is unchanged.");
@@ -130,7 +136,7 @@ public class CalendarMembersView implements Serializable {
             reloadMembers(actingUser);
         } catch (AuthorizationException | NotFoundException exception) {
             markNotFound();
-            addMessage(
+            FacesMessages.add(
                     FacesMessage.SEVERITY_WARN,
                     "The change was saved, but the page could not be refreshed.",
                     "Open the calendar again to see its current membership state.");
@@ -143,10 +149,6 @@ public class CalendarMembersView implements Serializable {
         if (!facesContext.isPostback()) {
             facesContext.getExternalContext().setResponseStatus(HttpServletResponse.SC_NOT_FOUND);
         }
-    }
-
-    private void addMessage(FacesMessage.Severity severity, String summary, String detail) {
-        FacesMessages.add(severity, summary, detail);
     }
 
     public String getCalendarIdParameter() { return calendarIdParameter; }
