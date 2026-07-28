@@ -59,7 +59,7 @@
 
 ## Verification
 
-Use the relevant committed tasks:
+Every task must run and pass all committed project checks before it can be considered complete:
 
 ```text
 mise run package
@@ -73,5 +73,15 @@ mise run docker-build
 - Tests must cover meaningful edge and failure cases and must never be accepted as flaky.
 - For browser failures, reproduce the behavior, find the root cause, then verify the fix through the real application.
 - Update `README.md` when setup, configuration, deployment, access rules, schema policy, backups, limitations, or operational behavior changes.
-- Before handoff, leave PostgreSQL and a current-source application instance running. Verify `/health` and a representative page, and report the manual-testing URL.
+- Do not skip a check because a change appears unrelated. A task is incomplete while any check is skipped or failing.
+- After all checks pass, establish the required local handoff state:
+
+```text
+mise run reseed-local
+mise run docker-up
+```
+
+- The final local database must be freshly reseeded by the committed deterministic reseed task, and PostgreSQL plus the current-source application must remain running.
+- Verify `http://localhost:9080/health` returns `ok`, verify a representative authenticated page contains the seeded data, and report the manual-testing URL.
+- Do not consider a task complete if the localhost site is unavailable or the seed is stale.
 - Never stop an unrelated process on the default application port. Use non-default ports when needed.

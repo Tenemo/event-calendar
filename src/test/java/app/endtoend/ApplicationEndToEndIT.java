@@ -47,6 +47,10 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             page.setViewportSize(320, 720);
             Response homeResponse = navigate(page, "/");
             assertEquals(200, homeResponse.status());
+            assertThat(page).hasTitle("calendar.social");
+            assertThat(page.locator(".app-brand span")).hasText("calendar.social");
+            assertThat(page.locator(".app-brand-mark"))
+                    .hasAttribute("src", "/jakarta.faces.resource/calendar-mark-v2.svg.xhtml?ln=images");
             assertThat(page.locator("h1")).hasText("Shared event calendars for real plans");
             assertSecurityHeaders(homeResponse);
             assertEquals(
@@ -72,6 +76,15 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             assertEquals("main-content", page.evaluate("document.activeElement.id"));
 
             navigate(page, "/sign-in");
+            assertThat(page).hasTitle("Sign in - calendar.social");
+            Locator usernameField = page.locator("input[id$='username']");
+            Locator passwordField = page.locator("input[id$='password']");
+            Locator signInButton = page.locator("input[type='submit'][value='Sign in']");
+            assertThat(usernameField).isFocused();
+            page.keyboard().press("Tab");
+            assertThat(passwordField).isFocused();
+            page.keyboard().press("Tab");
+            assertThat(signInButton).isFocused();
             assertAccessible(page);
             navigate(page, "/app/calendars");
             page.waitForURL("**/sign-in");
@@ -132,10 +145,12 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
         try (BrowserContext inviterContext = newBrowserContext()) {
             Page inviterPage = inviterContext.newPage();
             navigate(inviterPage, "/sign-in");
+            assertThat(inviterPage.locator("input[id$='username']")).isFocused();
             inviterPage.locator("input[id$='username']").fill(inviterUsername);
             inviterPage.locator("input[id$='password']").fill("definitely wrong");
             inviterPage.locator("input[type='submit'][value='Sign in']").click();
             assertThat(inviterPage.locator("body")).containsText("Sign-in failed.");
+            assertThat(inviterPage.locator("input[id$='password']")).isFocused();
             Locator signInMessages = inviterPage.locator("[id$='messages']");
             assertThat(signInMessages).hasAttribute("role", "alert");
             assertThat(signInMessages).hasAttribute("aria-live", "assertive");
@@ -149,7 +164,7 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             assertAccessible(inviterPage);
 
             inviterPage.locator("input[id$='password']").fill(TEST_PASSWORD);
-            inviterPage.locator("input[type='submit'][value='Sign in']").click();
+            inviterPage.locator("input[id$='password']").press("Enter");
             inviterPage.waitForURL("**/app/calendars");
             Cookie authenticationCookie = inviterContext.cookies(route("/")).stream()
                     .filter(cookie -> "LtpaToken2".equals(cookie.name))
@@ -174,6 +189,7 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
                     BrowserContext secondRegisteredContext = newBrowserContext()) {
                 Page registeredPage = registeredContext.newPage();
                 navigateBearerLink(registeredPage, invitationLink);
+                assertThat(registeredPage.locator("input[id$='username']")).isFocused();
                 assertAccessible(registeredPage);
                 fillRegistration(
                         registeredPage,
@@ -211,6 +227,7 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
 
                 Response accountSettingsResponse = navigate(registeredPage, "/app/account-settings");
                 assertSecurityHeaders(accountSettingsResponse);
+                assertThat(registeredPage.locator("input[id$='currentPassword']")).isFocused();
                 assertResponsiveAndAccessible(registeredPage, 768, 900);
                 registeredPage.locator("input[id$='currentPassword']").fill(TEST_PASSWORD);
                 registeredPage.locator("input[id$='newPassword']").fill(changedPassword);
@@ -267,7 +284,7 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             ownerPage.locator("button:has-text('Create event')").click();
             assertThat(ownerPage.locator("body")).containsText("Event title is required.");
             ownerPage.waitForFunction(
-                    "() => document.activeElement && document.activeElement.id.endsWith('messages')");
+                    "() => document.activeElement && document.activeElement.id.endsWith('eventTitle')");
 
             createTimedEvent(
                     ownerPage,
@@ -310,6 +327,7 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             assertEquals(0, readerPage.locator("button:has-text('Create event')").count());
 
             navigate(ownerPage, "/app/calendar-settings?id=" + calendarId);
+            assertThat(ownerPage.locator("input[id$='calendarName']")).isFocused();
             assertThat(ownerPage.locator(".app-nav a[aria-current='page']")).hasText("My calendars");
             assertResponsiveAndAccessible(ownerPage, 768, 900);
             Page staleOwnerPage = staleOwnerContext.newPage();

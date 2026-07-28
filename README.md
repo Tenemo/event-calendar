@@ -1,6 +1,6 @@
-# Shared calendar
+# calendar.social
 
-Shared calendar is a small server-rendered web app for coordinating events with friends and groups. Registered users can create multiple calendars, invite editors, and share a read-only calendar through its calendar link.
+calendar.social is a small server-rendered web app for coordinating events with friends and groups. Registered users can create multiple calendars, invite editors, and share a read-only calendar through its calendar link.
 
 ## What it does
 
@@ -34,7 +34,7 @@ mise run db
 mise run dev
 ```
 
-The default application URL is `https://localhost:9443`. Open Liberty uses a local development certificate, so a browser warning is expected. The database health check is available at `http://localhost:9080/health` and returns `ok` only when PostgreSQL is usable.
+The default application URL is `http://localhost:9080`, so the local workflow does not require accepting a development certificate. The database health check is available at `http://localhost:9080/health` and returns `ok` only when PostgreSQL is usable.
 
 To run the production container locally instead of Liberty development mode:
 
@@ -42,12 +42,24 @@ To run the production container locally instead of Liberty development mode:
 mise run docker-up
 ```
 
+## Deterministic local data
+
+Run this whenever you want to discard local application data and return to the same useful testing state:
+
+```text
+mise run reseed-local
+```
+
+The task starts local PostgreSQL when needed, refuses non-loopback database hosts, verifies that the target is empty or belongs to calendar.social, rebuilds the pre-launch schema from `V1`, and inserts fixed data in one transaction. It creates the local `admin` account, two additional members, three calendars, seven memberships, and fifteen realistic events. The fixtures cover public and private calendars, `ADMIN` and `EDITOR` roles, Warsaw and Lisbon time zones, past and future events, events crossing midnight, and single-day and multi-day all-day events.
+
+This command permanently deletes all application data in the configured local database. It cannot target a non-loopback host and does not run against the disposable end-to-end database unless that local database is explicitly selected through the `PG*` environment variables.
+
 ## First account
 
 Registration is invitation-only. For a fresh database, set `APP_BOOTSTRAP_INVITATION_TOKEN` to a random 43- to 80-character Base64URL value, start the app, and open:
 
 ```text
-https://localhost:9443/register?token=YOUR_TOKEN
+http://localhost:9080/register?token=YOUR_TOKEN
 ```
 
 The bootstrap invitation can create exactly one account. Its use is recorded atomically in the database and is not restored by deleting users. That first account can create ordinary registration invitations for friends.
@@ -58,10 +70,11 @@ Leave `APP_BOOTSTRAP_INVITATION_TOKEN` blank when bootstrap registration should 
 
 | Variable | Local default | Purpose |
 | --- | --- | --- |
-| `APP_BASE_URL` | `https://localhost:9443` | Public origin used in generated links. It must be an HTTP or HTTPS origin without credentials, a path, query parameters, or a fragment. |
+| `APP_BASE_URL` | `http://localhost:9080` | Public origin used in generated links. It must be an HTTP or HTTPS origin without credentials, a path, query parameters, or a fragment. |
 | `APP_DEFAULT_TIME_ZONE` | `Europe/Warsaw` | IANA time zone assigned to new calendars. |
 | `APP_BOOTSTRAP_INVITATION_TOKEN` | blank | Optional one-time invitation for the first account in a fresh database. |
 | `APP_LTPA_KEYS_PASSWORD` | `local-development-only` | Password protecting Liberty authentication keys. Use a stable secret in Railway. |
+| `APP_SSO_REQUIRES_SSL` | `false` locally | Controls the Secure attribute on the Liberty authentication cookie. Keep this `true` outside loopback-only local development. |
 | `PGHOST` | `localhost` | PostgreSQL host. |
 | `PGPORT` | `5432` | PostgreSQL port. |
 | `PGDATABASE` | `calendar` | PostgreSQL database name. |
@@ -91,6 +104,7 @@ The schema contains only application users, calendars, memberships, events, outs
 ```text
 mise run package
 mise run format
+mise run reseed-local
 mise run lint-css
 mise run lint-workflows
 mise run end-to-end

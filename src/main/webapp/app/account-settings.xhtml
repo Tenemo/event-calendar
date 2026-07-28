@@ -5,7 +5,7 @@
                 xmlns:pt="jakarta.faces.passthrough"
                 xmlns:p="primefaces"
                 template="/WEB-INF/templates/main.xhtml">
-    <ui:define name="title">Account settings - Shared calendar</ui:define>
+    <ui:define name="title">Account settings - calendar.social</ui:define>
 
     <ui:define name="content">
         <section class="narrow-section">
@@ -17,7 +17,7 @@
             <p:panel styleClass="surface-panel" pt:aria-labelledby="changePasswordHeading">
                 <h2 id="changePasswordHeading" class="panel-heading">Change password</h2>
                 <p id="passwordChangeNotice" class="field-help">Changing your password signs you out here and invalidates your other signed-in sessions.</p>
-                <h:form styleClass="stacked-form">
+                <h:form styleClass="stacked-form" pt:data-initial-focus="true">
                     <p:outputLabel for="currentPassword" value="Current password"/>
                     <p:password id="currentPassword"
                                 value="#{accountSettingsView.currentPassword}"

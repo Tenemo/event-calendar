@@ -30,10 +30,11 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      APP_BASE_URL: ${APP_BASE_URL:-https://localhost:9443}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:${PORT:-9080}}
       APP_BOOTSTRAP_INVITATION_TOKEN: ${APP_BOOTSTRAP_INVITATION_TOKEN:-}
       APP_DEFAULT_TIME_ZONE: ${APP_DEFAULT_TIME_ZONE:-Europe/Warsaw}
       APP_LTPA_KEYS_PASSWORD: ${APP_LTPA_KEYS_PASSWORD:-local-development-only}
+      APP_SSO_REQUIRES_SSL: ${APP_SSO_REQUIRES_SSL:-false}
       HTTPS_PORT: 9443
       PGAPPLICATIONNAME: shared-calendar-compose
       PGDATABASE: ${PGDATABASE:-calendar}
@@ -72,10 +73,11 @@ services:
       postgres-verification:
         condition: service_healthy
     environment:
-      APP_BASE_URL: https://localhost:${VERIFICATION_HTTPS_PORT:-19445}
+      APP_BASE_URL: ${VERIFICATION_APP_BASE_URL:-https://localhost:${VERIFICATION_HTTPS_PORT:-19445}}
       APP_BOOTSTRAP_INVITATION_TOKEN: verification-only-bootstrap-token-0000000000
       APP_DEFAULT_TIME_ZONE: Europe/Warsaw
       APP_LTPA_KEYS_PASSWORD: verification-only-ltpa-password
+      APP_SSO_REQUIRES_SSL: ${VERIFICATION_SSO_REQUIRES_SSL:-true}
       HTTPS_PORT: 9443
       PGAPPLICATIONNAME: shared-calendar-verification
       PGDATABASE: shared_calendar_verification

@@ -15,6 +15,13 @@ run = "docker compose up --detach --wait postgres"
 description = "Run Open Liberty dev mode"
 run = "mvn -Pliberty-dev liberty:dev"
 
+[tasks.reseed-local]
+description = "Wipe and recreate deterministic local development data"
+run = [
+    "docker compose up --detach --wait postgres",
+    "mvn -B -ntp -Dlocal.reseed.confirmation=calendar.social-local-only -Dexec.mainClass=app.development.LocalDatabaseSeeder -Dexec.classpathScope=test test-compile org.codehaus.mojo:exec-maven-plugin:3.5.0:java",
+]
+
 [tasks.package]
 description = "Build, test, format-check, and analyze the WAR"
 run = "mvn -B -ntp verify"

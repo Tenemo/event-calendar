@@ -6,12 +6,12 @@
       xmlns:p="primefaces"
       lang="en">
 <h:head>
-    <title><ui:insert name="title">Shared calendar</ui:insert></title>
+    <title><ui:insert name="title">calendar.social</ui:insert></title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="description"
           content="Create and share practical event calendars with friends, clubs, and groups."/>
     <meta name="theme-color" content="#0b1020"/>
-    <link rel="icon" type="image/svg+xml" sizes="any" href="#{resource['images/favicon.svg']}"/>
+    <link rel="icon" type="image/svg+xml" sizes="any" href="#{resource['images/calendar-mark-v2.svg']}"/>
     <ui:insert name="head"/>
     <h:outputStylesheet library="css" name="tokens.css"/>
     <h:outputStylesheet library="css" name="base.css"/>
@@ -30,8 +30,8 @@
     <header class="app-header">
         <div class="app-brand-lockup">
             <h:outputLink value="#{request.contextPath}/" styleClass="app-brand">
-                <h:graphicImage library="images" name="favicon.svg" styleClass="app-brand-mark" alt=""/>
-                <span>Shared calendar</span>
+                <h:graphicImage library="images" name="calendar-mark-v2.svg" styleClass="app-brand-mark" alt=""/>
+                <span>calendar.social</span>
             </h:outputLink>
             <p class="app-subtitle">Events for friends, clubs, and group plans.</p>
         </div>
@@ -62,7 +62,7 @@
         </ui:insert>
         <ui:insert name="content"/>
     </main>
-    <h:outputScript library="js" name="focus-management.js" target="body"/>
+    <h:outputScript library="js" name="keyboard-navigation-v1.js" target="body"/>
     <h:outputScript library="js" name="clipboard.js" target="body"/>
 </h:body>
 </html>

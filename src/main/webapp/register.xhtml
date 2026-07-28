@@ -9,7 +9,7 @@
         <f:viewParam name="token" value="#{registrationView.invitationToken}"/>
     </f:metadata>
 
-    <ui:define name="title">Register - Shared calendar</ui:define>
+    <ui:define name="title">Register - calendar.social</ui:define>
 
     <ui:define name="content">
         <section class="narrow-section">
@@ -70,7 +70,7 @@
                     <ui:fragment rendered="#{registrationView.hasInvitationExpiration()}">
                         <p class="field-help">This invitation expires <h:outputText value="#{registrationView.invitationExpiration}"/>.</p>
                     </ui:fragment>
-                    <h:form styleClass="stacked-form">
+                    <h:form styleClass="stacked-form" pt:data-initial-focus="true">
                         <h:inputHidden id="invitationToken" value="#{registrationView.invitationToken}"/>
 
                         <p:outputLabel for="username" value="Username"/>
