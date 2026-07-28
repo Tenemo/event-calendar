@@ -1,4 +1,5 @@
 <ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:app="jakarta.faces.composite/app-components"
                 xmlns:f="jakarta.faces.core"
                 xmlns:h="jakarta.faces.html"
                 xmlns:ui="jakarta.faces.facelets"
@@ -17,52 +18,53 @@
     <ui:define name="content">
         <h:panelGroup id="calendarPage" layout="block">
         <h:panelGroup layout="block" styleClass="page-section" rendered="#{calendarView.available}">
-            <div class="section-header compact-heading">
-                <div>
-                    <div class="heading-meta">
+            <app:page-header id="calendarHeader"
+                             title="#{calendarView.calendarName}"
+                             description="#{calendarView.calendarDescription}"
+                             supportingText="#{calendarView.editable ? 'Share the calendar link for read-only access while public access is enabled.' : ''}"
+                             compact="true"
+                             focusable="true"
+                             focusIdentifier="calendarHeading">
+                <f:facet name="meta">
+                    <h:panelGroup layout="block" styleClass="page-header-meta-group">
                         <span class="role-chip">#{not calendarView.editable ? 'Read-only' : calendarView.role.displayName}</span>
                         <span>#{calendarView.timeZone}</span>
                         <h:panelGroup rendered="#{calendarView.editable}">
                             <span>#{calendarView.publicAccessEnabled ? 'Public access enabled' : 'Public access disabled'}</span>
                         </h:panelGroup>
-                    </div>
-                    <h1 id="calendarHeading" tabindex="-1">#{calendarView.calendarName}</h1>
-                    <h:outputText value="#{calendarView.calendarDescription}"
-                                  styleClass="lead-text description-text"
-                                  rendered="#{not empty calendarView.calendarDescription}"/>
-                    <h:outputText value="Share the calendar link for read-only access while public access is enabled."
-                                  styleClass="secondary-line"
-                                  rendered="#{calendarView.editable}"/>
-                </div>
-                <div class="action-row compact-actions">
-                    <h:form rendered="#{calendarView.editable}">
-                        <p:commandButton value="Regenerate link"
-                                         action="#{calendarView.regenerateCalendarLink}"
-                                         ajax="false"
-                                         styleClass="ui-button-danger ui-button-outlined">
-                            <p:confirm header="Regenerate calendar link"
-                                       message="The current calendar link will stop working for everyone. Continue?"
-                                       yesButtonLabel="Regenerate link"
-                                       yesButtonClass="ui-button-danger"
-                                       noButtonLabel="Cancel"
-                                       noButtonClass="ui-button-secondary ui-button-outlined"
-                                       beforeShow="focusConfirmationCancelButton();"/>
-                        </p:commandButton>
-                    </h:form>
-                    <h:outputLink value="#{request.contextPath}/app/calendar-members"
-                                  styleClass="button-link secondary-link"
-                                  rendered="#{calendarView.admin}">
-                        Members
-                        <f:param name="id" value="#{calendarView.calendarId}"/>
-                    </h:outputLink>
-                    <h:outputLink value="#{request.contextPath}/app/calendar-settings"
-                                  styleClass="button-link secondary-link"
-                                  rendered="#{calendarView.admin}">
-                        Settings
-                        <f:param name="id" value="#{calendarView.calendarId}"/>
-                    </h:outputLink>
-                </div>
-            </div>
+                    </h:panelGroup>
+                </f:facet>
+                <f:facet name="actions">
+                    <h:panelGroup layout="block" styleClass="page-header-action-group">
+                        <h:form rendered="#{calendarView.editable}">
+                            <p:commandButton value="Regenerate link"
+                                             action="#{calendarView.regenerateCalendarLink}"
+                                             ajax="false"
+                                             styleClass="ui-button-danger ui-button-outlined">
+                                <p:confirm header="Regenerate calendar link"
+                                           message="The current calendar link will stop working for everyone. Continue?"
+                                           yesButtonLabel="Regenerate link"
+                                           yesButtonClass="ui-button-danger"
+                                           noButtonLabel="Cancel"
+                                           noButtonClass="ui-button-secondary ui-button-outlined"
+                                           beforeShow="focusConfirmationCancelButton();"/>
+                            </p:commandButton>
+                        </h:form>
+                        <h:outputLink value="#{request.contextPath}/app/calendar-members"
+                                      styleClass="button-link secondary-link"
+                                      rendered="#{calendarView.admin}">
+                            Members
+                            <f:param name="id" value="#{calendarView.calendarId}"/>
+                        </h:outputLink>
+                        <h:outputLink value="#{request.contextPath}/app/calendar-settings"
+                                      styleClass="button-link secondary-link"
+                                      rendered="#{calendarView.admin}">
+                            Settings
+                            <f:param name="id" value="#{calendarView.calendarId}"/>
+                        </h:outputLink>
+                    </h:panelGroup>
+                </f:facet>
+            </app:page-header>
 
             <div class="#{calendarView.editable ? 'calendar-workspace' : ''}">
                 <section class="event-list-section" aria-labelledby="events-heading">
@@ -129,7 +131,10 @@
                             </article>
                         </ui:repeat>
                     </h:panelGroup>
-                    <h:panelGroup layout="block" styleClass="empty-state" rendered="#{empty calendarView.events}">No events yet.</h:panelGroup>
+                    <app:empty-state id="emptyEventList"
+                                     title="#{calendarView.editable ? 'This calendar is ready for its first plan' : 'No events yet'}"
+                                     description="#{calendarView.editable ? 'Use New event to add a birthday, trip, activity, or anything else worth remembering.' : 'No events have been added to this calendar yet.'}"
+                                     rendered="#{empty calendarView.events}"/>
                 </section>
 
                 <p:panel styleClass="surface-panel event-editor"
@@ -243,18 +248,7 @@
                     </h:form>
                 </p:panel>
             </div>
-            <p:confirmDialog global="true"
-                             closeOnEscape="true"
-                             closable="false"
-                             responsive="true"
-                             rendered="#{calendarView.editable}">
-                <p:commandButton value="Cancel"
-                                 type="button"
-                                 styleClass="ui-confirmdialog-no ui-button-secondary ui-button-outlined"/>
-                <p:commandButton value="Confirm"
-                                 type="button"
-                                 styleClass="ui-confirmdialog-yes ui-button-danger"/>
-            </p:confirmDialog>
+            <app:confirmation-dialog id="eventConfirmation" rendered="#{calendarView.editable}"/>
         </h:panelGroup>
 
         <h:panelGroup layout="block" styleClass="narrow-section not-found-state" rendered="#{not calendarView.available}">

@@ -13,6 +13,7 @@ import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.Response;
 import com.microsoft.playwright.options.Cookie;
+import com.microsoft.playwright.options.ReducedMotion;
 import com.microsoft.playwright.options.SameSiteAttribute;
 import java.net.URI;
 import java.sql.SQLException;
@@ -48,10 +49,22 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             assertEquals(200, homeResponse.status());
             assertThat(page.locator("h1")).hasText("Shared event calendars for real plans");
             assertSecurityHeaders(homeResponse);
+            assertEquals(
+                    "dark",
+                    page.evaluate("() => getComputedStyle(document.documentElement).colorScheme"));
+            assertEquals(
+                    "rgb(11, 16, 32)",
+                    page.evaluate("() => getComputedStyle(document.body).backgroundColor"));
             assertFalse(Boolean.TRUE.equals(page.evaluate(
                     "() => document.documentElement.scrollWidth "
                             + "> document.documentElement.clientWidth")));
             assertAccessible(page);
+
+            page.emulateMedia(new Page.EmulateMediaOptions().setReducedMotion(ReducedMotion.REDUCE));
+            assertEquals(
+                    "0s",
+                    page.locator(".primary-link")
+                            .evaluate("element => getComputedStyle(element).transitionDuration"));
 
             page.keyboard().press("Tab");
             assertThat(page.locator(".skip-link:focus")).hasText("Skip to main content");

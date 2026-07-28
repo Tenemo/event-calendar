@@ -1,4 +1,5 @@
 <ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:app="jakarta.faces.composite/app-components"
                 xmlns:f="jakarta.faces.core"
                 xmlns:h="jakarta.faces.html"
                 xmlns:ui="jakarta.faces.facelets"
@@ -9,12 +10,9 @@
 
     <ui:define name="content">
         <section class="page-section">
-            <div class="section-header">
-                <div>
-                    <h1>My calendars</h1>
-                    <p class="lead-text">Create and manage event calendars for friend groups and plans.</p>
-                </div>
-            </div>
+            <app:page-header id="calendarListHeader"
+                             title="My calendars"
+                             description="Create and manage event calendars for friend groups and plans."/>
 
             <p:panel styleClass="surface-panel" pt:aria-labelledby="createCalendarHeading">
                 <h2 id="createCalendarHeading" class="panel-heading">Create calendar</h2>
@@ -29,8 +27,10 @@
                 </h:form>
             </p:panel>
 
-            <h:panelGroup layout="block" styleClass="empty-state"
-                          rendered="#{empty calendarListView.calendarMemberships}">No calendars yet.</h:panelGroup>
+            <app:empty-state id="emptyCalendarList"
+                             title="No calendars yet"
+                             description="Create your first calendar above and start adding plans."
+                             rendered="#{empty calendarListView.calendarMemberships}"/>
             <div class="card-list">
                 <ui:repeat value="#{calendarListView.calendarMemberships}" var="calendar">
                     <article class="list-card">

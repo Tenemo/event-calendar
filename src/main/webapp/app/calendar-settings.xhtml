@@ -1,4 +1,5 @@
 <ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:app="jakarta.faces.composite/app-components"
                 xmlns:f="jakarta.faces.core"
                 xmlns:h="jakarta.faces.html"
                 xmlns:ui="jakarta.faces.facelets"
@@ -15,14 +16,19 @@
     <ui:define name="content">
         <h:panelGroup id="settingsPage" layout="block">
         <h:panelGroup layout="block" styleClass="page-section" rendered="#{calendarSettingsView.available}">
-            <div class="section-header compact-heading">
-                <div>
-                    <p class="eyebrow">Calendar administration</p>
-                    <h1 id="settingsHeading" tabindex="-1">Settings</h1>
-                </div>
-                <h:outputLink value="#{calendarSettingsView.calendarLink}"
-                              styleClass="button-link secondary-link">Back to calendar</h:outputLink>
-            </div>
+            <app:page-header id="calendarSettingsHeader"
+                             title="Settings"
+                             eyebrow="Calendar administration"
+                             compact="true"
+                             focusable="true"
+                             focusIdentifier="settingsHeading">
+                <f:facet name="actions">
+                    <h:panelGroup layout="block" styleClass="page-header-action-group">
+                        <h:outputLink value="#{calendarSettingsView.calendarLink}"
+                                      styleClass="button-link secondary-link">Back to calendar</h:outputLink>
+                    </h:panelGroup>
+                </f:facet>
+            </app:page-header>
 
             <div class="settings-grid">
                 <p:panel styleClass="surface-panel" pt:aria-labelledby="calendarDetailsHeading">
@@ -73,18 +79,11 @@
                             #{calendarSettingsView.publicAccessEnabled ? 'Public access enabled' : 'Public access disabled'}
                         </p>
                         <p>When enabled, anyone with the calendar link can read its events without signing in.</p>
-                        <p:outputLabel for="calendarLink" value="Calendar link"/>
-                        <div class="copy-control">
-                            <p:inputText id="calendarLink"
-                                         value="#{calendarSettingsView.calendarLink}"
-                                         readonly="true"
-                                         pt:aria-describedby="calendarLinkHelp"/>
-                            <button type="button"
-                                    class="button-link secondary-link"
-                                    onclick="copyLink(this); return false;">Copy calendar link</button>
-                            <p class="copy-status" role="status" aria-live="polite"></p>
-                        </div>
-                        <p id="calendarLinkHelp" class="field-help">This link works only while public access is enabled. Regenerating it invalidates the previous link.</p>
+                        <app:copy-field id="calendarLink"
+                                        value="#{calendarSettingsView.calendarLink}"
+                                        label="Calendar link"
+                                        help="This link works only while public access is enabled. Regenerating it invalidates the previous link."
+                                        buttonLabel="Copy calendar link"/>
                     </div>
                 </p:panel>
             </div>

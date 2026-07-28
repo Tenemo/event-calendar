@@ -1,4 +1,5 @@
 <ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:app="jakarta.faces.composite/app-components"
                 xmlns:f="jakarta.faces.core"
                 xmlns:h="jakarta.faces.html"
                 xmlns:ui="jakarta.faces.facelets"
@@ -9,12 +10,9 @@
 
     <ui:define name="content">
         <section class="page-section">
-            <div class="section-header">
-                <div>
-                    <h1>Invitations</h1>
-                    <p class="lead-text">Create single-use registration and editor links. Links expire after seven days.</p>
-                </div>
-            </div>
+            <app:page-header id="invitationHeader"
+                             title="Invitations"
+                             description="Create single-use registration and editor links. Links expire after seven days."/>
 
             <div class="form-grid">
                 <p:panel styleClass="surface-panel" pt:aria-labelledby="registrationInvitationHeading">
@@ -54,38 +52,27 @@
             <h:panelGroup layout="block"
                           styleClass="generated-invitation"
                           rendered="#{invitationView.hasGeneratedInvitationLink()}">
-                <p:outputLabel for="generatedInvitationLink" value="Generated link"/>
-                <div class="copy-control">
-                    <p:inputText id="generatedInvitationLink"
-                                 value="#{invitationView.generatedInvitationLink}"
-                                 pt:aria-describedby="generatedInvitationHelp"
-                                 readonly="true"/>
-                    <button type="button"
-                            class="button-link secondary-link"
-                            onclick="copyLink(this); return false;">Copy generated link</button>
-                    <p class="copy-status" role="status" aria-live="polite"></p>
-                </div>
-                <p id="generatedInvitationHelp" class="field-help">You can also select the link and copy it manually.</p>
+                <app:copy-field id="generatedInvitationLink"
+                                value="#{invitationView.generatedInvitationLink}"
+                                label="Generated link"
+                                help="You can also select the link and copy it manually."
+                                buttonLabel="Copy generated link"/>
             </h:panelGroup>
 
-            <h:panelGroup layout="block" styleClass="empty-state"
-                          rendered="#{empty invitationView.invitations}">No outstanding invitations.</h:panelGroup>
+            <app:empty-state id="emptyInvitationList"
+                             title="No outstanding invitations"
+                             description="New invitation links will appear here until they are accepted, revoked, or expire."
+                             rendered="#{empty invitationView.invitations}"/>
             <div class="card-list">
                 <ui:repeat value="#{invitationView.invitations}" var="invitation">
                     <article class="list-card invitation-card">
                         <div class="invitation-details">
                             <h2 class="card-heading">#{invitation.scope}</h2>
                             <p class="secondary-line">Created #{invitation.createdAtLabel} · Expires #{invitation.expiresAtLabel}</p>
-                            <div class="copy-control">
-                                <p:inputText value="#{invitation.invitationLink}"
-                                             readonly="true"
-                                             pt:aria-label="Invitation link for #{invitation.scope}, created #{invitation.createdAtLabel}"/>
-                                <button type="button"
-                                        class="button-link secondary-link"
-                                        aria-label="Copy invitation link for #{invitation.scope}, created #{invitation.createdAtLabel}"
-                                        onclick="copyLink(this); return false;">Copy link</button>
-                                <p class="copy-status" role="status" aria-live="polite"></p>
-                            </div>
+                            <app:copy-field id="invitationLink"
+                                            value="#{invitation.invitationLink}"
+                                            inputAriaLabel="Invitation link for #{invitation.scope}, created #{invitation.createdAtLabel}"
+                                            buttonAriaLabel="Copy invitation link for #{invitation.scope}, created #{invitation.createdAtLabel}"/>
                         </div>
                         <h:form styleClass="item-actions">
                             <input type="hidden" name="invitationId" value="#{invitation.id}"/>
@@ -106,14 +93,7 @@
                     </article>
                 </ui:repeat>
             </div>
-            <p:confirmDialog global="true" closeOnEscape="true" closable="false" responsive="true">
-                <p:commandButton value="Cancel"
-                                 type="button"
-                                 styleClass="ui-confirmdialog-no ui-button-secondary ui-button-outlined"/>
-                <p:commandButton value="Confirm"
-                                 type="button"
-                                 styleClass="ui-confirmdialog-yes ui-button-danger"/>
-            </p:confirmDialog>
+            <app:confirmation-dialog id="invitationConfirmation"/>
         </section>
     </ui:define>
 </ui:composition>

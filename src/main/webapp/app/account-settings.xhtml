@@ -1,4 +1,5 @@
 <ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:app="jakarta.faces.composite/app-components"
                 xmlns:h="jakarta.faces.html"
                 xmlns:ui="jakarta.faces.facelets"
                 xmlns:pt="jakarta.faces.passthrough"
@@ -8,10 +9,10 @@
 
     <ui:define name="content">
         <section class="narrow-section">
-            <div>
-                <p class="eyebrow">Signed in as <h:outputText value="#{accountSettingsView.username}"/></p>
-                <h1>Account settings</h1>
-            </div>
+            <app:page-header id="accountSettingsHeader"
+                             title="Account settings"
+                             eyebrow="Signed in as #{accountSettingsView.username}"
+                             compact="true"/>
 
             <p:panel styleClass="surface-panel" pt:aria-labelledby="changePasswordHeading">
                 <h2 id="changePasswordHeading" class="panel-heading">Change password</h2>

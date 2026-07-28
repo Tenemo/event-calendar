@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:cc="jakarta.faces.composite"
+      xmlns:p="primefaces">
+<cc:interface/>
+<cc:implementation>
+    <p:confirmDialog global="true"
+                     closeOnEscape="true"
+                     closable="false"
+                     responsive="true">
+        <p:commandButton value="Cancel"
+                         type="button"
+                         styleClass="ui-confirmdialog-no ui-button-secondary ui-button-outlined"/>
+        <p:commandButton value="Confirm"
+                         type="button"
+                         styleClass="ui-confirmdialog-yes ui-button-danger"/>
+    </p:confirmDialog>
+</cc:implementation>
+</html>

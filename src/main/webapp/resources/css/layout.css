@@ -1,0 +1,126 @@
+.app-main {
+    width: min(100%, var(--content-width));
+    margin: 0 auto;
+    padding: var(--space-extra-large);
+}
+
+.app-main:focus {
+    outline: none;
+}
+
+.page-section,
+.narrow-section,
+.home-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.25rem;
+}
+
+.narrow-section {
+    max-width: 34rem;
+    margin: 0 auto;
+}
+
+.home-layout {
+    max-width: 64rem;
+    margin: 0 auto;
+}
+
+.page-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--space-large);
+}
+
+.page-header-compact {
+    align-items: center;
+}
+
+.page-header-copy {
+    min-width: 0;
+}
+
+.page-header h1,
+.narrow-section > h1,
+.narrow-section > div > h1,
+.intro-copy h1 {
+    margin: 0;
+    font-weight: var(--font-weight-heading);
+    letter-spacing: -0.035em;
+    line-height: 1.05;
+}
+
+.page-header h1 {
+    font-size: clamp(2rem, 5vw, 2.85rem);
+}
+
+.narrow-section > h1,
+.narrow-section > div > h1 {
+    font-size: clamp(1.9rem, 5vw, 2.3rem);
+}
+
+.page-header-actions,
+.page-header-action-group,
+.page-header-meta-group {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-small);
+}
+
+.page-header-actions {
+    justify-content: flex-end;
+}
+
+.page-header-meta {
+    margin-bottom: 0.75rem;
+}
+
+.page-header-meta-group {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-small);
+}
+
+.settings-grid,
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    align-items: start;
+}
+
+.settings-grid > *,
+.form-grid > * {
+    min-width: 0;
+}
+
+.not-found-state {
+    padding-top: 4rem;
+    text-align: center;
+}
+
+@media (width <= 52rem) {
+    :root {
+        --scroll-offset: 1rem;
+    }
+
+    .app-main {
+        padding: 1rem;
+    }
+
+    .page-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .page-header-actions,
+    .page-header-action-group {
+        justify-content: flex-start;
+    }
+
+    .settings-grid,
+    .form-grid {
+        grid-template-columns: 1fr;
+    }
+}

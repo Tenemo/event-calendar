@@ -1,0 +1,244 @@
+body .ui-widget {
+    color: var(--color-text);
+    font-family: var(--font-family-body);
+}
+
+body .ui-panel,
+body .ui-panel .ui-panel-content {
+    color: var(--color-text);
+}
+
+body .ui-panel.surface-panel .ui-panel-content {
+    border: 0;
+    background: transparent;
+}
+
+body .ui-inputfield,
+body .ui-inputfield.ui-state-default,
+body .ui-datepicker-trigger.ui-button {
+    border-color: var(--color-border-control);
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+    box-shadow: none;
+}
+
+body .ui-inputfield.ui-state-hover {
+    border-color: var(--color-primary);
+}
+
+body .ui-inputfield.ui-state-focus {
+    border-color: var(--color-focus);
+    background: var(--color-surface-interactive);
+}
+
+body .ui-inputfield:disabled,
+body .ui-inputfield.ui-state-disabled,
+body select:disabled {
+    border-color: var(--color-border-subtle);
+    background: var(--color-canvas-muted);
+    color: var(--color-text-subtle);
+    opacity: 0.72;
+}
+
+body .ui-button {
+    min-height: var(--control-height);
+    border-color: var(--color-primary);
+    border-radius: var(--radius-small);
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+    cursor: pointer;
+    font-weight: var(--font-weight-strong);
+    box-shadow: none;
+}
+
+body .ui-button:not(.ui-state-disabled):hover {
+    border-color: var(--color-primary-hover);
+    background: var(--color-primary-hover);
+    color: var(--color-on-primary);
+}
+
+body .ui-button:not(.ui-state-disabled):active {
+    border-color: var(--color-primary-active);
+    background: var(--color-primary-active);
+}
+
+body .ui-button.ui-button-outlined {
+    border-color: var(--color-primary);
+    background: transparent;
+    color: var(--color-primary-hover);
+}
+
+body .ui-button.ui-button-outlined:not(.ui-state-disabled):hover {
+    border-color: var(--color-primary-hover);
+    background: var(--color-primary-soft);
+    color: var(--color-primary-hover);
+}
+
+body .ui-button.ui-button-secondary.ui-button-outlined {
+    border-color: var(--color-border-control);
+    background: transparent;
+    color: var(--color-text);
+}
+
+body .ui-button.ui-button-secondary.ui-button-outlined:not(.ui-state-disabled):hover {
+    border-color: var(--color-primary);
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+}
+
+body .ui-button.ui-button-danger {
+    border-color: var(--color-danger);
+    background: var(--color-danger);
+    color: var(--color-on-primary);
+}
+
+body .ui-button.ui-button-danger:not(.ui-state-disabled):hover {
+    border-color: var(--color-danger-hover);
+    background: var(--color-danger-hover);
+    color: var(--color-on-primary);
+}
+
+body .ui-button.ui-button-danger.ui-button-outlined {
+    border-color: var(--color-danger);
+    background: transparent;
+    color: var(--color-danger);
+}
+
+body .ui-button.ui-button-danger.ui-button-outlined:not(.ui-state-disabled):hover {
+    border-color: var(--color-danger-hover);
+    background: var(--color-danger-soft);
+    color: var(--color-danger-hover);
+}
+
+body .ui-chkbox .ui-chkbox-box {
+    border-color: var(--color-border-control);
+    border-radius: 0.35rem;
+    background: var(--color-surface-raised);
+    color: var(--color-on-primary);
+}
+
+body .ui-chkbox .ui-chkbox-box.ui-state-hover {
+    border-color: var(--color-primary);
+}
+
+body .ui-chkbox .ui-chkbox-box.ui-state-active {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+}
+
+body .ui-datepicker {
+    border: 1px solid var(--color-border-control);
+    border-radius: var(--radius-medium);
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+    box-shadow: var(--shadow-raised);
+}
+
+body .ui-datepicker .ui-datepicker-header,
+body .ui-datepicker .ui-timepicker-div,
+body .ui-datepicker .ui-datepicker-buttonbar {
+    border-color: var(--color-border-subtle);
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+}
+
+body .ui-datepicker .ui-datepicker-calendar th {
+    color: var(--color-text-muted);
+}
+
+body .ui-datepicker .ui-datepicker-calendar td > a,
+body .ui-datepicker .ui-datepicker-calendar td > span {
+    border-radius: 0.4rem;
+    color: var(--color-text);
+}
+
+body .ui-datepicker .ui-datepicker-calendar td > a.ui-state-hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+}
+
+body .ui-datepicker .ui-datepicker-calendar td > a.ui-state-active {
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+}
+
+body .ui-datepicker .ui-datepicker-calendar td.ui-datepicker-today > a {
+    border: 1px solid var(--color-primary);
+    background: var(--color-primary-soft);
+    color: var(--color-primary-hover);
+}
+
+body .ui-dialog {
+    overflow: hidden;
+    border: 1px solid var(--color-border-control);
+    border-radius: var(--radius-large);
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+    box-shadow: var(--shadow-raised);
+}
+
+body .ui-dialog .ui-dialog-titlebar,
+body .ui-dialog .ui-dialog-content,
+body .ui-dialog .ui-dialog-footer {
+    border-color: var(--color-border-subtle);
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+}
+
+body .ui-dialog .ui-dialog-titlebar {
+    font-family: var(--font-family-heading);
+}
+
+body .ui-dialog .ui-confirm-dialog-message {
+    color: var(--color-text-muted);
+    line-height: 1.55;
+}
+
+body .ui-widget-overlay {
+    background: rgb(3 7 18 / 72%);
+    backdrop-filter: blur(3px);
+}
+
+body .ui-messages {
+    margin: 0 0 1rem;
+    border-radius: var(--radius-medium);
+}
+
+body .ui-messages .ui-messages-info {
+    border-color: rgb(85 214 190 / 38%);
+    background: var(--color-success-soft);
+    color: var(--color-success);
+}
+
+body .ui-messages .ui-messages-warn {
+    border-color: rgb(246 200 106 / 38%);
+    background: var(--color-warning-soft);
+    color: var(--color-warning);
+}
+
+body .ui-messages .ui-messages-error,
+body .ui-messages .ui-messages-fatal {
+    border-color: rgb(255 135 147 / 38%);
+    background: var(--color-danger-soft);
+    color: var(--color-danger);
+}
+
+body .ui-messages .ui-messages-close {
+    color: currentcolor;
+}
+
+body .ui-staticmessage {
+    border-radius: var(--radius-medium);
+}
+
+body .ui-outputlabel,
+body label {
+    color: var(--color-text);
+    font-weight: var(--font-weight-medium);
+}
+
+body .ui-state-error,
+body .ui-inputfield.ui-state-error {
+    border-color: var(--color-danger);
+}

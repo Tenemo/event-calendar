@@ -124,7 +124,7 @@ abstract class SharedCalendarEndToEndSupport {
     String createRegistrationInvitation(Page page) {
         navigate(page, "/app/invitations");
         page.locator("button:has-text('Generate registration link')").click();
-        return page.locator("input[id$='generatedInvitationLink']").inputValue();
+        return page.locator(".generated-invitation input").inputValue();
     }
 
     String createEditorInvitation(Page page, String calendarName) {
@@ -132,7 +132,7 @@ abstract class SharedCalendarEndToEndSupport {
         page.locator("select[id$='calendar']")
                 .selectOption(new SelectOption().setLabel(calendarName));
         page.locator("button:has-text('Generate editor link')").click();
-        return page.locator("input[id$='generatedInvitationLink']").inputValue();
+        return page.locator(".generated-invitation input").inputValue();
     }
 
     void createTimedEvent(

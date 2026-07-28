@@ -10,15 +10,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="description"
           content="Create and share practical event calendars with friends, clubs, and groups."/>
+    <meta name="theme-color" content="#0b1020"/>
     <link rel="icon" type="image/svg+xml" sizes="any" href="#{resource['images/favicon.svg']}"/>
     <ui:insert name="head"/>
-    <h:outputStylesheet library="css" name="app.css"/>
+    <h:outputStylesheet library="css" name="tokens.css"/>
+    <h:outputStylesheet library="css" name="base.css"/>
+    <h:outputStylesheet library="css" name="layout.css"/>
+    <h:outputStylesheet library="css" name="components/navigation.css"/>
+    <h:outputStylesheet library="css" name="components/actions.css"/>
+    <h:outputStylesheet library="css" name="components/surfaces.css"/>
+    <h:outputStylesheet library="css" name="components/forms.css"/>
+    <h:outputStylesheet library="css" name="components/feedback.css"/>
+    <h:outputStylesheet library="css" name="components/calendar.css"/>
+    <h:outputStylesheet library="css" name="primefaces-overrides.css"/>
+    <h:outputStylesheet library="css" name="motion.css"/>
 </h:head>
 <h:body>
     <a href="#main-content" class="skip-link">Skip to main content</a>
     <header class="app-header">
-        <div>
-            <h:outputLink value="#{request.contextPath}/" styleClass="app-brand">Shared calendar</h:outputLink>
+        <div class="app-brand-lockup">
+            <h:outputLink value="#{request.contextPath}/" styleClass="app-brand">
+                <h:graphicImage library="images" name="favicon.svg" styleClass="app-brand-mark" alt=""/>
+                <span>Shared calendar</span>
+            </h:outputLink>
             <p class="app-subtitle">Events for friends, clubs, and group plans.</p>
         </div>
         <nav class="app-nav" aria-label="Main navigation">
@@ -48,52 +62,7 @@
         </ui:insert>
         <ui:insert name="content"/>
     </main>
-    <script type="text/javascript">
-        function focusElementByIdSuffix(idSuffix) {
-            window.requestAnimationFrame(function () {
-                var element = document.querySelector("[id$='" + idSuffix + "']");
-                if (element) {
-                    element.focus();
-                }
-            });
-        }
-
-        function focusAfterAjax(ajaxArguments, successIdSuffix) {
-            var validationFailed = ajaxArguments &amp;&amp; ajaxArguments.validationFailed;
-            focusElementByIdSuffix(validationFailed ? "messages" : successIdSuffix);
-        }
-
-        function focusConfirmationCancelButton() {
-            window.setTimeout(function () {
-                var cancelButton = document.querySelector(".ui-confirmdialog-no");
-                if (cancelButton) {
-                    cancelButton.focus();
-                }
-            }, 0);
-        }
-
-        function copyLink(button) {
-            var copyControl = button.closest(".copy-control");
-            var linkInput = copyControl.querySelector("input");
-            var copyStatus = copyControl.querySelector(".copy-status");
-
-            function reportCopySuccess() {
-                copyStatus.textContent = "Link copied.";
-            }
-
-            function selectForManualCopy() {
-                linkInput.focus();
-                linkInput.select();
-                linkInput.setSelectionRange(0, linkInput.value.length);
-                copyStatus.textContent = "Clipboard access is unavailable. Select the link and copy it manually.";
-            }
-
-            if (navigator.clipboard) {
-                navigator.clipboard.writeText(linkInput.value).then(reportCopySuccess, selectForManualCopy);
-                return;
-            }
-            selectForManualCopy();
-        }
-    </script>
+    <h:outputScript library="js" name="focus-management.js" target="body"/>
+    <h:outputScript library="js" name="clipboard.js" target="body"/>
 </h:body>
 </html>
