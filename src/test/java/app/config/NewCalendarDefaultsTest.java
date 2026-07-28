@@ -26,7 +26,7 @@ final class NewCalendarDefaultsTest {
         IllegalStateException exception = assertThrows(IllegalStateException.class, newCalendarDefaults::initialize);
 
         assertEquals(
-                "APP_TIMEZONE must be a valid IANA time zone such as Europe/Warsaw.", exception.getMessage());
+                "APP_DEFAULT_TIME_ZONE must be a valid IANA time zone such as Europe/Warsaw.", exception.getMessage());
         assertInstanceOf(ValidationException.class, exception.getCause());
     }
 

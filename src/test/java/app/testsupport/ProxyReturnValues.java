@@ -1,7 +1,24 @@
 package app.testsupport;
 
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Proxy;
+import java.util.Objects;
+
 public final class ProxyReturnValues {
     private ProxyReturnValues() {
+    }
+
+    public static <InterfaceType> InterfaceType createInterfaceProxy(
+            Class<InterfaceType> interfaceType, InvocationHandler invocationHandler) {
+        Objects.requireNonNull(interfaceType, "interfaceType");
+        Objects.requireNonNull(invocationHandler, "invocationHandler");
+        if (!interfaceType.isInterface()) {
+            throw new IllegalArgumentException(interfaceType.getName() + " is not an interface");
+        }
+        return interfaceType.cast(Proxy.newProxyInstance(
+                interfaceType.getClassLoader(),
+                new Class<?>[] {interfaceType},
+                invocationHandler));
     }
 
     public static Object defaultValue(Class<?> returnType) {

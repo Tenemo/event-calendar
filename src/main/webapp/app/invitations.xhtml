@@ -17,7 +17,7 @@
             </div>
 
             <div class="form-grid">
-                <p:panel styleClass="surface-panel form-panel" pt:aria-labelledby="registrationInvitationHeading">
+                <p:panel styleClass="surface-panel" pt:aria-labelledby="registrationInvitationHeading">
                     <h2 id="registrationInvitationHeading" class="panel-heading">Registration invitation</h2>
                     <h:form styleClass="stacked-form">
                         <p:commandButton value="Generate registration link"
@@ -26,7 +26,7 @@
                     </h:form>
                 </p:panel>
 
-                <p:panel styleClass="surface-panel form-panel" pt:aria-labelledby="editorInvitationHeading">
+                <p:panel styleClass="surface-panel" pt:aria-labelledby="editorInvitationHeading">
                     <h2 id="editorInvitationHeading" class="panel-heading">Editor invitation</h2>
                     <h:form styleClass="stacked-form" rendered="#{invitationView.hasEditableCalendars()}">
                         <p:outputLabel for="calendar" value="Calendar"/>
@@ -62,55 +62,40 @@
                                  readonly="true"/>
                     <button type="button"
                             class="button-link secondary-link"
-                            onclick="copyInvitationLink(this); return false;">Copy generated link</button>
+                            onclick="copyLink(this); return false;">Copy generated link</button>
                     <p class="copy-status" role="status" aria-live="polite"></p>
                 </div>
                 <p id="generatedInvitationHelp" class="field-help">You can also select the link and copy it manually.</p>
             </h:panelGroup>
 
-            <div class="table-scroll-region" role="region" aria-label="Invitations table" tabindex="0">
-            <p:dataTable value="#{invitationView.invitations}"
-                         var="invitation"
-                         lazy="true"
-                         paginator="true"
-                         paginatorAlwaysVisible="false"
-                         paginatorPosition="bottom"
-                         rows="50"
-                         emptyMessage="No invitations yet."
-                         styleClass="surface-table">
-                <p:column headerText="Invitation link">
-                    <div class="copy-control">
-                        <p:inputText value="#{invitation.invitationLink}"
-                                     readonly="true"
-                                     styleClass="table-copy-field"
-                                     pt:aria-label="Invitation link for #{invitation.scope}, created #{invitation.createdAt}"/>
-                        <button type="button"
-                                class="button-link secondary-link"
-                                aria-label="Copy invitation link for #{invitation.scope}, created #{invitation.createdAt}"
-                                onclick="copyInvitationLink(this); return false;">Copy link</button>
-                        <p class="copy-status" role="status" aria-live="polite"></p>
-                    </div>
-                </p:column>
-                <p:column headerText="Scope">
-                    <h:outputText value="#{invitation.scope}"/>
-                </p:column>
-                <p:column headerText="Status">
-                    <h:outputText value="#{invitation.status}"/>
-                </p:column>
-                <p:column headerText="Created">
-                    <h:outputText value="#{invitation.createdAt}"/>
-                </p:column>
-                <p:column headerText="Action">
-                    <div class="row-actions table-row-actions">
-                        <h:form rendered="#{invitation.revocable}">
+            <h:panelGroup layout="block" styleClass="empty-state"
+                          rendered="#{empty invitationView.invitations}">No outstanding invitations.</h:panelGroup>
+            <div class="card-list">
+                <ui:repeat value="#{invitationView.invitations}" var="invitation">
+                    <article class="list-card invitation-card">
+                        <div class="invitation-details">
+                            <h2 class="card-heading">#{invitation.scope}</h2>
+                            <p class="secondary-line">Created #{invitation.createdAtLabel} · Expires #{invitation.expiresAtLabel}</p>
+                            <div class="copy-control">
+                                <p:inputText value="#{invitation.invitationLink}"
+                                             readonly="true"
+                                             pt:aria-label="Invitation link for #{invitation.scope}, created #{invitation.createdAtLabel}"/>
+                                <button type="button"
+                                        class="button-link secondary-link"
+                                        aria-label="Copy invitation link for #{invitation.scope}, created #{invitation.createdAtLabel}"
+                                        onclick="copyLink(this); return false;">Copy link</button>
+                                <p class="copy-status" role="status" aria-live="polite"></p>
+                            </div>
+                        </div>
+                        <h:form styleClass="item-actions">
                             <input type="hidden" name="invitationId" value="#{invitation.id}"/>
                             <p:commandButton value="Revoke"
                                              action="#{invitationView.revokeInvitation}"
                                              ajax="false"
                                              styleClass="ui-button-danger ui-button-outlined"
-                                             pt:aria-label="Revoke invitation for #{invitation.scope}, created #{invitation.createdAt}">
+                                             pt:aria-label="Revoke invitation for #{invitation.scope}, created #{invitation.createdAtLabel}">
                                 <p:confirm header="Revoke invitation"
-                                           message="Revoke #{invitation.scope}, created #{invitation.createdAt}, permanently?"
+                                           message="Revoke #{invitation.scope}, created #{invitation.createdAtLabel}, permanently?"
                                            yesButtonLabel="Revoke invitation"
                                            yesButtonClass="ui-button-danger"
                                            noButtonLabel="Cancel"
@@ -118,12 +103,8 @@
                                            beforeShow="focusConfirmationCancelButton();"/>
                             </p:commandButton>
                         </h:form>
-                        <h:outputText value="Not available"
-                                      styleClass="secondary-line"
-                                      rendered="#{not invitation.revocable}"/>
-                    </div>
-                </p:column>
-            </p:dataTable>
+                    </article>
+                </ui:repeat>
             </div>
             <p:confirmDialog global="true" closeOnEscape="true" closable="false" responsive="true">
                 <p:commandButton value="Cancel"
@@ -134,38 +115,5 @@
                                  styleClass="ui-confirmdialog-yes ui-button-danger"/>
             </p:confirmDialog>
         </section>
-        <script type="text/javascript">
-            function copyInvitationLink(button) {
-                var copyControl = button.closest(".copy-control");
-                var invitationLink = copyControl.querySelector("input");
-                var copyStatus = copyControl.querySelector(".copy-status");
-
-                function reportCopySuccess() {
-                    copyStatus.textContent = "Link copied.";
-                }
-
-                function copyWithSelectionFallback() {
-                    invitationLink.focus();
-                    invitationLink.select();
-                    invitationLink.setSelectionRange(0, invitationLink.value.length);
-                    try {
-                        if (document.execCommand("copy")) {
-                            reportCopySuccess();
-                            return;
-                        }
-                    } catch (copyFailure) {
-                        copyStatus.textContent = "Clipboard access is unavailable. Select the link and copy it manually.";
-                        return;
-                    }
-                    copyStatus.textContent = "Clipboard access is unavailable. Select the link and copy it manually.";
-                }
-
-                if (navigator.clipboard) {
-                    navigator.clipboard.writeText(invitationLink.value).then(reportCopySuccess, copyWithSelectionFallback);
-                    return;
-                }
-                copyWithSelectionFallback();
-            }
-        </script>
     </ui:define>
 </ui:composition>

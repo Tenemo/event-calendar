@@ -36,9 +36,6 @@ public final class AuthenticatedApplicationFilter implements Filter {
             return;
         }
 
-        String signInRoute = "partial/ajax".equalsIgnoreCase(request.getHeader("Faces-Request"))
-                ? ExpiredSignInViewExceptionHandler.RECOVERY_ROUTE
-                : "/login";
-        RelativeRedirect.send(request, response, request.getContextPath(), signInRoute);
+        RelativeRedirect.send(request, response, "/sign-in");
     }
 }

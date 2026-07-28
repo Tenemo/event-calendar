@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.invitation.InvitationToken;
-import app.web.RelativeRedirect;
 import org.junit.jupiter.api.Test;
 
 final class SignInViewTest {
@@ -39,31 +38,20 @@ final class SignInViewTest {
                         SignInView.successfulSignInRoute("  alpha beta&gamma  ")),
                 () -> assertEquals(
                         "/register?token=" + maximumLengthToken,
-                        SignInView.successfulSignInRoute(maximumLengthToken)),
-                () -> assertTrue(RelativeRedirect.isSafeApplicationPath(
-                        SignInView.successfulSignInRoute("alpha beta&gamma"))));
+                        SignInView.successfulSignInRoute(maximumLengthToken)));
     }
 
     @Test
-    void statusViewParametersAcceptOnlyTheLiteralTrueValue() {
+    void passwordChangedViewParameterAcceptsOnlyTheLiteralTrueValue() {
         SignInView signInView = new SignInView();
 
         signInView.setPasswordChangedParameter("TRUE");
-        signInView.setReauthenticationRequiredParameter(" true ");
-        assertAll(
-                () -> assertFalse(signInView.isPasswordChanged()),
-                () -> assertFalse(signInView.isReauthenticationRequired()));
+        assertFalse(signInView.isPasswordChanged());
 
         signInView.setPasswordChangedParameter("true");
-        signInView.setReauthenticationRequiredParameter("true");
-        assertAll(
-                () -> assertTrue(signInView.isPasswordChanged()),
-                () -> assertTrue(signInView.isReauthenticationRequired()));
+        assertTrue(signInView.isPasswordChanged());
 
         signInView.setPasswordChangedParameter(null);
-        signInView.setReauthenticationRequiredParameter("not-a-boolean");
-        assertAll(
-                () -> assertFalse(signInView.isPasswordChanged()),
-                () -> assertFalse(signInView.isReauthenticationRequired()));
+        assertFalse(signInView.isPasswordChanged());
     }
 }

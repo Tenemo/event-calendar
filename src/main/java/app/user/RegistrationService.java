@@ -1,9 +1,9 @@
 package app.user;
 
-import app.audit.AuditService;
-import app.calendar.Calendar;
 import app.calendar.CalendarService;
+import app.invitation.InvitationClaim;
 import app.invitation.InvitationService;
+import app.util.ValidationException;
 import jakarta.ejb.Stateless;
 import jakarta.inject.Inject;
 
@@ -16,9 +16,6 @@ public class RegistrationService {
     private CalendarService calendarService;
 
     @Inject
-    private AuditService auditService;
-
-    @Inject
     private InvitationService invitationService;
 
     public ApplicationUser register(
@@ -26,12 +23,17 @@ public class RegistrationService {
             String username,
             String displayName,
             String password,
+            String passwordConfirmation,
             String initialCalendarName) {
-        RegistrationAdmission admission = invitationService.claimRegistrationAdmission(invitationToken);
+        if (password == null || !password.equals(passwordConfirmation)) {
+            throw new ValidationException("Password confirmation does not match.");
+        }
+        String normalizedInitialCalendarName =
+                calendarService.normalizeAndValidateCalendarName(initialCalendarName);
+        InvitationClaim invitationClaim = invitationService.claimInvitationForRegistration(invitationToken);
         ApplicationUser user = userService.createUser(username, displayName, password);
-        Calendar calendar = calendarService.createCalendar(user, initialCalendarName);
-        invitationService.acceptAdmission(admission, user);
-        auditService.record(user, calendar, "app_user", user.getId(), "registered", "User registered.");
+        calendarService.createCalendar(user, normalizedInitialCalendarName);
+        invitationService.completeInvitationClaim(invitationClaim, user);
         return user;
     }
 }

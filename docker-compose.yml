@@ -1,202 +1,93 @@
-x-application-health-timeout: &application-health-timeout 5s
-x-application-health-command: &application-health-command
-  ["CMD-SHELL", "response=\"$$(curl --fail --silent http://localhost:9080/health)\" && [ \"$$response\" = \"ok\" ]"]
+x-application-healthcheck: &application-healthcheck
+  test: ["CMD-SHELL", "response=\"$$(curl --fail --silent http://localhost:9080/health)\" && [ \"$$response\" = \"ok\" ]"]
+  interval: 3s
+  timeout: 5s
+  retries: 40
+  start_period: 20s
 
 services:
   postgres:
     image: postgres:17.10@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
     environment:
       POSTGRES_DB: ${PGDATABASE:-calendar}
-      POSTGRES_USER: ${PGUSER:-calendar}
       POSTGRES_PASSWORD: ${PGPASSWORD:-calendar}
+      POSTGRES_USER: ${PGUSER:-calendar}
     ports:
-      - "${PGPORT:-5432}:5432"
+      - "127.0.0.1:${PGPORT:-5432}:5432"
     volumes:
       - calendar_postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 10s
+      interval: 3s
       timeout: 5s
-      retries: 5
+      retries: 20
 
   web:
     profiles: [application]
     image: shared-calendar:local
-    build:
-      context: .
-      args:
-        RAILWAY_GIT_COMMIT_SHA: ${RAILWAY_GIT_COMMIT_SHA:-}
+    build: .
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      PORT: 9080
-      HTTPS_PORT: 9443
-      PGHOST: postgres
-      PGPORT: 5432
-      PGDATABASE: ${PGDATABASE:-calendar}
-      PGUSER: ${PGUSER:-calendar}
-      PGPASSWORD: ${PGPASSWORD:-calendar}
-      APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Warsaw}
       APP_BASE_URL: ${APP_BASE_URL:-https://localhost:9443}
+      APP_BOOTSTRAP_INVITATION_TOKEN: ${APP_BOOTSTRAP_INVITATION_TOKEN:-}
+      APP_DEFAULT_TIME_ZONE: ${APP_DEFAULT_TIME_ZONE:-Europe/Warsaw}
       APP_LTPA_KEYS_PASSWORD: ${APP_LTPA_KEYS_PASSWORD:-local-development-only}
-      APP_BOOTSTRAP_INVITE_TOKEN: ${APP_BOOTSTRAP_INVITE_TOKEN:-}
+      HTTPS_PORT: 9443
+      PGAPPLICATIONNAME: shared-calendar-compose
+      PGDATABASE: ${PGDATABASE:-calendar}
+      PGHOST: postgres
+      PGPASSWORD: ${PGPASSWORD:-calendar}
+      PGPORT: 5432
+      PGUSER: ${PGUSER:-calendar}
+      PORT: 9080
     ports:
-      - "${PORT:-9080}:9080"
-      - "${HTTPS_PORT:-9443}:9443"
-    healthcheck:
-      test: *application-health-command
-      interval: 10s
-      timeout: *application-health-timeout
-      retries: 12
-      start_period: 30s
+      - "127.0.0.1:${PORT:-9080}:9080"
+      - "127.0.0.1:${HTTPS_PORT:-9443}:9443"
+    healthcheck: *application-healthcheck
 
-  postgres-restore-verification:
-    profiles: [restore-verification]
+  postgres-verification:
+    profiles: [verification]
     image: postgres:17.10@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
     environment:
-      POSTGRES_DB: calendar_restore
-      POSTGRES_USER: calendar_restore
-      POSTGRES_PASSWORD: calendar_restore
+      POSTGRES_DB: shared_calendar_verification
+      POSTGRES_PASSWORD: shared_calendar_verification
+      POSTGRES_USER: shared_calendar_verification
+    ports:
+      - "127.0.0.1:${VERIFICATION_DATABASE_PORT:-55433}:5432"
     tmpfs:
       - /var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U calendar_restore -d calendar_restore"]
+      test: ["CMD-SHELL", "pg_isready -U shared_calendar_verification -d shared_calendar_verification"]
       interval: 2s
       timeout: 5s
       retries: 30
 
-  postgres-backup-verification:
-    profiles: [backup-verification]
-    image: postgres:17.10@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
-    environment:
-      POSTGRES_DB: calendar_backup_verification
-      POSTGRES_USER: calendar_backup_verification
-      POSTGRES_PASSWORD: calendar_backup_verification
-    tmpfs:
-      - /var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U calendar_backup_verification -d calendar_backup_verification"]
-      interval: 2s
-      timeout: 5s
-      retries: 30
-
-  web-backup-verification:
-    profiles: [backup-verification]
-    image: shared-calendar:local
+  web-verification:
+    profiles: [verification]
+    image: shared-calendar:verification
+    build: .
     depends_on:
-      postgres-backup-verification:
+      postgres-verification:
         condition: service_healthy
     environment:
-      PORT: 9080
+      APP_BASE_URL: https://localhost:${VERIFICATION_HTTPS_PORT:-19445}
+      APP_BOOTSTRAP_INVITATION_TOKEN: verification-only-bootstrap-token-0000000000
+      APP_DEFAULT_TIME_ZONE: Europe/Warsaw
+      APP_LTPA_KEYS_PASSWORD: verification-only-ltpa-password
       HTTPS_PORT: 9443
-      PGHOST: postgres-backup-verification
+      PGAPPLICATIONNAME: shared-calendar-verification
+      PGDATABASE: shared_calendar_verification
+      PGHOST: postgres-verification
+      PGPASSWORD: shared_calendar_verification
       PGPORT: 5432
-      PGDATABASE: calendar_backup_verification
-      PGUSER: calendar_backup_verification
-      PGPASSWORD: calendar_backup_verification
-      APP_TIMEZONE: Europe/Warsaw
-      APP_BASE_URL: http://localhost:${BACKUP_VERIFICATION_APPLICATION_PORT:-9083}
-      APP_LTPA_KEYS_PASSWORD: backup-verification-only
-      APP_BOOTSTRAP_INVITE_TOKEN: ""
-    ports:
-      - "127.0.0.1:${BACKUP_VERIFICATION_APPLICATION_PORT:-9083}:9080"
-    healthcheck:
-      test: *application-health-command
-      interval: 2s
-      timeout: *application-health-timeout
-      retries: 30
-      start_period: 30s
-
-  postgres-bootstrap-verification:
-    profiles: [bootstrap-verification]
-    image: postgres:17.10@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
-    environment:
-      POSTGRES_DB: calendar_bootstrap_verification
-      POSTGRES_USER: calendar_bootstrap_verification
-      POSTGRES_PASSWORD: calendar_bootstrap_verification
-    ports:
-      - "127.0.0.1:${BOOTSTRAP_VERIFICATION_DATABASE_PORT:-55432}:5432"
-    tmpfs:
-      - /var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U calendar_bootstrap_verification -d calendar_bootstrap_verification"]
-      interval: 2s
-      timeout: 5s
-      retries: 30
-
-  postgres-end-to-end-verification:
-    profiles: [end-to-end-verification]
-    image: postgres:17.10@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
-    environment:
-      POSTGRES_DB: calendar_end_to_end_verification
-      POSTGRES_USER: calendar_end_to_end_verification
-      POSTGRES_PASSWORD: calendar_end_to_end_verification
-    ports:
-      - "127.0.0.1:${END_TO_END_VERIFICATION_DATABASE_PORT:-55433}:5432"
-    tmpfs:
-      - /var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U calendar_end_to_end_verification -d calendar_end_to_end_verification"]
-      interval: 2s
-      timeout: 5s
-      retries: 30
-
-  web-end-to-end-verification:
-    profiles: [end-to-end-verification]
-    image: shared-calendar:local
-    depends_on:
-      postgres-end-to-end-verification:
-        condition: service_healthy
-    environment:
+      PGUSER: shared_calendar_verification
       PORT: 9080
-      HTTPS_PORT: 9443
-      PGHOST: postgres-end-to-end-verification
-      PGPORT: 5432
-      PGDATABASE: calendar_end_to_end_verification
-      PGUSER: calendar_end_to_end_verification
-      PGPASSWORD: calendar_end_to_end_verification
-      APP_TIMEZONE: Europe/Warsaw
-      APP_BASE_URL: ${END_TO_END_VERIFICATION_BASE_URL:-https://localhost:9445}
-      APP_LTPA_KEYS_PASSWORD: end-to-end-verification-only
-      APP_BOOTSTRAP_INVITE_TOKEN: ""
     ports:
-      - "127.0.0.1:${END_TO_END_VERIFICATION_APPLICATION_PORT:-9082}:9080"
-      - "127.0.0.1:${END_TO_END_VERIFICATION_HTTPS_PORT:-9445}:9443"
-    healthcheck:
-      test: *application-health-command
-      interval: 2s
-      timeout: *application-health-timeout
-      retries: 30
-      start_period: 30s
-
-  web-bootstrap-verification:
-    profiles: [bootstrap-verification]
-    image: shared-calendar:local
-    depends_on:
-      postgres-bootstrap-verification:
-        condition: service_healthy
-    environment:
-      PORT: 9080
-      HTTPS_PORT: 9443
-      PGHOST: postgres-bootstrap-verification
-      PGPORT: 5432
-      PGDATABASE: calendar_bootstrap_verification
-      PGUSER: calendar_bootstrap_verification
-      PGPASSWORD: calendar_bootstrap_verification
-      APP_TIMEZONE: Europe/Warsaw
-      APP_BASE_URL: https://localhost:${BOOTSTRAP_VERIFICATION_HTTPS_PORT:-9444}
-      APP_LTPA_KEYS_PASSWORD: bootstrap-verification-only
-      APP_BOOTSTRAP_INVITE_TOKEN: ${BOOTSTRAP_VERIFICATION_INVITATION_TOKEN:-bootstrap-verification-only-token-00000000000000000000000000000000}
-    ports:
-      - "127.0.0.1:${BOOTSTRAP_VERIFICATION_APPLICATION_PORT:-9081}:9080"
-      - "127.0.0.1:${BOOTSTRAP_VERIFICATION_HTTPS_PORT:-9444}:9443"
-    healthcheck:
-      test: *application-health-command
-      interval: 2s
-      timeout: *application-health-timeout
-      retries: 30
-      start_period: 30s
+      - "127.0.0.1:${VERIFICATION_HTTP_PORT:-19082}:9080"
+      - "127.0.0.1:${VERIFICATION_HTTPS_PORT:-19445}:9443"
+    healthcheck: *application-healthcheck
 
 volumes:
   calendar_postgres:

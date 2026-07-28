@@ -25,7 +25,7 @@ public class RegistrationInvitationConfiguration {
         if (!bootstrapInvitationToken.isEmpty()
                 && !InvitationToken.isValidBootstrapSecret(bootstrapInvitationToken)) {
             throw new IllegalStateException(
-                    "APP_BOOTSTRAP_INVITE_TOKEN must be blank or contain between 43 and 80 Base64URL characters.");
+                    "APP_BOOTSTRAP_INVITATION_TOKEN must be blank or contain between 43 and 80 Base64URL characters.");
         }
     }
 

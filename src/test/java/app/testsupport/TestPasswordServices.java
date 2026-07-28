@@ -24,16 +24,6 @@ public final class TestPasswordServices {
         return passwordService;
     }
 
-    /**
-     * Applies the container's {@code @PostConstruct} initialization to a subclass built with
-     * {@code new}, so a test double inherits the same configured hash parameters and absent-account
-     * hash that the real bean receives.
-     */
-    public static void initialize(PasswordService passwordService) {
-        ServiceTestSupport.setField(passwordService, "passwordHash", new RecordingPasswordHash());
-        initializePasswordService(passwordService);
-    }
-
     private static void initializePasswordService(PasswordService passwordService) {
         try {
             var initializationMethod = PasswordService.class.getDeclaredMethod("initializePasswordHash");

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml"
       xmlns:h="jakarta.faces.html"
+      xmlns:pt="jakarta.faces.passthrough"
       xmlns:ui="jakarta.faces.facelets"
       xmlns:p="primefaces"
       lang="en">
@@ -22,10 +23,19 @@
         </div>
         <nav class="app-nav" aria-label="Main navigation">
             <h:outputLink value="#{request.contextPath}/">Home</h:outputLink>
-            <h:outputLink value="#{request.contextPath}/app/calendars" rendered="#{currentUser.signedIn}">My calendars</h:outputLink>
-            <h:outputLink value="#{request.contextPath}/app/invitations" rendered="#{currentUser.signedIn}">Invitations</h:outputLink>
-            <h:outputLink value="#{request.contextPath}/app/account-settings" rendered="#{currentUser.signedIn}">Account settings</h:outputLink>
-            <h:outputLink value="#{request.contextPath}/login" rendered="#{not currentUser.signedIn}">Sign in</h:outputLink>
+            <h:outputLink value="#{request.contextPath}/app/calendars"
+                          rendered="#{currentUser.signedIn}"
+                          styleClass="#{request.servletPath.startsWith('/app/calendar') ? 'current-nav-item' : ''}"
+                          pt:aria-current="#{request.servletPath.startsWith('/app/calendar') ? 'page' : null}">My calendars</h:outputLink>
+            <h:outputLink value="#{request.contextPath}/app/invitations"
+                          rendered="#{currentUser.signedIn}"
+                          styleClass="#{request.servletPath.startsWith('/app/invitations') ? 'current-nav-item' : ''}"
+                          pt:aria-current="#{request.servletPath.startsWith('/app/invitations') ? 'page' : null}">Invitations</h:outputLink>
+            <h:outputLink value="#{request.contextPath}/app/account-settings"
+                          rendered="#{currentUser.signedIn}"
+                          styleClass="#{request.servletPath.startsWith('/app/account-settings') ? 'current-nav-item' : ''}"
+                          pt:aria-current="#{request.servletPath.startsWith('/app/account-settings') ? 'page' : null}">Account settings</h:outputLink>
+            <h:outputLink value="#{request.contextPath}/sign-in" rendered="#{not currentUser.signedIn}">Sign in</h:outputLink>
             <h:form styleClass="nav-form" rendered="#{currentUser.signedIn}">
                 <h:commandButton value="Sign out" action="#{signOutView.signOut}" styleClass="nav-action link-button"/>
             </h:form>
@@ -34,7 +44,7 @@
 
     <main id="main-content" class="app-main" tabindex="-1">
         <ui:insert name="messages">
-            <p:messages id="messages" showDetail="true" closable="true"/>
+            <p:messages id="messages" showDetail="true" closable="true" pt:tabindex="-1"/>
         </ui:insert>
         <ui:insert name="content"/>
     </main>
@@ -48,13 +58,9 @@
             });
         }
 
-        function focusAfterSuccessfulAjax(ajaxArguments, idSuffix) {
-            if (ajaxArguments) {
-                if (ajaxArguments.validationFailed) {
-                    return;
-                }
-            }
-            focusElementByIdSuffix(idSuffix);
+        function focusAfterAjax(ajaxArguments, successIdSuffix) {
+            var validationFailed = ajaxArguments &amp;&amp; ajaxArguments.validationFailed;
+            focusElementByIdSuffix(validationFailed ? "messages" : successIdSuffix);
         }
 
         function focusConfirmationCancelButton() {
@@ -64,6 +70,29 @@
                     cancelButton.focus();
                 }
             }, 0);
+        }
+
+        function copyLink(button) {
+            var copyControl = button.closest(".copy-control");
+            var linkInput = copyControl.querySelector("input");
+            var copyStatus = copyControl.querySelector(".copy-status");
+
+            function reportCopySuccess() {
+                copyStatus.textContent = "Link copied.";
+            }
+
+            function selectForManualCopy() {
+                linkInput.focus();
+                linkInput.select();
+                linkInput.setSelectionRange(0, linkInput.value.length);
+                copyStatus.textContent = "Clipboard access is unavailable. Select the link and copy it manually.";
+            }
+
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(linkInput.value).then(reportCopySuccess, selectForManualCopy);
+                return;
+            }
+            selectForManualCopy();
         }
     </script>
 </h:body>

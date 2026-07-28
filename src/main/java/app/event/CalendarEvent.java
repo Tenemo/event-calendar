@@ -1,7 +1,6 @@
 package app.event;
 
 import app.calendar.Calendar;
-import app.user.ApplicationUser;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -42,23 +41,9 @@ public class CalendarEvent {
     @Column(name = "all_day", nullable = false)
     private boolean allDay;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_by_user_id")
-    private ApplicationUser createdByUser;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "updated_by_user_id")
-    private ApplicationUser updatedByUser;
-
     @Version
     @Column(nullable = false)
     private int version;
-
-    @Column(name = "created_at", nullable = false)
-    private OffsetDateTime createdAt;
-
-    @Column(name = "updated_at", nullable = false)
-    private OffsetDateTime updatedAt;
 
     public Long getId() {
         return id;
@@ -120,31 +105,8 @@ public class CalendarEvent {
         this.allDay = allDay;
     }
 
-    public void setCreatedByUser(ApplicationUser createdByUser) {
-        this.createdByUser = createdByUser;
-    }
-
-    public void setUpdatedByUser(ApplicationUser updatedByUser) {
-        this.updatedByUser = updatedByUser;
-    }
-
     public int getVersion() {
         return version;
     }
 
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(OffsetDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public OffsetDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(OffsetDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
 }

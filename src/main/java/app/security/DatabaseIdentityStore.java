@@ -28,46 +28,38 @@ public class DatabaseIdentityStore implements IdentityStore {
     @Inject
     private ClientRequestSourceResolver clientRequestSourceResolver;
 
-    @Inject
-    private PasswordValidationState passwordValidationState;
-
     @Override
     public CredentialValidationResult validate(Credential credential) {
-        passwordValidationState.clear();
-        if (!(credential instanceof UsernamePasswordCredential usernamePasswordCredential)) {
+        if (!(credential instanceof UsernamePasswordCredential submittedCredential)) {
             return CredentialValidationResult.NOT_VALIDATED_RESULT;
         }
 
-        String username = userService.normalizeUsername(usernamePasswordCredential.getCaller());
-        String password = usernamePasswordCredential.getPasswordAsString();
-        String sourceIdentifier = sourceIdentifier();
-        if (!signInAttemptThrottle.reserveAuthenticationAttempt(username, sourceIdentifier)) {
+        String username = userService.normalizeUsername(submittedCredential.getCaller());
+        String password = submittedCredential.getPasswordAsString();
+        String source = clientRequestSourceResolver.resolve(request);
+        if (!signInAttemptThrottle.reserveAuthenticationAttempt(username, source)) {
             return CredentialValidationResult.INVALID_RESULT;
         }
 
-        // Reserving first means the key derivation below runs without holding the throttle, so one
-        // slow verification cannot delay unrelated sign-ins.
-        CredentialValidationResult validationResult = userService.findActiveByUsername(username)
-                .map(user -> validatePassword(user, password))
-                .orElseGet(() -> validateMissingUserPassword(password));
-        if (validationResult.getStatus() == CredentialValidationResult.Status.VALID) {
-            signInAttemptThrottle.releaseSuccessfulAttempt(username, sourceIdentifier);
+        try {
+            CredentialValidationResult result = userService.findByUsername(username)
+                    .map(user -> validatePassword(user, password))
+                    .orElseGet(() -> validateMissingUserPassword(password));
+            if (result.getStatus() == CredentialValidationResult.Status.VALID) {
+                signInAttemptThrottle.releaseSuccessfulAttempt(username, source);
+            }
+            return result;
+        } catch (RuntimeException exception) {
+            signInAttemptThrottle.withdrawAuthenticationAttempt(username, source);
+            throw exception;
         }
-        return validationResult;
     }
 
     private CredentialValidationResult validatePassword(ApplicationUser user, String password) {
-        String validatedUsername = user.getUsername();
-        String validatedPasswordHash = user.getPasswordHash();
-        long validatedPasswordVersion = user.getPasswordVersion();
-        if (passwordService.verifyPassword(password, validatedPasswordHash)) {
-            return validUser(validatedUsername, validatedPasswordVersion);
+        if (!passwordService.verifyPassword(password, user.getPasswordHash())) {
+            return CredentialValidationResult.INVALID_RESULT;
         }
-        return CredentialValidationResult.INVALID_RESULT;
-    }
-
-    String sourceIdentifier() {
-        return clientRequestSourceResolver.resolve(request);
+        return new CredentialValidationResult(user.getUsername(), Set.of("USER"));
     }
 
     private CredentialValidationResult validateMissingUserPassword(String password) {
@@ -75,25 +67,18 @@ public class DatabaseIdentityStore implements IdentityStore {
         return CredentialValidationResult.INVALID_RESULT;
     }
 
-    private CredentialValidationResult validUser(String username, long validatedPasswordVersion) {
-        passwordValidationState.recordSuccessfulValidation(username, validatedPasswordVersion);
-        return new CredentialValidationResult(username, Set.of("USER"));
-    }
-
     @Override
     public Set<String> getCallerGroups(CredentialValidationResult validationResult) {
         if (validationResult == null || validationResult.getCallerPrincipal() == null) {
             return Set.of();
         }
-        if (userService.findActiveByUsername(validationResult.getCallerPrincipal().getName()).isPresent()) {
-            return Set.of("USER");
-        }
-        return Set.of();
+        return userService.findByUsername(validationResult.getCallerPrincipal().getName()).isPresent()
+                ? Set.of("USER")
+                : Set.of();
     }
 
     @Override
     public Set<ValidationType> validationTypes() {
         return Set.of(ValidationType.VALIDATE, ValidationType.PROVIDE_GROUPS);
     }
-
 }

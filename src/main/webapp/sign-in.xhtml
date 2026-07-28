@@ -1,0 +1,73 @@
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:f="jakarta.faces.core"
+                xmlns:h="jakarta.faces.html"
+                xmlns:ui="jakarta.faces.facelets"
+                xmlns:pt="jakarta.faces.passthrough"
+                template="/WEB-INF/templates/main.xhtml">
+    <f:metadata>
+        <f:viewParam name="token" value="#{signInView.invitationToken}"/>
+        <f:viewParam name="passwordChanged" value="#{signInView.passwordChangedParameter}"/>
+    </f:metadata>
+    <ui:define name="title">Sign in - Shared calendar</ui:define>
+    <ui:define name="messages">
+        <h:panelGroup id="messages"
+                      layout="block"
+                      styleClass="lightweight-message-region"
+                      pt:role="#{facesContext.maximumSeverity ne null and facesContext.maximumSeverity.ordinal ge 2 ? 'alert' : 'status'}"
+                      pt:aria-live="#{facesContext.maximumSeverity ne null and facesContext.maximumSeverity.ordinal ge 2 ? 'assertive' : 'polite'}"
+                      pt:aria-atomic="true"
+                      pt:tabindex="-1">
+            <h:messages id="message-list"
+                        layout="list"
+                        showSummary="true"
+                        showDetail="true"
+                        styleClass="lightweight-messages"
+                        infoClass="lightweight-message-info"
+                        warnClass="lightweight-message-warn"
+                        errorClass="lightweight-message-error"
+                        fatalClass="lightweight-message-fatal"/>
+        </h:panelGroup>
+    </ui:define>
+
+    <ui:define name="content">
+        <section class="narrow-section">
+            <h1 id="sign-in-heading">Sign in</h1>
+            <h:panelGroup layout="block"
+                          styleClass="notice-message"
+                          rendered="#{signInView.passwordChanged}">
+                Your password was changed. Sign in with the new password.
+            </h:panelGroup>
+            <h:panelGroup layout="block"
+                          styleClass="surface-panel lightweight-panel"
+                          pt:aria-labelledby="sign-in-heading">
+                <h:form styleClass="stacked-form">
+                    <h:inputHidden id="invitationToken" value="#{signInView.invitationToken}"/>
+                    <h:outputLabel for="username" value="Username"/>
+                    <h:inputText id="username"
+                                 value="#{signInView.username}"
+                                 styleClass="native-input"
+                                 pt:autocomplete="username"
+                                 maxlength="80"
+                                 required="true"
+                                 requiredMessage="Username is required."/>
+
+                    <h:outputLabel for="password" value="Password"/>
+                    <h:inputSecret id="password"
+                                   value="#{signInView.password}"
+                                   styleClass="native-input"
+                                   pt:autocomplete="current-password"
+                                   maxlength="#{passwordService.maximumPasswordInputLength}"
+                                   required="true"
+                                   requiredMessage="Password is required."/>
+
+                    <h:commandButton value="Sign in"
+                                     action="#{signInView.signIn}"
+                                     styleClass="native-button"/>
+                </h:form>
+                <p class="form-footer">
+                    Registration requires an invitation link.
+                </p>
+            </h:panelGroup>
+        </section>
+    </ui:define>
+</ui:composition>

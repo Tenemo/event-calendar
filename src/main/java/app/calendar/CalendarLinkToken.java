@@ -6,9 +6,9 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 
 public final class CalendarLinkToken {
-    public static final int RANDOM_BYTE_COUNT = 8;
     public static final int ENCODED_LENGTH = 11;
 
+    private static final int RANDOM_BYTE_COUNT = 8;
     private static final Pattern TOKEN_PATTERN = Pattern.compile("[A-Za-z0-9_-]{10}[AEIMQUYcgkosw048]");
 
     private CalendarLinkToken() {

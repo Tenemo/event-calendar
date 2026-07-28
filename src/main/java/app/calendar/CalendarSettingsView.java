@@ -7,8 +7,8 @@ import app.util.AuthorizationException;
 import app.util.ConflictException;
 import app.util.NotFoundException;
 import app.util.ValidationException;
-import app.web.ViewParameterParser;
 import app.web.FacesMessages;
+import app.web.ViewParameterParser;
 import jakarta.faces.application.FacesMessage;
 import jakarta.faces.context.FacesContext;
 import jakarta.faces.view.ViewScoped;
@@ -67,9 +67,27 @@ public class CalendarSettingsView implements Serializable {
                     publicAccessEnabled,
                     version);
             copyCalendar(calendar);
-            addMessage(FacesMessage.SEVERITY_INFO, "Calendar settings saved.", "The calendar has been updated.");
-        } catch (AuthorizationException | ConflictException | NotFoundException | ValidationException exception) {
-            addMessage(FacesMessage.SEVERITY_ERROR, "Settings could not be saved.", exception.getMessage());
+            FacesMessages.add(
+                    FacesMessage.SEVERITY_INFO,
+                    "Calendar settings saved.",
+                    "The calendar has been updated.");
+        } catch (ValidationException exception) {
+            FacesMessages.add(
+                    FacesMessage.SEVERITY_ERROR,
+                    "Settings could not be saved.",
+                    exception.getMessage());
+        } catch (ConflictException exception) {
+            reloadAfterConflict();
+            FacesMessages.add(
+                    FacesMessage.SEVERITY_ERROR,
+                    "Settings could not be saved.",
+                    exception.getMessage());
+        } catch (AuthorizationException | NotFoundException exception) {
+            markNotFound();
+            FacesMessages.add(
+                    FacesMessage.SEVERITY_ERROR,
+                    "Settings could not be saved.",
+                    exception.getMessage());
         }
     }
 
@@ -86,13 +104,21 @@ public class CalendarSettingsView implements Serializable {
         version = calendar.getVersion();
     }
 
-    private void markNotFound() {
-        available = false;
-        FacesContext.getCurrentInstance().getExternalContext().setResponseStatus(HttpServletResponse.SC_NOT_FOUND);
+    private void reloadAfterConflict() {
+        try {
+            Calendar calendar = calendarService.requireAdminCalendar(currentUser.require(), calendarId);
+            copyCalendar(calendar);
+        } catch (AuthorizationException | NotFoundException exception) {
+            markNotFound();
+        }
     }
 
-    private void addMessage(FacesMessage.Severity severity, String summary, String detail) {
-        FacesMessages.add(severity, summary, detail);
+    private void markNotFound() {
+        available = false;
+        FacesContext facesContext = FacesContext.getCurrentInstance();
+        if (!facesContext.isPostback()) {
+            facesContext.getExternalContext().setResponseStatus(HttpServletResponse.SC_NOT_FOUND);
+        }
     }
 
     public String getCalendarIdParameter() { return calendarIdParameter; }

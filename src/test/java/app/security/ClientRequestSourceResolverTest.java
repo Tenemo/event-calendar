@@ -1,10 +1,10 @@
 package app.security;
 
+import static app.testsupport.ProxyReturnValues.createInterfaceProxy;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import jakarta.servlet.http.HttpServletRequest;
-import java.lang.reflect.Proxy;
 import java.util.Collections;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -136,10 +136,9 @@ final class ClientRequestSourceResolverTest {
 
     private static HttpServletRequest request(String remoteAddress, String... realIpHeaders) {
         List<String> headerValues = List.of(realIpHeaders);
-        return (HttpServletRequest) Proxy.newProxyInstance(
-                HttpServletRequest.class.getClassLoader(),
-                new Class<?>[] {HttpServletRequest.class},
-                (proxy, method, arguments) -> switch (method.getName()) {
+        return createInterfaceProxy(
+                HttpServletRequest.class,
+                (ignoredProxy, method, arguments) -> switch (method.getName()) {
                     case "getRemoteAddr" -> remoteAddress;
                     case "getHeaders" -> "X-Real-IP".equals(arguments[0])
                             ? Collections.enumeration(headerValues)

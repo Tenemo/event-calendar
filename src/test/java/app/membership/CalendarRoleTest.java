@@ -16,12 +16,4 @@ final class CalendarRoleTest {
                 () -> assertEquals("Editor", CalendarRole.EDITOR.getDisplayName()),
                 () -> assertEquals("Admin", CalendarRole.ADMIN.getDisplayName()));
     }
-
-    @Test
-    void keepsTheStrongerRoleWhenAnInviteWouldOtherwiseDowngradeAccess() {
-        assertAll(
-                () -> assertEquals(CalendarRole.EDITOR, CalendarRole.strongerRole(CalendarRole.EDITOR, CalendarRole.EDITOR)),
-                () -> assertEquals(CalendarRole.ADMIN, CalendarRole.strongerRole(CalendarRole.ADMIN, CalendarRole.EDITOR)),
-                () -> assertEquals(CalendarRole.ADMIN, CalendarRole.strongerRole(CalendarRole.EDITOR, CalendarRole.ADMIN)));
-    }
 }

@@ -1,7 +1,6 @@
 package app.calendar;
 
 import app.membership.CalendarAccessService;
-import app.security.ClientRequestSourceResolver;
 import app.security.CurrentUser;
 import app.util.NotFoundException;
 import jakarta.inject.Inject;
@@ -20,23 +19,12 @@ public class CalendarRouteFilter implements Filter {
     public static final String CALENDAR_LINK_TOKEN_REQUEST_ATTRIBUTE = "calendarLinkToken";
     public static final String CALENDAR_NOT_FOUND_REQUEST_ATTRIBUTE = "calendarNotFound";
     public static final String CALENDAR_REQUEST_ATTRIBUTE = "calendar";
-    public static final String ANONYMOUS_CALENDAR_POSTBACK_REQUIRED_REQUEST_ATTRIBUTE =
-            "anonymousCalendarPostbackRequired";
-
-    private static final String CALENDAR_TEMPLATE_PATH = "/calendar.xhtml";
-    private static final String RATE_LIMIT_MESSAGE = "Too many calendar link requests. Try again later.";
-
+    private static final String CALENDAR_VIEW_PATH = "/WEB-INF/views/calendar.xhtml";
     @Inject
     private CalendarAccessService calendarAccessService;
 
     @Inject
     private CurrentUser currentUser;
-
-    @Inject
-    private CalendarLinkRequestThrottle calendarLinkRequestThrottle;
-
-    @Inject
-    private ClientRequestSourceResolver clientRequestSourceResolver;
 
     @Override
     public void doFilter(
@@ -49,11 +37,6 @@ public class CalendarRouteFilter implements Filter {
             return;
         }
 
-        if (isLegacyCalendarRoute(request)) {
-            response.sendError(HttpServletResponse.SC_NOT_FOUND);
-            return;
-        }
-
         String calendarLinkToken = CalendarLinkToken.fromRequestPath(
                 request.getContextPath(), request.getRequestURI());
         if (calendarLinkToken == null) {
@@ -61,33 +44,17 @@ public class CalendarRouteFilter implements Filter {
             return;
         }
 
-        String sourceIdentifier = clientRequestSourceResolver.resolve(request);
-        try (CalendarLinkRequestThrottle.RequestPermit requestPermit = calendarLinkRequestThrottle.tryAcquire(sourceIdentifier)) {
-            if (!requestPermit.isAccepted()) {
-                sendRateLimitResponse(response, requestPermit.getRetryAfterSeconds());
-                return;
-            }
-            if (!isReadOnlyRequest(request)) {
-                filterChain.doFilter(request, response);
-                return;
-            }
-            forwardCalendar(request, response, calendarLinkToken);
+        if (!isSupportedCalendarRequest(request)) {
+            filterChain.doFilter(request, response);
+            return;
         }
+        forwardCalendar(request, response, calendarLinkToken);
     }
 
-    private static boolean isReadOnlyRequest(HttpServletRequest request) {
+    private static boolean isSupportedCalendarRequest(HttpServletRequest request) {
         return "GET".equalsIgnoreCase(request.getMethod())
-                || "HEAD".equalsIgnoreCase(request.getMethod());
-    }
-
-    private static boolean isLegacyCalendarRoute(HttpServletRequest request) {
-        String contextPath = request.getContextPath();
-        String requestUri = request.getRequestURI();
-        if (contextPath == null || requestUri == null || !requestUri.startsWith(contextPath)) {
-            return false;
-        }
-        String applicationPath = requestUri.substring(contextPath.length());
-        return applicationPath.equals("/calendar") || applicationPath.startsWith("/calendar/");
+                || "HEAD".equalsIgnoreCase(request.getMethod())
+                || "POST".equalsIgnoreCase(request.getMethod());
     }
 
     private void forwardCalendar(
@@ -95,7 +62,7 @@ public class CalendarRouteFilter implements Filter {
             HttpServletResponse response,
             String calendarLinkToken) throws IOException, ServletException {
         request.setAttribute(CALENDAR_LINK_TOKEN_REQUEST_ATTRIBUTE, calendarLinkToken);
-        RequestDispatcher requestDispatcher = request.getRequestDispatcher(CALENDAR_TEMPLATE_PATH);
+        RequestDispatcher requestDispatcher = request.getRequestDispatcher(CALENDAR_VIEW_PATH);
         Calendar calendar;
         try {
             calendar = calendarAccessService.requireCalendarReadableByLinkToken(
@@ -108,14 +75,6 @@ public class CalendarRouteFilter implements Filter {
 
         request.setAttribute(CALENDAR_REQUEST_ATTRIBUTE, calendar);
         requestDispatcher.forward(request, response);
-    }
-
-    private void sendRateLimitResponse(HttpServletResponse response, int retryAfterSeconds) throws IOException {
-        response.setStatus(429);
-        response.setHeader("Retry-After", Integer.toString(retryAfterSeconds));
-        response.setHeader("Cache-Control", "no-store");
-        response.setContentType("text/plain;charset=UTF-8");
-        response.getWriter().write(RATE_LIMIT_MESSAGE);
     }
 
     private static final class FixedStatusResponse extends HttpServletResponseWrapper {

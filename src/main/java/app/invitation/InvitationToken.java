@@ -1,6 +1,6 @@
 package app.invitation;
 
-/** Canonical validation shared by invitation persistence, lookup, and redirects. */
+/** Normalization and validation for untrusted invitation tokens and bootstrap secrets. */
 public final class InvitationToken {
     public static final int MINIMUM_BOOTSTRAP_SECRET_LENGTH = 43;
     public static final int MAXIMUM_LENGTH = 80;

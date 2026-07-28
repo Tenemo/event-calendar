@@ -1,6 +1,5 @@
 package app.calendar;
 
-import app.audit.AuditService;
 import app.config.NewCalendarDefaults;
 import app.event.CalendarEvent;
 import app.membership.CalendarAccessService;
@@ -18,8 +17,6 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.PersistenceContext;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 
 @Stateless
@@ -36,9 +33,6 @@ public class CalendarService {
     private TokenService tokenService;
 
     @Inject
-    private AuditService auditService;
-
-    @Inject
     private CalendarAccessService calendarAccessService;
 
     @Inject
@@ -48,62 +42,46 @@ public class CalendarService {
     private NewCalendarDefaults newCalendarDefaults;
 
     public Calendar createCalendar(ApplicationUser creator, String name) {
-        if (creator == null || creator.getId() == null || !creator.isActive()) {
-            throw new ValidationException("An active user is required to create a calendar.");
+        if (creator == null || creator.getId() == null) {
+            throw new ValidationException("A registered user is required to create a calendar.");
         }
 
-        String normalizedName = TextNormalizer.normalizeRequiredText(
-                name,
-                "Calendar name is required.",
-                MAXIMUM_CALENDAR_NAME_LENGTH,
-                "Calendar name must be 160 characters or fewer.");
-        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         ApplicationUser managedCreator = entityManager.find(ApplicationUser.class, creator.getId());
-        if (managedCreator == null || !managedCreator.isActive()) {
-            throw new ValidationException("An active user is required to create a calendar.");
+        if (managedCreator == null) {
+            throw new ValidationException("A registered user is required to create a calendar.");
         }
 
         Calendar calendar = new Calendar();
-        calendar.setName(normalizedName);
-        calendar.setDescription(null);
-        calendar.setCalendarLinkToken(generateCalendarLinkToken());
+        calendar.setName(normalizeAndValidateCalendarName(name));
+        calendar.setCalendarLinkToken(tokenService.generateCalendarLinkToken());
         calendar.setTimeZone(newCalendarDefaults.getDefaultTimeZone());
         calendar.setPublicAccessEnabled(true);
-        calendar.setActive(true);
-        calendar.setCreatedByUser(managedCreator);
-        calendar.setCreatedAt(now);
-        calendar.setUpdatedAt(now);
         entityManager.persist(calendar);
 
         CalendarMembership creatorMembership = new CalendarMembership();
         creatorMembership.setCalendar(calendar);
         creatorMembership.setUser(managedCreator);
         creatorMembership.setRole(CalendarRole.ADMIN);
-        creatorMembership.setActive(true);
-        creatorMembership.setCreatedAt(now);
-        creatorMembership.setUpdatedAt(now);
         entityManager.persist(creatorMembership);
-
         entityManager.flush();
-        auditService.record(managedCreator, calendar, "calendar", calendar.getId(), "created", "Calendar created.");
         return calendar;
     }
 
-    public Calendar requireActiveCalendar(Long calendarId) {
-        Calendar calendar = entityManager.find(Calendar.class, calendarId);
-        if (calendar == null || !calendar.isActive()) {
-            throw new NotFoundException("Calendar was not found.");
-        }
-        return calendar;
+    public String normalizeAndValidateCalendarName(String calendarName) {
+        return TextNormalizer.normalizeRequiredText(
+                calendarName,
+                "Calendar name is required.",
+                MAXIMUM_CALENDAR_NAME_LENGTH,
+                "Calendar name must be 160 characters or fewer.");
     }
 
-    public Calendar requireActiveCalendarForChildMutation(Long calendarId) {
-        return requireActiveCalendar(calendarId, LockModeType.PESSIMISTIC_READ);
+    public Calendar requireCalendarForChildMutation(Long calendarId) {
+        return requireCalendar(calendarId, LockModeType.PESSIMISTIC_READ);
     }
 
     public Calendar requireAdminCalendar(ApplicationUser actingUser, Long calendarId) {
         calendarAccessService.requireCanAdminister(actingUser, calendarId);
-        return requireActiveCalendar(calendarId);
+        return requireCalendar(calendarId, LockModeType.NONE);
     }
 
     public List<CalendarMembershipSummary> findCalendarsForUser(ApplicationUser user) {
@@ -119,30 +97,21 @@ public class CalendarService {
                                 + "calendarMembership.calendar.publicAccessEnabled) "
                                 + "from CalendarMembership calendarMembership "
                                 + "where calendarMembership.user.id = :userId "
-                                + "and calendarMembership.active = true "
-                                + "and calendarMembership.calendar.active = true "
                                 + "order by calendarMembership.calendar.name",
                         CalendarMembershipSummary.class)
                 .setParameter("userId", user.getId())
                 .getResultList();
     }
 
-    public Calendar regenerateCalendarLink(ApplicationUser actingUser, Long calendarId, Integer expectedVersion) {
+    public Calendar regenerateCalendarLink(
+            ApplicationUser actingUser,
+            Long calendarId,
+            Integer expectedVersion) {
         calendarAccessService.requireCanEdit(actingUser, calendarId);
-        Calendar calendar = requireActiveCalendar(calendarId, LockModeType.PESSIMISTIC_WRITE);
-        // Deliberate second check: the acting user's role can be revoked between the first check and
-        // the lock, so authorization is confirmed again once the calendar row is held.
+        Calendar calendar = requireCalendar(calendarId, LockModeType.PESSIMISTIC_WRITE);
         calendarAccessService.requireCanEdit(actingUser, calendarId);
         requireExpectedVersion(calendar, expectedVersion);
-        calendar.setCalendarLinkToken(generateCalendarLinkToken());
-        calendar.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
-        auditService.record(
-                actingUser,
-                calendar,
-                "calendar",
-                calendar.getId(),
-                "public_token_regenerated",
-                "Calendar link token regenerated.");
+        calendar.setCalendarLinkToken(tokenService.generateCalendarLinkToken());
         flushWithConflictMessage();
         return calendar;
     }
@@ -156,17 +125,15 @@ public class CalendarService {
             boolean publicAccessEnabled,
             Integer expectedVersion) {
         calendarAccessService.requireCanAdminister(actingUser, calendarId);
-        Calendar calendar = requireActiveCalendar(calendarId, LockModeType.PESSIMISTIC_WRITE);
-        // Deliberate second check: the acting user's role can be revoked between the first check and
-        // the lock, so authorization is confirmed again once the calendar row is held.
+        Calendar calendar = requireCalendar(calendarId, LockModeType.PESSIMISTIC_WRITE);
         calendarAccessService.requireCanAdminister(actingUser, calendarId);
         requireExpectedVersion(calendar, expectedVersion);
-        calendar.setName(TextNormalizer.normalizeRequiredText(
-                name,
-                "Calendar name is required.",
-                MAXIMUM_CALENDAR_NAME_LENGTH,
-                "Calendar name must be 160 characters or fewer."));
-        calendar.setDescription(TextNormalizer.normalizeOptionalText(description));
+
+        calendar.setName(normalizeAndValidateCalendarName(name));
+        calendar.setDescription(TextNormalizer.normalizeOptionalMultilineText(
+                description,
+                TextNormalizer.MAXIMUM_DESCRIPTION_LENGTH,
+                "Calendar description must be 4,000 characters or fewer."));
         String normalizedTimeZone = TextNormalizer.normalizeRequiredText(
                 timeZone,
                 "Time zone is required.",
@@ -176,8 +143,6 @@ public class CalendarService {
         preserveAllDayEventDatesWhenTimeZoneChanges(calendar, validatedTimeZone);
         calendar.setTimeZone(validatedTimeZone);
         calendar.setPublicAccessEnabled(publicAccessEnabled);
-        calendar.setUpdatedAt(OffsetDateTime.now(ZoneOffset.UTC));
-        auditService.record(actingUser, calendar, "calendar", calendar.getId(), "settings_updated", "Calendar settings updated.");
         flushWithConflictMessage();
         return calendar;
     }
@@ -201,8 +166,7 @@ public class CalendarService {
                     .toCalendarTime(allDayEvent.getStartTime(), previousTimeZone)
                     .toLocalDate();
             LocalDate lastDay = calendarTimeService.toCalendarDateImmediatelyBefore(
-                    allDayEvent.getEndTime(),
-                    previousTimeZone);
+                    allDayEvent.getEndTime(), previousTimeZone);
             CalendarTimeService.StoredAllDayRange storedRange =
                     calendarTimeService.toStoredAllDayRange(firstDay, lastDay, newTimeZone);
             allDayEvent.setStartTime(storedRange.startTime());
@@ -210,13 +174,14 @@ public class CalendarService {
         }
     }
 
-    private Calendar requireActiveCalendar(Long calendarId, LockModeType lockMode) {
-        Calendar calendar = entityManager.find(Calendar.class, calendarId, lockMode);
-        if (calendar == null) {
+    private Calendar requireCalendar(Long calendarId, LockModeType lockMode) {
+        if (calendarId == null) {
             throw new NotFoundException("Calendar was not found.");
         }
-        entityManager.refresh(calendar);
-        if (!calendar.isActive()) {
+        Calendar calendar = lockMode == LockModeType.NONE
+                ? entityManager.find(Calendar.class, calendarId)
+                : entityManager.find(Calendar.class, calendarId, lockMode);
+        if (calendar == null) {
             throw new NotFoundException("Calendar was not found.");
         }
         return calendar;
@@ -230,14 +195,4 @@ public class CalendarService {
     private void flushWithConflictMessage() {
         OptimisticLockConflicts.flushOrConflict(entityManager, CALENDAR_CONFLICT_MESSAGE);
     }
-
-    /**
-     * Uniqueness is guaranteed by the unique {@code calendar.public_token} constraint, not by
-     * reading the column first: a read cannot see a token another transaction is about to insert,
-     * so a pre-check would still leave the constraint as the only real guarantee.
-     */
-    private String generateCalendarLinkToken() {
-        return tokenService.generateCalendarLinkToken();
-    }
-
 }

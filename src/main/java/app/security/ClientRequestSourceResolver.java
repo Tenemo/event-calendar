@@ -3,8 +3,8 @@ package app.security;
 import app.config.ApplicationEnvironmentVariables;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.servlet.http.HttpServletRequest;
-import java.net.InetAddress;
 import java.net.Inet6Address;
+import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.Enumeration;
@@ -23,7 +23,7 @@ public class ClientRequestSourceResolver {
         this(System.getenv(ApplicationEnvironmentVariables.RAILWAY_ENVIRONMENT_ID));
     }
 
-    public ClientRequestSourceResolver(String railwayEnvironmentId) {
+    ClientRequestSourceResolver(String railwayEnvironmentId) {
         railwayEnvironment = railwayEnvironmentId != null && !railwayEnvironmentId.isBlank();
     }
 

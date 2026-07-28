@@ -6,7 +6,7 @@
     <ui:define name="messages"/>
 
     <ui:define name="content">
-        <section class="home-layout">
+        <section class="home-layout narrow-section">
             <div class="intro-panel">
                 <div class="section-header">
                     <div>
@@ -18,41 +18,19 @@
                 </div>
 
                 <div class="action-row">
-                    <h:outputLink value="#{request.contextPath}/login"
+                    <h:outputLink value="#{request.contextPath}/sign-in"
                                   styleClass="button-link primary-link"
                                   rendered="#{not currentUser.signedIn}">Sign in</h:outputLink>
                     <h:outputLink value="#{request.contextPath}/app/calendars"
                                   styleClass="button-link primary-link"
                                   rendered="#{currentUser.signedIn}">My calendars</h:outputLink>
                 </div>
+                <ul class="feature-list">
+                    <li>Use one short link for members and read-only guests.</li>
+                    <li>Invite friends who should add and update events.</li>
+                    <li>Keep timed and all-day plans correct in the calendar time zone.</li>
+                </ul>
             </div>
-
-            <section class="calendar-preview" aria-label="Calendar preview">
-                <div class="preview-header">
-                    <div>
-                        <h2>Kayaking weekend</h2>
-                        <p>Example event calendar</p>
-                    </div>
-                    <span class="role-chip">Read-only</span>
-                </div>
-                <div class="month-grid" aria-hidden="true">
-                    <span>Mon</span>
-                    <span>Tue</span>
-                    <span>Wed</span>
-                    <span>Thu</span>
-                    <span>Fri</span>
-                    <span>Sat</span>
-                    <span>Sun</span>
-                    <b>8</b>
-                    <b>9</b>
-                    <b class="has-event">10</b>
-                    <b>11</b>
-                    <b>12</b>
-                    <b class="has-event">13</b>
-                    <b>14</b>
-                </div>
-                <div class="preview-empty-state">Create an account to start planning.</div>
-            </section>
         </section>
     </ui:define>
 </ui:composition>

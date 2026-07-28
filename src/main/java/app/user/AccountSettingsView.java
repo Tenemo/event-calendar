@@ -4,6 +4,7 @@ import app.security.AuthenticatedSessionSecurity;
 import app.security.CurrentUser;
 import app.util.AuthorizationException;
 import app.util.ValidationException;
+import app.web.FacesMessages;
 import app.web.RelativeRedirect;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.faces.application.FacesMessage;
@@ -12,7 +13,6 @@ import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
-import java.io.IOException;
 
 @Named
 @RequestScoped
@@ -27,7 +27,7 @@ public class AccountSettingsView {
     private String newPassword;
     private String newPasswordConfirmation;
 
-    public void changePassword() throws IOException, ServletException {
+    public void changePassword() throws ServletException {
         try {
             userService.changePassword(
                     currentUser.require(),
@@ -36,12 +36,10 @@ public class AccountSettingsView {
                     newPasswordConfirmation);
             signOutAndRedirect();
         } catch (AuthorizationException | ValidationException exception) {
-            FacesContext.getCurrentInstance().addMessage(
-                    null,
-                    new FacesMessage(
-                            FacesMessage.SEVERITY_ERROR,
-                            "Password could not be changed.",
-                            exception.getMessage()));
+            FacesMessages.add(
+                    FacesMessage.SEVERITY_ERROR,
+                    "Password could not be changed.",
+                    exception.getMessage());
         }
     }
 
@@ -49,11 +47,11 @@ public class AccountSettingsView {
         return currentUser.require().getUsername();
     }
 
-    private void signOutAndRedirect() throws IOException, ServletException {
+    private void signOutAndRedirect() throws ServletException {
         FacesContext facesContext = FacesContext.getCurrentInstance();
         HttpServletRequest request = (HttpServletRequest) facesContext.getExternalContext().getRequest();
         AuthenticatedSessionSecurity.invalidateSessionAndLogout(request);
-        RelativeRedirect.send(facesContext, "/login?passwordChanged=true");
+        RelativeRedirect.send(facesContext, "/sign-in?passwordChanged=true");
     }
 
     public String getCurrentPassword() {

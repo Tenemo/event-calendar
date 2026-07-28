@@ -13,7 +13,8 @@
     <ui:define name="title">Calendar settings - Shared calendar</ui:define>
 
     <ui:define name="content">
-        <h:panelGroup id="settingsContent" layout="block" styleClass="page-section" rendered="#{calendarSettingsView.available}">
+        <h:panelGroup id="settingsPage" layout="block">
+        <h:panelGroup layout="block" styleClass="page-section" rendered="#{calendarSettingsView.available}">
             <div class="section-header compact-heading">
                 <div>
                     <p class="eyebrow">Calendar administration</p>
@@ -34,9 +35,10 @@
                                      required="true"
                                      requiredMessage="Calendar name is required."/>
 
-                        <p:outputLabel for="calendarDescription" value="Description"/>
+                        <p:outputLabel for="calendarDescription" value="Description (optional)"/>
                         <p:inputTextarea id="calendarDescription"
                                          value="#{calendarSettingsView.description}"
+                                         pt:maxlength="4000"
                                          rows="6"
                                          autoResize="false"/>
 
@@ -58,8 +60,8 @@
                                          action="#{calendarSettingsView.save}"
                                          ajax="true"
                                          process="@form"
-                                         update=":messages :settingsContent"
-                                         oncomplete="focusAfterSuccessfulAjax(args, 'settingsHeading');"/>
+                                         update=":messages :settingsPage"
+                                         oncomplete="focusAfterAjax(args, 'settingsHeading');"/>
                     </h:form>
                 </p:panel>
 
@@ -70,8 +72,19 @@
                             <span class="status-dot #{calendarSettingsView.publicAccessEnabled ? 'enabled' : 'disabled'}" aria-hidden="true"></span>
                             #{calendarSettingsView.publicAccessEnabled ? 'Public access enabled' : 'Public access disabled'}
                         </p>
-                        <p>When enabled, anyone with the calendar URL can read its events without signing in.</p>
-                        <p>The URL shown in the browser on the calendar page is the link to share. Editors can regenerate it there to invalidate the previous URL.</p>
+                        <p>When enabled, anyone with the calendar link can read its events without signing in.</p>
+                        <p:outputLabel for="calendarLink" value="Calendar link"/>
+                        <div class="copy-control">
+                            <p:inputText id="calendarLink"
+                                         value="#{calendarSettingsView.calendarLink}"
+                                         readonly="true"
+                                         pt:aria-describedby="calendarLinkHelp"/>
+                            <button type="button"
+                                    class="button-link secondary-link"
+                                    onclick="copyLink(this); return false;">Copy calendar link</button>
+                            <p class="copy-status" role="status" aria-live="polite"></p>
+                        </div>
+                        <p id="calendarLinkHelp" class="field-help">This link works only while public access is enabled. Regenerating it invalidates the previous link.</p>
                     </div>
                 </p:panel>
             </div>
@@ -80,6 +93,7 @@
         <h:panelGroup layout="block" styleClass="narrow-section not-found-state" rendered="#{not calendarSettingsView.available}">
             <h1>Calendar not found</h1>
             <p>The calendar does not exist or you do not have admin access.</p>
+        </h:panelGroup>
         </h:panelGroup>
     </ui:define>
 </ui:composition>
