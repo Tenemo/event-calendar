@@ -1,5 +1,6 @@
 package app.security;
 
+import static app.testsupport.ProxyReturnValues.createInterfaceProxy;
 import static app.testsupport.ProxyReturnValues.defaultValue;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -12,7 +13,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.lang.reflect.Proxy;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -52,7 +52,7 @@ final class AuthenticatedApplicationFilterTest {
                 () -> assertEquals(0, filterChainCalls.get()),
                 () -> assertEquals(1, response.resetBufferCalls.get()),
                 () -> assertEquals(HttpServletResponse.SC_FOUND, response.status.get()),
-                () -> assertEquals("/shared/login", response.headers.get("Location")),
+                () -> assertEquals("/shared/sign-in", response.headers.get("Location")),
                 () -> assertEquals("no-store", response.headers.get("Cache-Control")));
     }
 
@@ -74,7 +74,7 @@ final class AuthenticatedApplicationFilterTest {
                 () -> assertEquals("text/xml;charset=UTF-8", response.contentType),
                 () -> assertEquals(
                         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-                                + "<partial-response><redirect url=\"/shared/login\"/>"
+                                + "<partial-response><redirect url=\"/shared/sign-in\"/>"
                                 + "</partial-response>",
                         response.body.toString()));
     }
@@ -83,9 +83,8 @@ final class AuthenticatedApplicationFilterTest {
     void anonymousRedirectDoesNotReadClientControlledAuthorityOrForwardingHeaders() throws Exception {
         AtomicInteger filterChainCalls = new AtomicInteger();
         TestResponse response = new TestResponse();
-        HttpServletRequest hostileRequest = (HttpServletRequest) Proxy.newProxyInstance(
-                HttpServletRequest.class.getClassLoader(),
-                new Class<?>[] {HttpServletRequest.class},
+        HttpServletRequest hostileRequest = createInterfaceProxy(
+                HttpServletRequest.class,
                 (ignoredProxy, method, arguments) -> {
                     if (method.getName().equals("getContextPath")) {
                         return "";
@@ -95,7 +94,7 @@ final class AuthenticatedApplicationFilterTest {
                         return null;
                     }
                     throw new AssertionError(
-                            "Admission filter unexpectedly consulted request data through "
+                            "Authenticated filter unexpectedly consulted request data through "
                                     + method.getName()
                                     + ".");
                 });
@@ -108,7 +107,7 @@ final class AuthenticatedApplicationFilterTest {
 
         assertAll(
                 () -> assertEquals(0, filterChainCalls.get()),
-                () -> assertEquals("/login", response.headers.get("Location")),
+                () -> assertEquals("/sign-in", response.headers.get("Location")),
                 () -> assertEquals("no-store", response.headers.get("Cache-Control")));
     }
 
@@ -148,9 +147,8 @@ final class AuthenticatedApplicationFilterTest {
     }
 
     private static HttpServletRequest request(String contextPath, String facesRequestHeader) {
-        return (HttpServletRequest) Proxy.newProxyInstance(
-                HttpServletRequest.class.getClassLoader(),
-                new Class<?>[] {HttpServletRequest.class},
+        return createInterfaceProxy(
+                HttpServletRequest.class,
                 (ignoredProxy, method, arguments) -> switch (method.getName()) {
                     case "getContextPath" -> contextPath;
                     case "getHeader" -> "Faces-Request".equals(arguments[0])
@@ -160,11 +158,9 @@ final class AuthenticatedApplicationFilterTest {
                 });
     }
 
-    @SuppressWarnings("unchecked")
     private static <T> T proxy(Class<T> interfaceType) {
-        return (T) Proxy.newProxyInstance(
-                interfaceType.getClassLoader(),
-                new Class<?>[] {interfaceType},
+        return createInterfaceProxy(
+                interfaceType,
                 (ignoredProxy, method, arguments) -> defaultValue(method.getReturnType()));
     }
 
@@ -174,9 +170,8 @@ final class AuthenticatedApplicationFilterTest {
         private final Map<String, String> headers = new LinkedHashMap<>();
         private final StringWriter body = new StringWriter();
         private String contentType;
-        private final HttpServletResponse proxy = (HttpServletResponse) Proxy.newProxyInstance(
-                HttpServletResponse.class.getClassLoader(),
-                new Class<?>[] {HttpServletResponse.class},
+        private final HttpServletResponse proxy = createInterfaceProxy(
+                HttpServletResponse.class,
                 (ignoredProxy, method, arguments) -> switch (method.getName()) {
                     case "resetBuffer" -> {
                         resetBufferCalls.incrementAndGet();

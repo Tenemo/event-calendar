@@ -73,7 +73,7 @@ public final class EventFormState implements Serializable {
                 "Could not find an unambiguous default event time in the calendar time zone.");
     }
 
-    public void select(CalendarEventRow event) {
+    public void select(CalendarEventItem event) {
         selectedEventId = event.getId();
         selectedEventVersion = event.getVersion();
         title = event.getTitle();
@@ -237,7 +237,7 @@ public final class EventFormState implements Serializable {
         return allDay;
     }
 
-    public void setAllDay(boolean allDay) {
+    void setAllDay(boolean allDay) {
         this.allDay = allDay;
         allDaySelection = allDay;
     }

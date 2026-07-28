@@ -37,7 +37,7 @@ public class CalendarMembersView implements Serializable {
     private String calendarName;
     private String calendarLinkToken;
     private boolean available;
-    private List<MemberRow> members = List.of();
+    private List<MemberItem> members = List.of();
 
     public void load() {
         try {
@@ -58,7 +58,15 @@ public class CalendarMembersView implements Serializable {
         }
     }
 
-    public void saveRole(Long userId, CalendarRole role) {
+    public void makeAdmin(Long userId) {
+        saveRole(userId, CalendarRole.ADMIN);
+    }
+
+    public void makeEditor(Long userId) {
+        saveRole(userId, CalendarRole.EDITOR);
+    }
+
+    private void saveRole(Long userId, CalendarRole role) {
         ApplicationUser actingUser;
         try {
             actingUser = currentUser.require();
@@ -114,7 +122,7 @@ public class CalendarMembersView implements Serializable {
 
     private void reloadMembers(ApplicationUser actingUser) {
         members = calendarMembershipService.listMembers(actingUser, calendarId).stream()
-                .map(member -> new MemberRow(
+                .map(member -> new MemberItem(
                         member.getUser().getId(),
                         member.getUser().getDisplayName(),
                         member.getUser().getUsername(),
@@ -156,17 +164,16 @@ public class CalendarMembersView implements Serializable {
     public String getCalendarName() { return calendarName; }
     public String getCalendarLinkToken() { return calendarLinkToken; }
     public boolean isAvailable() { return available; }
-    public List<MemberRow> getMembers() { return members; }
-    public CalendarRole[] getRoles() { return CalendarRole.values(); }
+    public List<MemberItem> getMembers() { return members; }
 
-    public static final class MemberRow implements Serializable {
+    public static final class MemberItem implements Serializable {
         private final Long userId;
         private final String displayName;
         private final String username;
         private final boolean currentUser;
-        private CalendarRole role;
+        private final CalendarRole role;
 
-        private MemberRow(
+        private MemberItem(
                 Long userId,
                 String displayName,
                 String username,
@@ -183,7 +190,6 @@ public class CalendarMembersView implements Serializable {
         public String getDisplayName() { return displayName; }
         public String getUsername() { return username; }
         public CalendarRole getRole() { return role; }
-        public void setRole(CalendarRole role) { this.role = role; }
         public boolean isCurrentUser() { return currentUser; }
     }
 }

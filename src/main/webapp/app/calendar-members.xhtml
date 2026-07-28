@@ -2,7 +2,6 @@
                 xmlns:f="jakarta.faces.core"
                 xmlns:h="jakarta.faces.html"
                 xmlns:ui="jakarta.faces.facelets"
-                xmlns:pt="jakarta.faces.passthrough"
                 xmlns:p="primefaces"
                 template="/WEB-INF/templates/main.xhtml">
     <f:metadata>
@@ -30,29 +29,37 @@
 
             <h:panelGroup layout="block" styleClass="empty-state"
                           rendered="#{empty calendarMembersView.members}">No members are available.</h:panelGroup>
-            <div class="card-list">
-                <ui:repeat value="#{calendarMembersView.members}" var="member">
+            <p:dataList id="memberList"
+                        value="#{calendarMembersView.members}"
+                        var="member"
+                        type="unordered"
+                        rowStatePreserved="true"
+                        styleClass="member-card-list"
+                        rendered="#{not empty calendarMembersView.members}">
                     <article class="list-card member-card">
                         <div>
                             <h2 class="card-heading">#{member.displayName}#{member.currentUser ? ' (you)' : ''}</h2>
                             <p class="secondary-line">@#{member.username}</p>
                         </div>
                         <h:form styleClass="member-actions">
-                            <h:selectOneMenu id="memberRole"
-                                             value="#{member.role}"
-                                             pt:aria-label="Role for #{member.displayName}">
-                                <f:selectItems value="#{calendarMembersView.roles}"
-                                               var="role"
-                                               itemValue="#{role}"
-                                               itemLabel="#{role.displayName}"/>
-                            </h:selectOneMenu>
-                            <p:commandButton value="Save role"
-                                             action="#{calendarMembersView.saveRole(member.userId, member.role)}"
-                                             ariaLabel="Save role for #{member.displayName}"
+                            <span class="member-role-label">#{member.role.displayName}</span>
+                            <p:commandButton value="Make admin"
+                                             action="#{calendarMembersView.makeAdmin(member.userId)}"
+                                             ariaLabel="Make #{member.displayName} an admin"
+                                             rendered="#{member.role eq 'EDITOR'}"
                                              ajax="true"
-                                             process="@form"
+                                             process="@this"
                                              update=":messages :membersPage"
-                                             oncomplete="focusAfterSuccessfulAjax(args, 'membersHeading');"
+                                             oncomplete="focusAfterAjax(args, 'membersHeading');"
+                                             styleClass="ui-button-outlined"/>
+                            <p:commandButton value="Make editor"
+                                             action="#{calendarMembersView.makeEditor(member.userId)}"
+                                             ariaLabel="Make #{member.displayName} an editor"
+                                             rendered="#{member.role eq 'ADMIN'}"
+                                             ajax="true"
+                                             process="@this"
+                                             update=":messages :membersPage"
+                                             oncomplete="focusAfterAjax(args, 'membersHeading');"
                                              styleClass="ui-button-outlined"/>
                             <p:commandButton value="Remove access"
                                              action="#{calendarMembersView.removeMemberAccess(member.userId)}"
@@ -60,7 +67,7 @@
                                              ajax="true"
                                              process="@this"
                                              update=":messages :membersPage"
-                                             oncomplete="focusAfterSuccessfulAjax(args, 'membersHeading');"
+                                             oncomplete="focusAfterAjax(args, 'membersHeading');"
                                              styleClass="ui-button-danger ui-button-outlined">
                                 <p:confirm header="Remove member access"
                                            message="Remove this member's access to the calendar?"
@@ -72,8 +79,7 @@
                             </p:commandButton>
                         </h:form>
                     </article>
-                </ui:repeat>
-            </div>
+            </p:dataList>
             <p:confirmDialog global="true" closeOnEscape="true" closable="false" responsive="true">
                 <p:commandButton value="Cancel"
                                  type="button"

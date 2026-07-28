@@ -1,5 +1,6 @@
 package app.security;
 
+import static app.testsupport.ProxyReturnValues.createInterfaceProxy;
 import static app.testsupport.ProxyReturnValues.defaultValue;
 import static app.testsupport.ServiceTestSupport.setField;
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -15,7 +16,6 @@ import app.util.AuthorizationException;
 import jakarta.security.enterprise.SecurityContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
-import java.lang.reflect.Proxy;
 import java.security.Principal;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -86,29 +86,26 @@ final class CurrentUserTest {
     }
 
     private static HttpServletRequest request(long sessionPasswordVersion) {
-        HttpSession session = (HttpSession) Proxy.newProxyInstance(
-                HttpSession.class.getClassLoader(),
-                new Class<?>[] {HttpSession.class},
-                (proxy, method, arguments) -> {
+        HttpSession session = createInterfaceProxy(
+                HttpSession.class,
+                (ignoredProxy, method, arguments) -> {
                     if (method.getName().equals("getAttribute")
                             && AuthenticatedSessionSecurity.PASSWORD_VERSION_SESSION_ATTRIBUTE.equals(arguments[0])) {
                         return sessionPasswordVersion;
                     }
                     return defaultValue(method.getReturnType());
                 });
-        return (HttpServletRequest) Proxy.newProxyInstance(
-                HttpServletRequest.class.getClassLoader(),
-                new Class<?>[] {HttpServletRequest.class},
-                (proxy, method, arguments) -> method.getName().equals("getSession")
+        return createInterfaceProxy(
+                HttpServletRequest.class,
+                (ignoredProxy, method, arguments) -> method.getName().equals("getSession")
                         ? session
                         : defaultValue(method.getReturnType()));
     }
 
     private static SecurityContext securityContext(String principalName) {
-        return (SecurityContext) Proxy.newProxyInstance(
-                SecurityContext.class.getClassLoader(),
-                new Class<?>[] { SecurityContext.class },
-                (proxy, method, arguments) -> {
+        return createInterfaceProxy(
+                SecurityContext.class,
+                (ignoredProxy, method, arguments) -> {
                     String methodName = method.getName();
                     if (methodName.equals("getCallerPrincipal")) {
                         return principalName == null ? null : (Principal) () -> principalName;
@@ -116,13 +113,7 @@ final class CurrentUserTest {
                     if (methodName.equals("toString")) {
                         return "SecurityContext test proxy";
                     }
-                    if (method.getReturnType() == Boolean.TYPE) {
-                        return false;
-                    }
-                    if (method.getReturnType().isPrimitive()) {
-                        return 0;
-                    }
-                    return null;
+                    return defaultValue(method.getReturnType());
                 });
     }
 

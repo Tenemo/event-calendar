@@ -4,6 +4,7 @@ import app.security.AuthenticatedSessionSecurity;
 import app.security.CurrentUser;
 import app.util.AuthorizationException;
 import app.util.ValidationException;
+import app.web.FacesMessages;
 import app.web.RelativeRedirect;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.faces.application.FacesMessage;
@@ -35,12 +36,10 @@ public class AccountSettingsView {
                     newPasswordConfirmation);
             signOutAndRedirect();
         } catch (AuthorizationException | ValidationException exception) {
-            FacesContext.getCurrentInstance().addMessage(
-                    null,
-                    new FacesMessage(
-                            FacesMessage.SEVERITY_ERROR,
-                            "Password could not be changed.",
-                            exception.getMessage()));
+            FacesMessages.add(
+                    FacesMessage.SEVERITY_ERROR,
+                    "Password could not be changed.",
+                    exception.getMessage());
         }
     }
 
@@ -52,7 +51,7 @@ public class AccountSettingsView {
         FacesContext facesContext = FacesContext.getCurrentInstance();
         HttpServletRequest request = (HttpServletRequest) facesContext.getExternalContext().getRequest();
         AuthenticatedSessionSecurity.invalidateSessionAndLogout(request);
-        RelativeRedirect.send(facesContext, "/login?passwordChanged=true");
+        RelativeRedirect.send(facesContext, "/sign-in?passwordChanged=true");
     }
 
     public String getCurrentPassword() {

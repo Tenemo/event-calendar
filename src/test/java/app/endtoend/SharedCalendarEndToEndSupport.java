@@ -2,6 +2,8 @@ package app.endtoend;
 
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.deque.html.axecore.playwright.AxeBuilder;
@@ -12,12 +14,12 @@ import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.Response;
+import com.microsoft.playwright.options.SelectOption;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
-import java.security.SecureRandom;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -27,6 +29,7 @@ import java.time.Duration;
 import java.util.Base64;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.TestInstance;
@@ -40,7 +43,7 @@ abstract class SharedCalendarEndToEndSupport {
             "PBKDF2WithHmacSHA256:600000:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=:"
                     + "YTpMNBE5TiT//mxRmUMHckVy5XS82Y6oz0V8ZImb+/4=";
 
-    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private static final AtomicLong CALENDAR_LINK_TOKEN_SEQUENCE = new AtomicLong(1);
 
     private URI applicationBaseUri;
     private String databaseHost;
@@ -98,7 +101,7 @@ abstract class SharedCalendarEndToEndSupport {
     }
 
     void signIn(Page page, String username, String password) {
-        navigate(page, "/login");
+        navigate(page, "/sign-in");
         page.locator("input[id$='username']").fill(username);
         page.locator("input[id$='password']").fill(password);
         page.locator("input[type='submit'][value='Sign in']").click();
@@ -121,6 +124,14 @@ abstract class SharedCalendarEndToEndSupport {
     String createRegistrationInvitation(Page page) {
         navigate(page, "/app/invitations");
         page.locator("button:has-text('Generate registration link')").click();
+        return page.locator("input[id$='generatedInvitationLink']").inputValue();
+    }
+
+    String createEditorInvitation(Page page, String calendarName) {
+        navigate(page, "/app/invitations");
+        page.locator("select[id$='calendar']")
+                .selectOption(new SelectOption().setLabel(calendarName));
+        page.locator("button:has-text('Generate editor link')").click();
         return page.locator("input[id$='generatedInvitationLink']").inputValue();
     }
 
@@ -157,6 +168,21 @@ abstract class SharedCalendarEndToEndSupport {
                         + results.getViolations().stream().map(violation -> violation.getId()).toList());
     }
 
+    void assertResponsiveAndAccessible(Page page, int width, int height) {
+        page.setViewportSize(width, height);
+        assertFalse(
+                Boolean.TRUE.equals(page.evaluate(
+                        "() => document.documentElement.scrollWidth > document.documentElement.clientWidth")),
+                () -> "Page has horizontal overflow at " + width + " by " + height + ".");
+        assertAccessible(page);
+    }
+
+    void assertSecurityHeaders(Response response) {
+        assertEquals("DENY", response.headerValue("x-frame-options"));
+        assertEquals("nosniff", response.headerValue("x-content-type-options"));
+        assertNotNull(response.headerValue("content-security-policy"));
+    }
+
     long seedUser(String username, String displayName) throws SQLException {
         try (Connection connection = openDatabaseConnection();
                 PreparedStatement statement = connection.prepareStatement(
@@ -173,12 +199,12 @@ abstract class SharedCalendarEndToEndSupport {
     }
 
     SeededCalendar seedCalendar(long userId, String calendarName) throws SQLException {
-        String calendarLinkToken = randomCalendarLinkToken();
+        String calendarLinkToken = nextCalendarLinkToken();
         long calendarId;
         try (Connection connection = openDatabaseConnection();
                 PreparedStatement statement = connection.prepareStatement(
-                        "insert into calendar(name, calendar_link_token, time_zone) "
-                                + "values (?, ?, 'Europe/Warsaw') returning id")) {
+                        "insert into calendar(name, calendar_link_token, time_zone, public_access_enabled) "
+                                + "values (?, ?, 'Europe/Warsaw', true) returning id")) {
             statement.setString(1, calendarName);
             statement.setString(2, calendarLinkToken);
             try (ResultSet resultSet = statement.executeQuery()) {
@@ -312,9 +338,9 @@ abstract class SharedCalendarEndToEndSupport {
         }
     }
 
-    private static String randomCalendarLinkToken() {
+    private static String nextCalendarLinkToken() {
         byte[] tokenBytes = ByteBuffer.allocate(Long.BYTES)
-                .putLong(SECURE_RANDOM.nextLong())
+                .putLong(CALENDAR_LINK_TOKEN_SEQUENCE.getAndIncrement())
                 .array();
         return Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
     }
@@ -333,5 +359,5 @@ abstract class SharedCalendarEndToEndSupport {
                 || "::1".equals(host);
     }
 
-    record SeededCalendar(long id, String linkToken) {}
+    record SeededCalendar(long id, String calendarLinkToken) {}
 }

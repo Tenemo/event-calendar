@@ -1,7 +1,7 @@
 package app.calendar;
 
 import app.event.CalendarEvent;
-import app.event.CalendarEventRow;
+import app.event.CalendarEventItem;
 import app.event.CalendarEventService;
 import app.event.EventFormState;
 import app.membership.CalendarAccessService;
@@ -55,7 +55,7 @@ public class CalendarView implements Serializable {
     private CalendarRole role;
     private boolean publicAccessEnabled;
     private boolean available;
-    private List<CalendarEventRow> events = List.of();
+    private List<CalendarEventItem> events = List.of();
     private final EventFormState eventForm = new EventFormState();
 
     public void load() {
@@ -222,7 +222,7 @@ public class CalendarView implements Serializable {
                 ? calendarEventService.findPublicEvents(calendarLinkToken)
                 : calendarEventService.findEventsForMember(actingUser, calendarId);
         events = loadedEvents.stream()
-                .map(event -> CalendarEventRow.from(event, timeZone, calendarTimeService))
+                .map(event -> CalendarEventItem.from(event, timeZone, calendarTimeService))
                 .toList();
     }
 
@@ -255,7 +255,7 @@ public class CalendarView implements Serializable {
     public boolean isAvailable() { return available; }
     public boolean isEditable() { return role != null; }
     public boolean isAdmin() { return role == CalendarRole.ADMIN; }
-    public List<CalendarEventRow> getEvents() { return events; }
+    public List<CalendarEventItem> getEvents() { return events; }
     public boolean isEditingEvent() { return eventForm.isEditing(); }
     public String getEventTitle() { return eventForm.getTitle(); }
     public void setEventTitle(String eventTitle) { eventForm.setTitle(eventTitle); }

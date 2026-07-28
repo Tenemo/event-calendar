@@ -19,7 +19,7 @@ public class CalendarRouteFilter implements Filter {
     public static final String CALENDAR_LINK_TOKEN_REQUEST_ATTRIBUTE = "calendarLinkToken";
     public static final String CALENDAR_NOT_FOUND_REQUEST_ATTRIBUTE = "calendarNotFound";
     public static final String CALENDAR_REQUEST_ATTRIBUTE = "calendar";
-    private static final String CALENDAR_TEMPLATE_PATH = "/WEB-INF/views/calendar.xhtml";
+    private static final String CALENDAR_VIEW_PATH = "/WEB-INF/views/calendar.xhtml";
     @Inject
     private CalendarAccessService calendarAccessService;
 
@@ -62,7 +62,7 @@ public class CalendarRouteFilter implements Filter {
             HttpServletResponse response,
             String calendarLinkToken) throws IOException, ServletException {
         request.setAttribute(CALENDAR_LINK_TOKEN_REQUEST_ATTRIBUTE, calendarLinkToken);
-        RequestDispatcher requestDispatcher = request.getRequestDispatcher(CALENDAR_TEMPLATE_PATH);
+        RequestDispatcher requestDispatcher = request.getRequestDispatcher(CALENDAR_VIEW_PATH);
         Calendar calendar;
         try {
             calendar = calendarAccessService.requireCalendarReadableByLinkToken(

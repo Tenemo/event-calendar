@@ -1,5 +1,6 @@
 package app.health;
 
+import static app.testsupport.ProxyReturnValues.createInterfaceProxy;
 import static app.testsupport.ServiceTestSupport.setField;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -10,7 +11,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
 import org.junit.jupiter.api.Test;
 
 final class HealthServletTest {
@@ -104,10 +104,7 @@ final class HealthServletTest {
         private String cacheControl;
 
         private HttpServletResponse response() {
-            return (HttpServletResponse) Proxy.newProxyInstance(
-                    HttpServletResponse.class.getClassLoader(),
-                    new Class<?>[] { HttpServletResponse.class },
-                    this);
+            return createInterfaceProxy(HttpServletResponse.class, this);
         }
 
         @Override

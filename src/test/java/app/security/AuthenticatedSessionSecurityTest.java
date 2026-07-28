@@ -1,5 +1,6 @@
 package app.security;
 
+import static app.testsupport.ProxyReturnValues.createInterfaceProxy;
 import static app.testsupport.ProxyReturnValues.defaultValue;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -11,7 +12,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import app.user.ApplicationUser;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
-import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -26,20 +26,18 @@ final class AuthenticatedSessionSecurityTest {
     void logsOutBeforeInvalidatingAnySessionThatTheContainerRetains() throws Exception {
         AtomicBoolean authenticated = new AtomicBoolean(true);
         List<String> cleanupOperations = new ArrayList<>();
-        HttpSession session = (HttpSession) Proxy.newProxyInstance(
-                HttpSession.class.getClassLoader(),
-                new Class<?>[] {HttpSession.class},
-                (proxy, method, arguments) -> {
+        HttpSession session = createInterfaceProxy(
+                HttpSession.class,
+                (ignoredProxy, method, arguments) -> {
                     if (method.getName().equals("invalidate")) {
                         assertFalse(authenticated.get());
                         cleanupOperations.add("session invalidated");
                     }
                     return defaultValue(method.getReturnType());
                 });
-        HttpServletRequest request = (HttpServletRequest) Proxy.newProxyInstance(
-                HttpServletRequest.class.getClassLoader(),
-                new Class<?>[] {HttpServletRequest.class},
-                (proxy, method, arguments) -> {
+        HttpServletRequest request = createInterfaceProxy(
+                HttpServletRequest.class,
+                (ignoredProxy, method, arguments) -> {
                     if (method.getName().equals("getSession")) {
                         assertFalse(authenticated.get());
                         return session;
@@ -62,19 +60,17 @@ final class AuthenticatedSessionSecurityTest {
     void doesNotInvalidateAgainWhenContainerLogoutAlreadyRemovedTheSession() throws Exception {
         AtomicBoolean authenticated = new AtomicBoolean(true);
         AtomicInteger sessionInvalidations = new AtomicInteger();
-        HttpSession session = (HttpSession) Proxy.newProxyInstance(
-                HttpSession.class.getClassLoader(),
-                new Class<?>[] {HttpSession.class},
-                (proxy, method, arguments) -> {
+        HttpSession session = createInterfaceProxy(
+                HttpSession.class,
+                (ignoredProxy, method, arguments) -> {
                     if (method.getName().equals("invalidate")) {
                         sessionInvalidations.incrementAndGet();
                     }
                     return defaultValue(method.getReturnType());
                 });
-        HttpServletRequest request = (HttpServletRequest) Proxy.newProxyInstance(
-                HttpServletRequest.class.getClassLoader(),
-                new Class<?>[] {HttpServletRequest.class},
-                (proxy, method, arguments) -> {
+        HttpServletRequest request = createInterfaceProxy(
+                HttpServletRequest.class,
+                (ignoredProxy, method, arguments) -> {
                     if (method.getName().equals("logout")) {
                         authenticated.set(false);
                     }
@@ -95,10 +91,9 @@ final class AuthenticatedSessionSecurityTest {
     void logsOutWithoutCreatingAReplacementWhenThereIsNoSession() throws Exception {
         AtomicInteger sessionLookups = new AtomicInteger();
         AtomicInteger logoutCalls = new AtomicInteger();
-        HttpServletRequest request = (HttpServletRequest) Proxy.newProxyInstance(
-                HttpServletRequest.class.getClassLoader(),
-                new Class<?>[] {HttpServletRequest.class},
-                (proxy, method, arguments) -> {
+        HttpServletRequest request = createInterfaceProxy(
+                HttpServletRequest.class,
+                (ignoredProxy, method, arguments) -> {
                     if (method.getName().equals("getSession")) {
                         assertEquals(Boolean.FALSE, arguments[0]);
                         sessionLookups.incrementAndGet();
@@ -122,19 +117,17 @@ final class AuthenticatedSessionSecurityTest {
         jakarta.servlet.ServletException logoutFailure =
                 new jakarta.servlet.ServletException("Simulated logout failure.");
         AtomicInteger invalidationCount = new AtomicInteger();
-        HttpSession session = (HttpSession) Proxy.newProxyInstance(
-                HttpSession.class.getClassLoader(),
-                new Class<?>[] {HttpSession.class},
-                (proxy, method, arguments) -> {
+        HttpSession session = createInterfaceProxy(
+                HttpSession.class,
+                (ignoredProxy, method, arguments) -> {
                     if (method.getName().equals("invalidate")) {
                         invalidationCount.incrementAndGet();
                     }
                     return defaultValue(method.getReturnType());
                 });
-        HttpServletRequest request = (HttpServletRequest) Proxy.newProxyInstance(
-                HttpServletRequest.class.getClassLoader(),
-                new Class<?>[] {HttpServletRequest.class},
-                (proxy, method, arguments) -> switch (method.getName()) {
+        HttpServletRequest request = createInterfaceProxy(
+                HttpServletRequest.class,
+                (ignoredProxy, method, arguments) -> switch (method.getName()) {
                     case "logout" -> throw logoutFailure;
                     case "getSession" -> session;
                     default -> defaultValue(method.getReturnType());
@@ -156,19 +149,17 @@ final class AuthenticatedSessionSecurityTest {
                 new jakarta.servlet.ServletException("Simulated logout failure.");
         IllegalStateException invalidationFailure =
                 new IllegalStateException("Simulated invalidation failure.");
-        HttpSession session = (HttpSession) Proxy.newProxyInstance(
-                HttpSession.class.getClassLoader(),
-                new Class<?>[] {HttpSession.class},
-                (proxy, method, arguments) -> {
+        HttpSession session = createInterfaceProxy(
+                HttpSession.class,
+                (ignoredProxy, method, arguments) -> {
                     if (method.getName().equals("invalidate")) {
                         throw invalidationFailure;
                     }
                     return defaultValue(method.getReturnType());
                 });
-        HttpServletRequest request = (HttpServletRequest) Proxy.newProxyInstance(
-                HttpServletRequest.class.getClassLoader(),
-                new Class<?>[] {HttpServletRequest.class},
-                (proxy, method, arguments) -> switch (method.getName()) {
+        HttpServletRequest request = createInterfaceProxy(
+                HttpServletRequest.class,
+                (ignoredProxy, method, arguments) -> switch (method.getName()) {
                     case "logout" -> throw logoutFailure;
                     case "getSession" -> session;
                     default -> defaultValue(method.getReturnType());
@@ -265,10 +256,9 @@ final class AuthenticatedSessionSecurityTest {
             if (existingSession) {
                 createSession();
             }
-            request = (HttpServletRequest) Proxy.newProxyInstance(
-                    HttpServletRequest.class.getClassLoader(),
-                    new Class<?>[] {HttpServletRequest.class},
-                    (proxy, method, arguments) -> switch (method.getName()) {
+            request = createInterfaceProxy(
+                    HttpServletRequest.class,
+                    (ignoredProxy, method, arguments) -> switch (method.getName()) {
                         case "getSession" -> getSession(arguments);
                         case "changeSessionId" -> changeSessionIdentifier();
                         default -> defaultValue(method.getReturnType());
@@ -317,10 +307,9 @@ final class AuthenticatedSessionSecurityTest {
 
         private SessionHarness(String identifier) {
             this.identifier = new AtomicReference<>(identifier);
-            session = (HttpSession) Proxy.newProxyInstance(
-                    HttpSession.class.getClassLoader(),
-                    new Class<?>[] {HttpSession.class},
-                    (proxy, method, arguments) -> switch (method.getName()) {
+            session = createInterfaceProxy(
+                    HttpSession.class,
+                    (ignoredProxy, method, arguments) -> switch (method.getName()) {
                         case "getId" -> this.identifier.get();
                         case "getAttribute" -> attribute((String) arguments[0]);
                         case "setAttribute" -> setAttribute(

@@ -30,7 +30,7 @@
                     <h:outputText value="#{calendarView.calendarDescription}"
                                   styleClass="lead-text description-text"
                                   rendered="#{not empty calendarView.calendarDescription}"/>
-                    <h:outputText value="Share the URL in your browser for read-only access while public access is enabled."
+                    <h:outputText value="Share the calendar link for read-only access while public access is enabled."
                                   styleClass="secondary-line"
                                   rendered="#{calendarView.editable}"/>
                 </div>
@@ -41,7 +41,7 @@
                                          ajax="false"
                                          styleClass="ui-button-danger ui-button-outlined">
                             <p:confirm header="Regenerate calendar link"
-                                       message="The current URL will stop working for everyone. Continue?"
+                                       message="The current calendar link will stop working for everyone. Continue?"
                                        yesButtonLabel="Regenerate link"
                                        yesButtonClass="ui-button-danger"
                                        noButtonLabel="Cancel"
@@ -96,7 +96,7 @@
                                                   styleClass="description-text"
                                                   rendered="#{not empty event.description}">#{event.description}</h:panelGroup>
                                 </div>
-                                <h:panelGroup layout="block" styleClass="row-actions" rendered="#{calendarView.editable}">
+                                <h:panelGroup layout="block" styleClass="item-actions" rendered="#{calendarView.editable}">
                                     <h:form>
                                         <p:commandButton value="Edit"
                                                          action="#{calendarView.selectEvent(event.id)}"
@@ -104,7 +104,7 @@
                                                          ajax="true"
                                                          process="@this"
                                                          update=":messages :calendarPage"
-                                                         oncomplete="focusAfterSuccessfulAjax(args, 'eventTitle');"
+                                                         oncomplete="focusAfterAjax(args, 'eventTitle');"
                                                          styleClass="ui-button-outlined"/>
                                     </h:form>
                                     <h:form>
@@ -114,7 +114,7 @@
                                                          ajax="true"
                                                          process="@this"
                                                          update=":messages :calendarPage"
-                                                         oncomplete="focusAfterSuccessfulAjax(args, 'events-heading');"
+                                                         oncomplete="focusAfterAjax(args, 'events-heading');"
                                                          styleClass="ui-button-danger ui-button-outlined">
                                             <p:confirm header="Delete event"
                                                        message="Delete this event permanently?"
@@ -144,7 +144,7 @@
                                      required="true"
                                      requiredMessage="Event title is required."/>
 
-                        <p:outputLabel for="eventLocation" value="Location"/>
+                        <p:outputLabel for="eventLocation" value="Location (optional)"/>
                         <p:inputText id="eventLocation" value="#{calendarView.eventLocation}" pt:maxlength="200"/>
 
                         <div class="checkbox-field">
@@ -165,10 +165,12 @@
                                     <p:outputLabel for="eventStart" value="Starts"/>
                                     <p:datePicker id="eventStart"
                                                   value="#{calendarView.eventStartTime}"
-                                                   appendTo="@(body)"
-                                                   pattern="yyyy-MM-dd HH:mm"
-                                                   showTime="true"
-                                                   hourFormat="24"/>
+                                                  appendTo="@(body)"
+                                                  pattern="yyyy-MM-dd HH:mm"
+                                                  showTime="true"
+                                                  hourFormat="24"
+                                                  required="true"
+                                                  requiredMessage="Event start time is required."/>
                                 </div>
                                 <div class="field-stack">
                                     <p:outputLabel for="eventEnd" value="Ends"/>
@@ -177,7 +179,9 @@
                                                  appendTo="@(body)"
                                                  pattern="yyyy-MM-dd HH:mm"
                                                  showTime="true"
-                                                 hourFormat="24"/>
+                                                 hourFormat="24"
+                                                 required="true"
+                                                 requiredMessage="Event end time is required."/>
                                 </div>
                             </h:panelGroup>
 
@@ -189,19 +193,23 @@
                                     <p:datePicker id="eventFirstDay"
                                                   value="#{calendarView.eventFirstDay}"
                                                   appendTo="@(body)"
-                                                  pattern="yyyy-MM-dd"/>
+                                                  pattern="yyyy-MM-dd"
+                                                  required="true"
+                                                  requiredMessage="Event first day is required."/>
                                 </div>
                                 <div class="field-stack">
                                     <p:outputLabel for="eventLastDay" value="Last day (inclusive)"/>
                                     <p:datePicker id="eventLastDay"
                                                  value="#{calendarView.eventLastDay}"
                                                  appendTo="@(body)"
-                                                 pattern="yyyy-MM-dd"/>
+                                                 pattern="yyyy-MM-dd"
+                                                 required="true"
+                                                 requiredMessage="Event last day is required."/>
                                 </div>
                             </h:panelGroup>
                         </h:panelGroup>
 
-                        <p:outputLabel for="eventDescription" value="Description"/>
+                        <p:outputLabel for="eventDescription" value="Description (optional)"/>
                         <p:inputTextarea id="eventDescription"
                                          value="#{calendarView.eventDescription}"
                                          pt:maxlength="4000"
@@ -214,14 +222,14 @@
                                              ajax="true"
                                              process="@form"
                                              update=":messages :calendarPage"
-                                             oncomplete="focusAfterSuccessfulAjax(args, 'events-heading');"
+                                             oncomplete="focusAfterAjax(args, 'events-heading');"
                                              rendered="#{calendarView.editingEvent}"/>
                             <p:commandButton value="Create event"
                                              action="#{calendarView.createEvent}"
                                              ajax="true"
                                              process="@form"
                                              update=":messages :calendarPage"
-                                             oncomplete="focusAfterSuccessfulAjax(args, 'events-heading');"
+                                             oncomplete="focusAfterAjax(args, 'events-heading');"
                                              rendered="#{not calendarView.editingEvent}"/>
                             <p:commandButton value="Cancel edit"
                                              action="#{calendarView.resetEventForm}"

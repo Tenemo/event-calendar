@@ -3,7 +3,6 @@ package app.endtoend;
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.microsoft.playwright.Browser;
@@ -15,7 +14,6 @@ import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.Response;
 import com.microsoft.playwright.options.Cookie;
 import com.microsoft.playwright.options.SameSiteAttribute;
-import com.microsoft.playwright.options.SelectOption;
 import java.net.URI;
 import java.sql.SQLException;
 import java.time.Duration;
@@ -49,9 +47,7 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             Response homeResponse = navigate(page, "/");
             assertEquals(200, homeResponse.status());
             assertThat(page.locator("h1")).hasText("Shared event calendars for real plans");
-            assertEquals("DENY", homeResponse.headerValue("x-frame-options"));
-            assertEquals("nosniff", homeResponse.headerValue("x-content-type-options"));
-            assertNotNull(homeResponse.headerValue("content-security-policy"));
+            assertSecurityHeaders(homeResponse);
             assertFalse(Boolean.TRUE.equals(page.evaluate(
                     "() => document.documentElement.scrollWidth "
                             + "> document.documentElement.clientWidth")));
@@ -62,10 +58,10 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             page.keyboard().press("Enter");
             assertEquals("main-content", page.evaluate("document.activeElement.id"));
 
-            navigate(page, "/login");
+            navigate(page, "/sign-in");
             assertAccessible(page);
             navigate(page, "/app/calendars");
-            page.waitForURL("**/login");
+            page.waitForURL("**/sign-in");
         }
     }
 
@@ -122,11 +118,12 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
 
         try (BrowserContext inviterContext = newBrowserContext()) {
             Page inviterPage = inviterContext.newPage();
-            navigate(inviterPage, "/login");
+            navigate(inviterPage, "/sign-in");
             inviterPage.locator("input[id$='username']").fill(inviterUsername);
             inviterPage.locator("input[id$='password']").fill("definitely wrong");
             inviterPage.locator("input[type='submit'][value='Sign in']").click();
             assertThat(inviterPage.locator("body")).containsText("Sign-in failed.");
+            assertAccessible(inviterPage);
 
             inviterPage.locator("input[id$='password']").fill(TEST_PASSWORD);
             inviterPage.locator("input[type='submit'][value='Sign in']").click();
@@ -150,9 +147,11 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
 
             String registeredUsername = "friend-" + suffix;
             String changedPassword = "another correct horse battery staple " + suffix;
-            try (BrowserContext registeredContext = newBrowserContext()) {
+            try (BrowserContext registeredContext = newBrowserContext();
+                    BrowserContext secondRegisteredContext = newBrowserContext()) {
                 Page registeredPage = registeredContext.newPage();
                 navigateBearerLink(registeredPage, invitationLink);
+                assertAccessible(registeredPage);
                 fillRegistration(
                         registeredPage,
                         registeredUsername,
@@ -183,16 +182,25 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
                                         + "where created_by_user_id = ? and calendar_id is null",
                                 inviterId));
 
-                navigate(registeredPage, "/app/account-settings");
+                Page secondRegisteredPage = secondRegisteredContext.newPage();
+                signIn(secondRegisteredPage, registeredUsername, TEST_PASSWORD);
+                assertResponsiveAndAccessible(secondRegisteredPage, 320, 720);
+
+                Response accountSettingsResponse = navigate(registeredPage, "/app/account-settings");
+                assertSecurityHeaders(accountSettingsResponse);
+                assertResponsiveAndAccessible(registeredPage, 768, 900);
                 registeredPage.locator("input[id$='currentPassword']").fill(TEST_PASSWORD);
                 registeredPage.locator("input[id$='newPassword']").fill(changedPassword);
                 registeredPage
                         .locator("input[id$='newPasswordConfirmation']")
                         .fill(changedPassword);
                 registeredPage.locator("button:has-text('Change password')").click();
-                registeredPage.waitForURL("**/login**");
+                registeredPage.waitForURL("**/sign-in**");
                 assertThat(registeredPage.locator("body"))
                         .containsText("Your password was changed.");
+
+                navigate(secondRegisteredPage, "/app/calendars");
+                secondRegisteredPage.waitForURL("**/sign-in");
 
                 registeredPage.locator("input[id$='username']").fill(registeredUsername);
                 registeredPage.locator("input[id$='password']").fill(TEST_PASSWORD);
@@ -215,9 +223,11 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
         seedCalendar(userId, "Seed calendar " + suffix);
         String createdCalendarName = "River plans " + suffix;
         String eventTitle = "Kayaking day " + suffix;
+        String allDayEventTitle = "Kayaking weekend " + suffix;
 
         try (BrowserContext ownerContext = newBrowserContext();
-                BrowserContext readerContext = newBrowserContext()) {
+                BrowserContext readerContext = newBrowserContext();
+                BrowserContext staleOwnerContext = newBrowserContext()) {
             Page ownerPage = ownerContext.newPage();
             signIn(ownerPage, username, TEST_PASSWORD);
             ownerPage.locator("input[id$='calendarName']").fill(createdCalendarName);
@@ -226,9 +236,16 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
 
             long calendarId =
                     queryLong("select id from calendar where name = ?", createdCalendarName);
-            String originalLinkToken =
+            String originalCalendarLinkToken =
                     queryText("select calendar_link_token from calendar where id = ?", calendarId);
-            navigate(ownerPage, "/" + originalLinkToken);
+            navigate(ownerPage, "/" + originalCalendarLinkToken);
+            assertResponsiveAndAccessible(ownerPage, 320, 900);
+
+            ownerPage.locator("button:has-text('Create event')").click();
+            assertThat(ownerPage.locator("body")).containsText("Event title is required.");
+            ownerPage.waitForFunction(
+                    "() => document.activeElement && document.activeElement.id.endsWith('messages')");
+
             createTimedEvent(
                     ownerPage,
                     eventTitle,
@@ -248,8 +265,21 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
                             new Locator.FilterOptions().setHasText(updatedEventTitle)))
                     .isVisible();
 
+            ownerPage.locator(".event-editor .ui-chkbox-box").click();
+            ownerPage.locator("input[id$='eventTitle']").fill(allDayEventTitle);
+            ownerPage.locator("input[id$='eventFirstDay_input']").fill("2026-08-23");
+            ownerPage.locator("input[id$='eventLastDay_input']").fill("2026-08-24");
+            ownerPage.locator("button:has-text('Create event')").click();
+            assertThat(ownerPage.locator("article.event-item").filter(
+                            new Locator.FilterOptions().setHasText(allDayEventTitle)))
+                    .containsText("All day from Sun, Aug 23, 2026 to Mon, Aug 24, 2026");
+            String originalAllDayStart = queryText(
+                    "select start_at::text from calendar_event where calendar_id = ? and title = ?",
+                    calendarId,
+                    allDayEventTitle);
+
             Page readerPage = readerContext.newPage();
-            Response publicResponse = navigate(readerPage, "/" + originalLinkToken);
+            Response publicResponse = navigate(readerPage, "/" + originalCalendarLinkToken);
             assertEquals(200, publicResponse.status());
             assertEquals("noindex, nofollow", publicResponse.headerValue("x-robots-tag"));
             assertThat(readerPage.locator("body")).containsText(updatedEventTitle);
@@ -257,10 +287,36 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             assertEquals(0, readerPage.locator("button:has-text('Create event')").count());
 
             navigate(ownerPage, "/app/calendar-settings?id=" + calendarId);
+            assertThat(ownerPage.locator(".app-nav a[aria-current='page']")).hasText("My calendars");
+            assertResponsiveAndAccessible(ownerPage, 768, 900);
+            Page staleOwnerPage = staleOwnerContext.newPage();
+            signIn(staleOwnerPage, username, TEST_PASSWORD);
+            navigate(staleOwnerPage, "/app/calendar-settings?id=" + calendarId);
+            ownerPage.locator("input[id$='timeZone']").fill("America/New_York");
             Locator publicAccessControl = ownerPage.locator(".checkbox-field .ui-chkbox-box");
             publicAccessControl.click();
             ownerPage.locator("button:has-text('Save settings')").click();
             assertThat(ownerPage.locator("body")).containsText("Public access disabled");
+            assertFalse(
+                    originalAllDayStart.equals(queryText(
+                            "select start_at::text from calendar_event where calendar_id = ? and title = ?",
+                            calendarId,
+                            allDayEventTitle)),
+                    "Changing the calendar time zone should move stored all-day boundaries.");
+
+            ownerPage.setViewportSize(320, 900);
+            ownerPage.locator("button:has-text('Copy calendar link')").click();
+            ownerPage.waitForFunction(
+                    "() => document.querySelector('.copy-status').textContent.trim().length > 0");
+
+            staleOwnerPage.locator("textarea[id$='calendarDescription']")
+                    .fill("A stale settings update");
+            staleOwnerPage.locator("button:has-text('Save settings')").click();
+            assertThat(staleOwnerPage.locator("body"))
+                    .containsText("This calendar changed after you opened it.");
+            assertEquals(
+                    "America/New_York",
+                    staleOwnerPage.locator("input[id$='timeZone']").inputValue());
 
             Response disabledResponse = readerPage.reload();
             assertEquals(404, disabledResponse.status());
@@ -271,9 +327,14 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             assertThat(ownerPage.locator("body")).containsText("Public access enabled");
             assertEquals(200, readerPage.reload().status());
 
-            navigate(ownerPage, "/" + originalLinkToken);
+            navigate(ownerPage, "/" + originalCalendarLinkToken);
+            assertThat(ownerPage.locator("article.event-item").filter(
+                            new Locator.FilterOptions().setHasText(allDayEventTitle)))
+                    .containsText("All day from Sun, Aug 23, 2026 to Mon, Aug 24, 2026");
             String originalLink = ownerPage.url();
             ownerPage.locator("button:has-text('Regenerate link')").click();
+            assertThat(ownerPage.locator(".ui-confirmdialog-no")).isFocused();
+            assertAccessible(ownerPage);
             ownerPage.locator(".ui-confirmdialog-yes").click();
             ownerPage.waitForLoadState();
             assertFalse(
@@ -291,29 +352,24 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
     @Order(5)
     void editorInvitationAndLastAdminProtectionWork() throws Exception {
         String suffix = uniqueSuffix();
-        String administratorUsername = "administrator-" + suffix;
+        String adminUsername = "admin-" + suffix;
         String firstEditorUsername = "editor-" + suffix + "-one";
         String secondEditorUsername = "editor-" + suffix + "-two";
-        String administratorDisplayName = "Administrator " + suffix;
+        String adminDisplayName = "Admin " + suffix;
         String firstEditorDisplayName = "Editor one " + suffix;
         String secondEditorDisplayName = "Editor two " + suffix;
-        long administratorId = seedUser(administratorUsername, administratorDisplayName);
+        long adminId = seedUser(adminUsername, adminDisplayName);
         seedUser(firstEditorUsername, firstEditorDisplayName);
         seedUser(secondEditorUsername, secondEditorDisplayName);
         SeededCalendar calendar = seedCalendar(
-                administratorId,
+                adminId,
                 "Membership calendar " + suffix);
 
-        try (BrowserContext administratorContext = newBrowserContext()) {
-            Page administratorPage = administratorContext.newPage();
-            signIn(administratorPage, administratorUsername, TEST_PASSWORD);
-            navigate(administratorPage, "/app/invitations");
-            administratorPage
-                    .locator("select[id$='calendar']")
-                    .selectOption(new SelectOption().setLabel("Membership calendar " + suffix));
-            administratorPage.locator("button:has-text('Generate editor link')").click();
-            String invitationLink =
-                    administratorPage.locator("input[id$='generatedInvitationLink']").inputValue();
+        try (BrowserContext adminContext = newBrowserContext()) {
+            Page adminPage = adminContext.newPage();
+            signIn(adminPage, adminUsername, TEST_PASSWORD);
+            String invitationLink = createEditorInvitation(
+                    adminPage, "Membership calendar " + suffix);
 
             CountDownLatch formsReady = new CountDownLatch(2);
             CountDownLatch submitForms = new CountDownLatch(1);
@@ -341,7 +397,7 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
                         secondAcceptance.get(90, TimeUnit.SECONDS));
             }
 
-            String acceptedCalendarPath = "/" + calendar.linkToken();
+            String acceptedCalendarPath = "/" + calendar.calendarLinkToken();
             assertEquals(
                     1,
                     acceptanceResults.stream()
@@ -389,33 +445,129 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
                     0,
                     queryLong("select count(*) from invitation where calendar_id = ?", calendar.id()));
 
-            navigate(administratorPage, "/app/calendar-members?id=" + calendar.id());
-            Locator administratorCard = memberCard(administratorPage, administratorDisplayName);
-            administratorCard.locator("select").selectOption("EDITOR");
-            administratorCard.locator("button:has-text('Save role')").click();
-            assertThat(administratorPage.locator("body"))
+            try (BrowserContext editorContext = newBrowserContext()) {
+                Page editorPage = editorContext.newPage();
+                signIn(editorPage, editorUsername, TEST_PASSWORD);
+                Response settingsResponse = navigate(
+                        editorPage, "/app/calendar-settings?id=" + calendar.id());
+                assertEquals(404, settingsResponse.status());
+                assertThat(editorPage.locator("body")).containsText("Calendar not found");
+                Response membersResponse = navigate(
+                        editorPage, "/app/calendar-members?id=" + calendar.id());
+                assertEquals(404, membersResponse.status());
+                assertThat(editorPage.locator("body")).containsText("Calendar not found");
+            }
+
+            navigate(adminPage, "/app/calendar-members?id=" + calendar.id());
+            assertResponsiveAndAccessible(adminPage, 320, 900);
+            Locator adminCard = memberCard(adminPage, adminDisplayName);
+            adminCard.locator("button:has-text('Make editor')").click();
+            assertThat(adminPage.locator("body"))
                     .containsText("A calendar must keep at least one admin.");
             assertEquals(
                     "ADMIN",
-                    membershipRole(calendar.id(), administratorUsername));
+                    membershipRole(calendar.id(), adminUsername));
 
-            Locator editorCard = memberCard(administratorPage, editorDisplayName);
-            editorCard.locator("select").selectOption("ADMIN");
-            editorCard.locator("button:has-text('Save role')").click();
-            assertThat(administratorPage.locator("body")).containsText("Member role saved.");
+            adminCard.locator("button:has-text('Remove access')").click();
+            adminPage.locator(".ui-confirmdialog-yes").click();
+            assertThat(adminPage.locator("body"))
+                    .containsText("A calendar must keep at least one admin.");
+            assertEquals("ADMIN", membershipRole(calendar.id(), adminUsername));
+
+            Locator editorCard = memberCard(adminPage, editorDisplayName);
+            Response saveEditorRoleResponse = adminPage.waitForResponse(
+                    response -> "POST".equals(response.request().method()),
+                    () -> editorCard.locator("button:has-text('Make admin')").click());
+            assertTrue(saveEditorRoleResponse.ok());
+            assertThat(adminPage.locator("body")).containsText("Member role saved.");
+            assertThat(memberCard(adminPage, editorDisplayName).locator(".member-role-label"))
+                    .hasText("Admin");
             assertEquals("ADMIN", membershipRole(calendar.id(), editorUsername));
 
-            administratorCard = memberCard(administratorPage, administratorDisplayName);
-            administratorCard.locator("select").selectOption("EDITOR");
-            administratorCard.locator("button:has-text('Save role')").click();
-            assertThat(administratorPage.locator("body")).containsText("Calendar not found");
-            assertEquals("EDITOR", membershipRole(calendar.id(), administratorUsername));
+            adminCard = memberCard(adminPage, adminDisplayName);
+            adminCard.locator("button:has-text('Make editor')").click();
+            assertThat(adminPage.locator("body")).containsText("Calendar not found");
+            assertEquals("EDITOR", membershipRole(calendar.id(), adminUsername));
             assertEquals(
                     1,
                     queryLong(
                             "select count(*) from calendar_membership "
                                     + "where calendar_id = ? and role_name = 'ADMIN'",
                             calendar.id()));
+        }
+    }
+
+    @Test
+    @Order(6)
+    void invitationLifecycleRejectsRevokedExpiredAndUnauthorizedLinks() throws SQLException {
+        String suffix = uniqueSuffix();
+        String calendarName = "Invitation lifecycle " + suffix;
+        String adminUsername = "lifecycle-admin-" + suffix;
+        String creatorUsername = "lifecycle-creator-" + suffix;
+        String targetUsername = "lifecycle-target-" + suffix;
+        long adminId = seedUser(adminUsername, "Lifecycle admin " + suffix);
+        long creatorId = seedUser(creatorUsername, "Lifecycle creator " + suffix);
+        seedUser(targetUsername, "Lifecycle target " + suffix);
+        SeededCalendar calendar = seedCalendar(adminId, calendarName);
+        executeUpdate(
+                "insert into calendar_membership(calendar_id, user_id, role_name) values (?, ?, 'EDITOR')",
+                calendar.id(),
+                creatorId);
+
+        try (BrowserContext adminContext = newBrowserContext();
+                BrowserContext creatorContext = newBrowserContext();
+                BrowserContext targetContext = newBrowserContext()) {
+            Page adminPage = adminContext.newPage();
+            Page creatorPage = creatorContext.newPage();
+            Page targetPage = targetContext.newPage();
+            signIn(adminPage, adminUsername, TEST_PASSWORD);
+            signIn(creatorPage, creatorUsername, TEST_PASSWORD);
+            signIn(targetPage, targetUsername, TEST_PASSWORD);
+
+            String unauthorizedCreatorLink = createEditorInvitation(creatorPage, calendarName);
+            assertThat(creatorPage.locator(".app-nav a[aria-current='page']")).hasText("Invitations");
+            assertThat(creatorPage.locator(".invitation-card .secondary-line").first())
+                    .containsText("UTC · Expires");
+            assertResponsiveAndAccessible(creatorPage, 1280, 900);
+            creatorPage.locator("button:has-text('Copy generated link')").click();
+            creatorPage.waitForFunction(
+                    "() => document.querySelector('.generated-invitation .copy-status')"
+                            + ".textContent.trim().length > 0");
+
+            navigate(adminPage, "/app/calendar-members?id=" + calendar.id());
+            Locator creatorCard = memberCard(adminPage, "Lifecycle creator " + suffix);
+            creatorCard.locator("button:has-text('Remove access')").click();
+            adminPage.locator(".ui-confirmdialog-yes").click();
+            assertThat(adminPage.locator("body")).containsText("Member access removed.");
+
+            Response unauthorizedResponse = targetPage.navigate(unauthorizedCreatorLink);
+            assertSecurityHeaders(unauthorizedResponse);
+            assertThat(targetPage.locator("body")).containsText("Invitation unavailable");
+
+            String revokedLink = createEditorInvitation(adminPage, calendarName);
+            adminPage.locator("article.invitation-card").first()
+                    .locator("button:has-text('Revoke')")
+                    .click();
+            adminPage.locator(".ui-confirmdialog-yes").click();
+            assertThat(adminPage.locator("body")).containsText("Invitation revoked.");
+            Response revokedResponse = targetPage.navigate(revokedLink);
+            assertSecurityHeaders(revokedResponse);
+            assertThat(targetPage.locator("body")).containsText("Invitation unavailable");
+
+            String expiredToken = "A".repeat(43);
+            executeUpdate(
+                    "insert into invitation("
+                            + "calendar_id, invitation_token, created_by_user_id, created_at, expires_at"
+                            + ") values (?, ?, ?, "
+                            + "current_timestamp - interval '7 days 1 minute', "
+                            + "current_timestamp - interval '1 minute')",
+                    calendar.id(),
+                    expiredToken,
+                    adminId);
+            String expiredLink = route("/register?token=" + expiredToken);
+            Response expiredResponse = targetPage.navigate(expiredLink);
+            assertSecurityHeaders(expiredResponse);
+            assertThat(targetPage.locator("body")).containsText("Invitation unavailable");
         }
     }
 

@@ -3,6 +3,7 @@ package app.security;
 import app.invitation.InvitationToken;
 import app.user.ApplicationUser;
 import app.user.UserService;
+import app.web.FacesMessages;
 import app.web.RelativeRedirect;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.faces.application.FacesMessage;
@@ -32,7 +33,6 @@ public class SignInView {
     private String password;
     private String invitationToken;
     private boolean passwordChanged;
-    private boolean reauthenticationRequired;
 
     public void signIn() throws ServletException {
         if (isBlank(username) || isBlank(password)) {
@@ -110,18 +110,6 @@ public class SignInView {
         passwordChanged = "true".equals(value);
     }
 
-    public boolean isReauthenticationRequired() {
-        return reauthenticationRequired;
-    }
-
-    public String getReauthenticationRequiredParameter() {
-        return Boolean.toString(reauthenticationRequired);
-    }
-
-    public void setReauthenticationRequiredParameter(String value) {
-        reauthenticationRequired = "true".equals(value);
-    }
-
     static String successfulSignInRoute(String invitationToken) {
         String normalizedToken = InvitationToken.normalize(invitationToken);
         return InvitationToken.isValidCandidate(normalizedToken)
@@ -130,9 +118,7 @@ public class SignInView {
     }
 
     private void addFailureMessage(String detail) {
-        FacesContext.getCurrentInstance().addMessage(
-                null,
-                new FacesMessage(FacesMessage.SEVERITY_ERROR, "Sign-in failed.", detail));
+        FacesMessages.add(FacesMessage.SEVERITY_ERROR, "Sign-in failed.", detail);
     }
 
     private boolean isBlank(String value) {

@@ -36,6 +36,6 @@ public final class AuthenticatedApplicationFilter implements Filter {
             return;
         }
 
-        RelativeRedirect.send(request, response, "/login");
+        RelativeRedirect.send(request, response, "/sign-in");
     }
 }

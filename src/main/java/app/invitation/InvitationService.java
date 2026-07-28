@@ -7,7 +7,6 @@ import app.membership.CalendarMembershipService;
 import app.membership.CalendarRole;
 import app.security.TokenService;
 import app.user.ApplicationUser;
-import app.user.RegistrationAdmission;
 import app.user.RegistrationBootstrapState;
 import app.util.AuthorizationException;
 import app.util.NotFoundException;
@@ -96,32 +95,32 @@ public class InvitationService {
         entityManager.remove(invitation);
     }
 
-    public InvitationAdmissionPreview previewAdmission(String invitationToken) {
+    public InvitationPreview previewInvitation(String invitationToken) {
         String normalizedToken = normalizeValidToken(invitationToken);
         if (normalizedToken == null) {
-            return InvitationAdmissionPreview.unavailable();
+            return InvitationPreview.unavailable();
         }
 
         Optional<Invitation> invitation = findInvitationByToken(normalizedToken, false);
         if (invitation.isPresent() && invitationIsUsable(invitation.get())) {
             Invitation availableInvitation = invitation.get();
             return availableInvitation.getCalendar() == null
-                    ? InvitationAdmissionPreview.registration(availableInvitation.getExpiresAt())
-                    : InvitationAdmissionPreview.calendarEditor(
+                    ? InvitationPreview.registration(availableInvitation.getExpiresAt())
+                    : InvitationPreview.calendarEditor(
                             availableInvitation.getCalendar().getName(),
                             availableInvitation.getExpiresAt());
         }
-        return bootstrapAdmissionAvailable(normalizedToken)
-                ? InvitationAdmissionPreview.registration(null)
-                : InvitationAdmissionPreview.unavailable();
+        return isBootstrapRegistrationAvailable(normalizedToken)
+                ? InvitationPreview.registration(null)
+                : InvitationPreview.unavailable();
     }
 
-    public RegistrationAdmission claimRegistrationAdmission(String invitationToken) {
+    public InvitationClaim claimInvitationForRegistration(String invitationToken) {
         String normalizedToken = requireValidToken(invitationToken);
         Optional<Invitation> invitation = findInvitationByToken(normalizedToken, true);
         if (invitation.isPresent()) {
             requireUsableInvitation(invitation.get());
-            return new RegistrationAdmission(invitation.get(), false);
+            return new InvitationClaim(invitation.get(), false);
         }
 
         RegistrationBootstrapState bootstrapState = requireBootstrapState(true);
@@ -130,7 +129,7 @@ public class InvitationService {
             throw invalidInvitation();
         }
         bootstrapState.setConsumedAt(OffsetDateTime.now(clock));
-        return new RegistrationAdmission(null, true);
+        return new InvitationClaim(null, true);
     }
 
     public Invitation acceptInvitation(String invitationToken, ApplicationUser acceptingUser) {
@@ -141,17 +140,17 @@ public class InvitationService {
             throw invalidInvitation();
         }
         requireUsableInvitation(invitation);
-        acceptAdmission(new RegistrationAdmission(invitation, false), acceptingUser);
+        completeInvitationClaim(new InvitationClaim(invitation, false), acceptingUser);
         return invitation;
     }
 
-    public void acceptAdmission(RegistrationAdmission admission, ApplicationUser acceptingUser) {
-        ApplicationUser user = requireUserForAdmission(acceptingUser);
-        if (admission == null || admission.bootstrap()) {
+    public void completeInvitationClaim(InvitationClaim invitationClaim, ApplicationUser acceptingUser) {
+        ApplicationUser user = requireUserForInvitationAcceptance(acceptingUser);
+        if (invitationClaim == null || invitationClaim.bootstrap()) {
             return;
         }
 
-        Invitation invitation = admission.invitation();
+        Invitation invitation = invitationClaim.invitation();
         if (invitation == null || !entityManager.contains(invitation)) {
             throw invalidInvitation();
         }
@@ -200,7 +199,7 @@ public class InvitationService {
         }
     }
 
-    private boolean bootstrapAdmissionAvailable(String invitationToken) {
+    private boolean isBootstrapRegistrationAvailable(String invitationToken) {
         if (!registrationInvitationConfiguration.matchesBootstrapInvitationToken(invitationToken)) {
             return false;
         }
@@ -259,7 +258,7 @@ public class InvitationService {
         return managedUser;
     }
 
-    private ApplicationUser requireUserForAdmission(ApplicationUser user) {
+    private ApplicationUser requireUserForInvitationAcceptance(ApplicationUser user) {
         try {
             return requireUser(user);
         } catch (AuthorizationException exception) {

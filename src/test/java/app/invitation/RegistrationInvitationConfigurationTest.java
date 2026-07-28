@@ -13,7 +13,7 @@ final class RegistrationInvitationConfigurationTest {
             "6RrWdXJO3P9mQ1fUh8zGkV2nY5cBsA7tEeL0iNxC4_o";
 
     @Test
-    void blankConfigurationDisablesBootstrapAdmission() {
+    void blankConfigurationDisablesBootstrapRegistration() {
         RegistrationInvitationConfiguration missingConfiguration =
                 new RegistrationInvitationConfiguration(null);
         RegistrationInvitationConfiguration blankConfiguration =

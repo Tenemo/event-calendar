@@ -2,16 +2,16 @@ package app.invitation;
 
 import java.time.OffsetDateTime;
 
-public final class InvitationAdmissionPreview {
-    private static final InvitationAdmissionPreview UNAVAILABLE =
-            new InvitationAdmissionPreview(false, false, null, null);
+public final class InvitationPreview {
+    private static final InvitationPreview UNAVAILABLE =
+            new InvitationPreview(false, false, null, null);
 
     private final boolean available;
     private final boolean calendarEditorInvitation;
     private final String calendarName;
     private final OffsetDateTime expiresAt;
 
-    private InvitationAdmissionPreview(
+    private InvitationPreview(
             boolean available,
             boolean calendarEditorInvitation,
             String calendarName,
@@ -22,18 +22,18 @@ public final class InvitationAdmissionPreview {
         this.expiresAt = expiresAt;
     }
 
-    public static InvitationAdmissionPreview unavailable() {
+    public static InvitationPreview unavailable() {
         return UNAVAILABLE;
     }
 
-    public static InvitationAdmissionPreview registration(OffsetDateTime expiresAt) {
-        return new InvitationAdmissionPreview(true, false, null, expiresAt);
+    public static InvitationPreview registration(OffsetDateTime expiresAt) {
+        return new InvitationPreview(true, false, null, expiresAt);
     }
 
-    public static InvitationAdmissionPreview calendarEditor(
+    public static InvitationPreview calendarEditor(
             String calendarName,
             OffsetDateTime expiresAt) {
-        return new InvitationAdmissionPreview(true, true, calendarName, expiresAt);
+        return new InvitationPreview(true, true, calendarName, expiresAt);
     }
 
     public boolean isAvailable() {

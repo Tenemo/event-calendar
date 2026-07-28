@@ -23,7 +23,7 @@ public class ClientRequestSourceResolver {
         this(System.getenv(ApplicationEnvironmentVariables.RAILWAY_ENVIRONMENT_ID));
     }
 
-    public ClientRequestSourceResolver(String railwayEnvironmentId) {
+    ClientRequestSourceResolver(String railwayEnvironmentId) {
         railwayEnvironment = railwayEnvironmentId != null && !railwayEnvironmentId.isBlank();
     }
 

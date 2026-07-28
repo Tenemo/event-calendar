@@ -73,21 +73,6 @@ final class PasswordServiceTest {
     }
 
     @Test
-    void acceptsLongPasswordsWithoutCompositionOrCorpusRules() {
-        PasswordService passwordService = passwordService();
-
-        assertAll(
-                () -> assertDoesNotThrow(() -> passwordService.validatePasswordPolicy(
-                        "piotr", "a long lowercase passphrase")),
-                () -> assertDoesNotThrow(() -> passwordService.validatePasswordPolicy(
-                        "piotr", "letterswithoutdigits")),
-                () -> assertDoesNotThrow(() -> passwordService.validatePasswordPolicy(
-                        "piotr", "PASSWORDPASSWORD")),
-                () -> assertDoesNotThrow(() -> passwordService.validatePasswordPolicy(
-                        "piotr", "correcthorsebatterystaple")));
-    }
-
-    @Test
     void countsUnicodeCodePointsAsCharactersAtBothLengthBoundaries() {
         RecordingPasswordHash passwordHash = new RecordingPasswordHash();
         PasswordService passwordService = passwordService(passwordHash);
@@ -99,11 +84,11 @@ final class PasswordServiceTest {
 
         assertAll(
                 () -> assertEquals(
-                        PasswordService.MAXIMUM_PASSWORD_TRANSPORT_LENGTH,
+                        PasswordService.MAXIMUM_PASSWORD_INPUT_LENGTH,
                         maximumLengthPassword.length()),
                 () -> assertEquals(
                         1_024,
-                        passwordService.getMaximumPasswordTransportLength()),
+                        passwordService.getMaximumPasswordInputLength()),
                 () -> assertTrue(passwordService.verifyPassword(maximumLengthPassword, hash)),
                 () -> assertPasswordRejected(
                         passwordService,

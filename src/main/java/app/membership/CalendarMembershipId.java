@@ -10,9 +10,9 @@ public class CalendarMembershipId implements Serializable {
     public CalendarMembershipId() {
     }
 
-    CalendarMembershipId(Long calendarIdentifier, Long userIdentifier) {
-        this.calendar = calendarIdentifier;
-        this.user = userIdentifier;
+    public CalendarMembershipId(Long calendar, Long user) {
+        this.calendar = calendar;
+        this.user = user;
     }
 
     @Override

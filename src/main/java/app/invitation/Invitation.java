@@ -41,10 +41,6 @@ public class Invitation {
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
-    public Long getId() {
-        return id;
-    }
-
     public Calendar getCalendar() {
         return calendar;
     }
@@ -75,10 +71,6 @@ public class Invitation {
 
     public void setExpiresAt(OffsetDateTime expiresAt) {
         this.expiresAt = expiresAt;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
     }
 
     public void setCreatedAt(OffsetDateTime createdAt) {

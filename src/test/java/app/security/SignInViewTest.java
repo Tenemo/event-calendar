@@ -42,25 +42,16 @@ final class SignInViewTest {
     }
 
     @Test
-    void statusViewParametersAcceptOnlyTheLiteralTrueValue() {
+    void passwordChangedViewParameterAcceptsOnlyTheLiteralTrueValue() {
         SignInView signInView = new SignInView();
 
         signInView.setPasswordChangedParameter("TRUE");
-        signInView.setReauthenticationRequiredParameter(" true ");
-        assertAll(
-                () -> assertFalse(signInView.isPasswordChanged()),
-                () -> assertFalse(signInView.isReauthenticationRequired()));
+        assertFalse(signInView.isPasswordChanged());
 
         signInView.setPasswordChangedParameter("true");
-        signInView.setReauthenticationRequiredParameter("true");
-        assertAll(
-                () -> assertTrue(signInView.isPasswordChanged()),
-                () -> assertTrue(signInView.isReauthenticationRequired()));
+        assertTrue(signInView.isPasswordChanged());
 
         signInView.setPasswordChangedParameter(null);
-        signInView.setReauthenticationRequiredParameter("not-a-boolean");
-        assertAll(
-                () -> assertFalse(signInView.isPasswordChanged()),
-                () -> assertFalse(signInView.isReauthenticationRequired()));
+        assertFalse(signInView.isPasswordChanged());
     }
 }

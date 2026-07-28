@@ -1,13 +1,14 @@
 package app.user;
 
 import app.invitation.Invitation;
-import app.invitation.InvitationAdmissionPreview;
+import app.invitation.InvitationPreview;
 import app.invitation.InvitationService;
 import app.invitation.InvitationToken;
 import app.security.AuthenticatedSessionSecurity;
 import app.security.CurrentUser;
 import app.util.AuthorizationException;
 import app.util.ValidationException;
+import app.web.FacesMessages;
 import app.web.RelativeRedirect;
 import app.web.ViewParameterParser;
 import jakarta.enterprise.context.RequestScoped;
@@ -51,7 +52,7 @@ public class RegistrationView {
     private String passwordConfirmation;
     private String invitationToken;
     private boolean invitationTokenRequestParametersInspected;
-    private InvitationAdmissionPreview invitationPreview;
+    private InvitationPreview invitationPreview;
 
     public void register() throws ServletException {
         try {
@@ -64,9 +65,10 @@ public class RegistrationView {
                     calendarName);
             authenticateAndRedirect(registeredUser.getPasswordVersion());
         } catch (ValidationException exception) {
-            FacesContext.getCurrentInstance().addMessage(
-                    null,
-                    new FacesMessage(FacesMessage.SEVERITY_ERROR, "Registration failed.", exception.getMessage()));
+            FacesMessages.add(
+                    FacesMessage.SEVERITY_ERROR,
+                    "Registration failed.",
+                    exception.getMessage());
         }
     }
 
@@ -79,9 +81,10 @@ public class RegistrationView {
             FacesContext facesContext = FacesContext.getCurrentInstance();
             RelativeRedirect.send(facesContext, route);
         } catch (AuthorizationException | ValidationException exception) {
-            FacesContext.getCurrentInstance().addMessage(
-                    null,
-                    new FacesMessage(FacesMessage.SEVERITY_ERROR, "Invitation could not be accepted.", exception.getMessage()));
+            FacesMessages.add(
+                    FacesMessage.SEVERITY_ERROR,
+                    "Invitation could not be accepted.",
+                    exception.getMessage());
         }
     }
 
@@ -168,9 +171,9 @@ public class RegistrationView {
                 : INVITATION_EXPIRATION_FORMAT.format(expiration);
     }
 
-    private InvitationAdmissionPreview invitationPreview() {
+    private InvitationPreview invitationPreview() {
         if (invitationPreview == null) {
-            invitationPreview = invitationService.previewAdmission(invitationToken());
+            invitationPreview = invitationService.previewInvitation(invitationToken());
         }
         return invitationPreview;
     }
@@ -213,9 +216,10 @@ public class RegistrationView {
     }
 
     private void redirectToLoginAfterRegistration(FacesContext facesContext) {
-        facesContext.addMessage(
-                null,
-                new FacesMessage(FacesMessage.SEVERITY_INFO, "Registration succeeded.", "Sign in with the new account."));
-        RelativeRedirect.sendKeepingMessages(facesContext, "/login");
+        FacesMessages.add(
+                FacesMessage.SEVERITY_INFO,
+                "Registration succeeded.",
+                "Sign in with the new account.");
+        RelativeRedirect.sendKeepingMessages(facesContext, "/sign-in");
     }
 }

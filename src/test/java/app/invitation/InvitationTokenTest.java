@@ -19,7 +19,7 @@ final class InvitationTokenTest {
     }
 
     @Test
-    void candidateValidationEnforcesThePersistenceAndRedirectBoundary() {
+    void candidateValidationBoundsUntrustedLookupAndRedirectInput() {
         String maximumLengthToken = "a".repeat(InvitationToken.MAXIMUM_LENGTH);
 
         assertAll(

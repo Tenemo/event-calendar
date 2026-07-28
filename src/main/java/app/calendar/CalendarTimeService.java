@@ -65,7 +65,7 @@ public class CalendarTimeService {
         return OffsetDateTime.of(localDateTime, validOffsets.getFirst());
     }
 
-    public OffsetDateTime toStoredStartOfDay(LocalDate calendarDate, String timeZone) {
+    OffsetDateTime toStoredStartOfDay(LocalDate calendarDate, String timeZone) {
         if (calendarDate == null) {
             return null;
         }
@@ -82,7 +82,7 @@ public class CalendarTimeService {
         return startOfDay;
     }
 
-    public OffsetDateTime toStoredExclusiveDayBoundary(LocalDate exclusiveCalendarDate, String timeZone) {
+    OffsetDateTime toStoredExclusiveDayBoundary(LocalDate exclusiveCalendarDate, String timeZone) {
         if (exclusiveCalendarDate == null) {
             return null;
         }

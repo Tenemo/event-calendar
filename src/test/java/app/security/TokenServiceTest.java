@@ -1,43 +1,57 @@
 package app.security;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.calendar.CalendarLinkToken;
-import java.util.HashSet;
-import java.util.Set;
+import java.security.SecureRandom;
 import org.junit.jupiter.api.Test;
 
 final class TokenServiceTest {
-    private final TokenService tokenService = new TokenService();
-
     @Test
-    void generatesUniqueUrlSafeBearerTokens() {
-        int generatedTokenCount = 256;
-        Set<String> tokens = new HashSet<>();
+    void generatesInvitationTokensFromExactlyThirtyTwoRandomBytes() {
+        TokenService tokenService = new TokenService(new FixedSecureRandom(sequence(32)));
 
-        for (int tokenNumber = 0; tokenNumber < generatedTokenCount; tokenNumber++) {
-            String token = tokenService.generateInvitationToken();
+        String token = tokenService.generateInvitationToken();
 
-            assertTrue(token.matches("[A-Za-z0-9_-]{43}"), "Token should be unpadded URL-safe Base64.");
-            tokens.add(token);
-        }
-
-        assertEquals(generatedTokenCount, tokens.size(), "Generated tokens should not collide in this sample.");
+        assertAll(
+                () -> assertEquals("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8", token),
+                () -> assertTrue(token.matches("[A-Za-z0-9_-]{43}")));
     }
 
     @Test
-    void generatesShortCalendarTokensWithoutWeakeningInvitationTokens() {
-        int generatedTokenCount = 256;
-        Set<String> calendarLinkTokens = new HashSet<>();
+    void generatesCalendarLinkTokensFromExactlyEightRandomBytes() {
+        TokenService tokenService = new TokenService(new FixedSecureRandom(
+                new byte[] {(byte) 0xfb, (byte) 0xff, 0, 1, 2, 3, 4, 5}));
 
-        for (int tokenNumber = 0; tokenNumber < generatedTokenCount; tokenNumber++) {
-            String calendarLinkToken = tokenService.generateCalendarLinkToken();
-            assertTrue(CalendarLinkToken.isValid(calendarLinkToken));
-            calendarLinkTokens.add(calendarLinkToken);
+        String calendarLinkToken = tokenService.generateCalendarLinkToken();
+
+        assertAll(
+                () -> assertEquals("-_8AAQIDBAU", calendarLinkToken),
+                () -> assertEquals(CalendarLinkToken.ENCODED_LENGTH, calendarLinkToken.length()),
+                () -> assertTrue(CalendarLinkToken.isValid(calendarLinkToken)));
+    }
+
+    private static byte[] sequence(int byteCount) {
+        byte[] bytes = new byte[byteCount];
+        for (int byteIndex = 0; byteIndex < byteCount; byteIndex++) {
+            bytes[byteIndex] = (byte) byteIndex;
+        }
+        return bytes;
+    }
+
+    private static final class FixedSecureRandom extends SecureRandom {
+        private final byte[] value;
+
+        private FixedSecureRandom(byte[] value) {
+            this.value = value.clone();
         }
 
-        assertEquals(generatedTokenCount, calendarLinkTokens.size());
-        assertTrue(tokenService.generateInvitationToken().matches("[A-Za-z0-9_-]{43}"));
+        @Override
+        public void nextBytes(byte[] bytes) {
+            assertEquals(value.length, bytes.length, "Unexpected random byte request.");
+            System.arraycopy(value, 0, bytes, 0, bytes.length);
+        }
     }
 }

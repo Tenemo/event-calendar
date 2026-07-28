@@ -20,7 +20,7 @@ public class PasswordService {
     private static final int PASSWORD_HASH_KEY_BYTES = 32;
     public static final int MINIMUM_PASSWORD_LENGTH = 15;
     public static final int MAXIMUM_PASSWORD_LENGTH = 512;
-    public static final int MAXIMUM_PASSWORD_TRANSPORT_LENGTH = MAXIMUM_PASSWORD_LENGTH * 2;
+    public static final int MAXIMUM_PASSWORD_INPUT_LENGTH = MAXIMUM_PASSWORD_LENGTH * 2;
 
     /**
      * Verified instead of a real stored hash when the username does not exist, so that a missing
@@ -57,11 +57,11 @@ public class PasswordService {
         }
     }
 
-    public int getMaximumPasswordTransportLength() {
-        return MAXIMUM_PASSWORD_TRANSPORT_LENGTH;
+    public int getMaximumPasswordInputLength() {
+        return MAXIMUM_PASSWORD_INPUT_LENGTH;
     }
 
-    public void validatePasswordPolicy(String username, String password) {
+    void validatePasswordPolicy(String username, String password) {
         String normalizedPassword = normalizedCredentialForPolicyComparison(password);
         if (normalizedPassword.isBlank()) {
             throw new ValidationException("Password is required.");

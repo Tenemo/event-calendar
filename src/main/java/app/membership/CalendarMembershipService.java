@@ -2,7 +2,6 @@ package app.membership;
 
 import app.calendar.Calendar;
 import app.user.ApplicationUser;
-import app.util.AuthorizationException;
 import app.util.NotFoundException;
 import app.util.ValidationException;
 import jakarta.ejb.Stateless;
@@ -80,10 +79,10 @@ public class CalendarMembershipService {
         if (newRole == null) {
             throw new ValidationException("Role is required.");
         }
-        lockCalendarAndRequireAdministrator(actingUser, calendarId);
+        lockCalendarAndRequireAdmin(actingUser, calendarId);
         CalendarMembership membership = requireMembership(calendarId, targetUserId);
         if (membership.getRole() == CalendarRole.ADMIN && newRole != CalendarRole.ADMIN) {
-            requireAnotherAdministrator(calendarId, targetUserId);
+            requireAnotherAdmin(calendarId, targetUserId);
         }
         membership.setRole(newRole);
         return membership;
@@ -93,15 +92,15 @@ public class CalendarMembershipService {
             ApplicationUser actingUser,
             Long calendarId,
             Long targetUserId) {
-        lockCalendarAndRequireAdministrator(actingUser, calendarId);
+        lockCalendarAndRequireAdmin(actingUser, calendarId);
         CalendarMembership membership = requireMembership(calendarId, targetUserId);
         if (membership.getRole() == CalendarRole.ADMIN) {
-            requireAnotherAdministrator(calendarId, targetUserId);
+            requireAnotherAdmin(calendarId, targetUserId);
         }
         entityManager.remove(membership);
     }
 
-    private void lockCalendarAndRequireAdministrator(ApplicationUser actingUser, Long calendarId) {
+    private void lockCalendarAndRequireAdmin(ApplicationUser actingUser, Long calendarId) {
         calendarAccessService.requireCanAdminister(actingUser, calendarId);
         Calendar calendar = calendarId == null
                 ? null
@@ -136,8 +135,8 @@ public class CalendarMembershipService {
                 .orElseThrow(() -> new NotFoundException("Calendar membership was not found."));
     }
 
-    private void requireAnotherAdministrator(Long calendarId, Long excludedUserId) {
-        Long otherAdministratorCount = entityManager
+    private void requireAnotherAdmin(Long calendarId, Long excludedUserId) {
+        Long otherAdminCount = entityManager
                 .createQuery(
                         "select count(calendarMembership) from CalendarMembership calendarMembership "
                                 + "where calendarMembership.calendar.id = :calendarId "
@@ -148,18 +147,13 @@ public class CalendarMembershipService {
                 .setParameter("adminRole", CalendarRole.ADMIN)
                 .setParameter("excludedUserId", excludedUserId)
                 .getSingleResult();
-        if (otherAdministratorCount == 0) {
+        if (otherAdminCount == 0) {
             throw new ValidationException("A calendar must keep at least one admin.");
         }
     }
 
     private boolean canEdit(ApplicationUser user, Long calendarId) {
-        try {
-            calendarAccessService.requireCanEdit(user, calendarId);
-            return true;
-        } catch (AuthorizationException exception) {
-            return false;
-        }
+        return calendarAccessService.findRole(user, calendarId).isPresent();
     }
 
 }

@@ -15,12 +15,9 @@ public final class OptimisticLockConflicts {
     private OptimisticLockConflicts() {
     }
 
-    /**
-     * Rejects a submitted form whose entity version no longer matches the stored row. A null
-     * expected version means the caller did not carry a version and no check is performed.
-     */
+    /** Rejects a submitted form whose entity version is missing or no longer matches the stored row. */
     public static void requireExpectedVersion(int actualVersion, Integer expectedVersion, String conflictMessage) {
-        if (expectedVersion != null && actualVersion != expectedVersion.intValue()) {
+        if (expectedVersion == null || actualVersion != expectedVersion.intValue()) {
             throw new ConflictException(conflictMessage);
         }
     }

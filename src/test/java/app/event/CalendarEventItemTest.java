@@ -8,7 +8,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import org.junit.jupiter.api.Test;
 
-final class CalendarEventRowTest {
+final class CalendarEventItemTest {
     private final CalendarTimeService calendarTimeService = new CalendarTimeService();
 
     @Test
@@ -19,17 +19,17 @@ final class CalendarEventRowTest {
                 true,
                 "North landing");
 
-        CalendarEventRow row = CalendarEventRow.from(event, "Europe/Warsaw", calendarTimeService);
+        CalendarEventItem item = CalendarEventItem.from(event, "Europe/Warsaw", calendarTimeService);
 
         assertAll(
-                () -> assertEquals("Jul 22", row.getDateLabel()),
-                () -> assertEquals(LocalDate.parse("2026-07-24"), row.getInclusiveEndDate()),
+                () -> assertEquals("Jul 22", item.getDateLabel()),
+                () -> assertEquals(LocalDate.parse("2026-07-24"), item.getInclusiveEndDate()),
                 () -> assertEquals(
                         "All day from Wed, Jul 22, 2026 to Fri, Jul 24, 2026",
-                        row.getScheduleLabel()),
+                        item.getScheduleLabel()),
                 () -> assertEquals(
-                        "All day from Wed, Jul 22, 2026 to Fri, Jul 24, 2026 at North landing",
-                        row.getScheduleAndLocationLabel()));
+                        "All day from Wed, Jul 22, 2026 to Fri, Jul 24, 2026 · North landing",
+                        item.getScheduleAndLocationLabel()));
     }
 
     @Test
@@ -40,12 +40,12 @@ final class CalendarEventRowTest {
                 true,
                 null);
 
-        CalendarEventRow row = CalendarEventRow.from(event, "Europe/Warsaw", calendarTimeService);
+        CalendarEventItem item = CalendarEventItem.from(event, "Europe/Warsaw", calendarTimeService);
 
         assertAll(
-                () -> assertEquals(LocalDate.parse("2026-07-22"), row.getInclusiveEndDate()),
-                () -> assertEquals("All day", row.getScheduleLabel()),
-                () -> assertEquals("All day", row.getScheduleAndLocationLabel()));
+                () -> assertEquals(LocalDate.parse("2026-07-22"), item.getInclusiveEndDate()),
+                () -> assertEquals("All day", item.getScheduleLabel()),
+                () -> assertEquals("All day", item.getScheduleAndLocationLabel()));
     }
 
     @Test
@@ -56,11 +56,11 @@ final class CalendarEventRowTest {
                 true,
                 null);
 
-        CalendarEventRow row = CalendarEventRow.from(event, "Pacific/Apia", calendarTimeService);
+        CalendarEventItem item = CalendarEventItem.from(event, "Pacific/Apia", calendarTimeService);
 
         assertAll(
-                () -> assertEquals(LocalDate.parse("2011-12-29"), row.getInclusiveEndDate()),
-                () -> assertEquals("All day", row.getScheduleLabel()));
+                () -> assertEquals(LocalDate.parse("2011-12-29"), item.getInclusiveEndDate()),
+                () -> assertEquals("All day", item.getScheduleLabel()));
     }
 
     @Test
@@ -71,15 +71,30 @@ final class CalendarEventRowTest {
                 false,
                 "River bank");
 
-        CalendarEventRow row = CalendarEventRow.from(event, "Europe/Warsaw", calendarTimeService);
+        CalendarEventItem item = CalendarEventItem.from(event, "Europe/Warsaw", calendarTimeService);
 
         assertAll(
                 () -> assertEquals(
-                        "Mon, Jul 20, 2026 at 10:00 to Mon, Jul 20, 2026 at 12:00",
-                        row.getScheduleLabel()),
+                        "Mon, Jul 20, 2026 · 10:00–12:00",
+                        item.getScheduleLabel()),
                 () -> assertEquals(
-                        "Mon, Jul 20, 2026 at 10:00 to Mon, Jul 20, 2026 at 12:00 at River bank",
-                        row.getScheduleAndLocationLabel()));
+                        "Mon, Jul 20, 2026 · 10:00–12:00 · River bank",
+                        item.getScheduleAndLocationLabel()));
+    }
+
+    @Test
+    void timedEventAcrossDatesKeepsBothDates() {
+        CalendarEvent event = event(
+                "2026-07-20T21:00:00Z",
+                "2026-07-20T23:00:00Z",
+                false,
+                null);
+
+        CalendarEventItem item = CalendarEventItem.from(event, "Europe/Warsaw", calendarTimeService);
+
+        assertEquals(
+                "Mon, Jul 20, 2026 at 23:00 to Tue, Jul 21, 2026 at 01:00",
+                item.getScheduleLabel());
     }
 
     private CalendarEvent event(String startTime, String endTime, boolean allDay, String location) {

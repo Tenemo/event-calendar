@@ -7,7 +7,7 @@ import lighthouse from "lighthouse";
 const applicationBaseUrl = process.env.APP_BASE_URL ?? "https://localhost:9443";
 const auditedPages = [
   {name: "Landing page", url: new URL("/", applicationBaseUrl), fileName: "landing"},
-  {name: "Sign-in page", url: new URL("/login", applicationBaseUrl), fileName: "sign-in"},
+  {name: "Sign-in page", url: new URL("/sign-in", applicationBaseUrl), fileName: "sign-in"},
 ];
 
 const outputDirectory = path.resolve(".build", "lighthouse");

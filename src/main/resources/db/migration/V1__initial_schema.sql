@@ -15,7 +15,7 @@ create table calendar (
     description varchar(4000),
     calendar_link_token char(11) not null unique,
     time_zone varchar(80) not null,
-    public_access_enabled boolean not null default true,
+    public_access_enabled boolean not null,
     version integer not null default 0,
     constraint calendar_name_not_blank check (length(trim(name)) > 0),
     constraint calendar_description_length check (description is null or length(description) <= 4000),

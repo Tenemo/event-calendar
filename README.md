@@ -1,13 +1,13 @@
 # Shared calendar
 
-Shared calendar is a small server-rendered web app for coordinating events with friends and groups. Registered users can create multiple calendars, invite editors, and share a read-only calendar through its compact URL.
+Shared calendar is a small server-rendered web app for coordinating events with friends and groups. Registered users can create multiple calendars, invite editors, and share a read-only calendar through its calendar link.
 
 ## What it does
 
 - Creates shared calendars with `ADMIN` and `EDITOR` memberships.
 - Creates timed and all-day events in each calendar's IANA time zone.
-- Shares a calendar read-only through an 11-character bearer URL.
-- Lets an admin disable public access or replace the bearer URL.
+- Shares each calendar read-only through its 11-character calendar link.
+- Lets an admin disable public access or regenerate the calendar link.
 - Uses single-use, seven-day links for registration and editor invitations.
 - Changes passwords from the account settings page.
 
@@ -109,7 +109,7 @@ Every pull request runs:
 - browser tests against an isolated disposable database;
 - Lighthouse against an isolated production container.
 
-Lighthouse measures both `/` and `/login` three times and checks their median results. The committed budgets require a performance score of at least `0.90`, first contentful paint at most `2,000 ms`, largest contentful paint at most `2,500 ms`, total blocking time at most `300 ms`, and cumulative layout shift at most `0.10`.
+Lighthouse measures both `/` and `/sign-in` three times and checks their median results. The committed budgets require a performance score of at least `0.90`, first contentful paint at most `2,000 ms`, largest contentful paint at most `2,500 ms`, total blocking time at most `300 ms`, and cumulative layout shift at most `0.10`.
 
 CodeQL also runs on pushes to `master`, weekly, and on demand.
 
@@ -124,11 +124,11 @@ Every calendar must retain at least one admin. Removing a membership deletes it;
 
 ## Calendar links
 
-Each calendar has one canonical URL at `/{calendarLinkToken}`. The token contains 64 random bits encoded as exactly 11 unpadded Base64URL characters.
+Each calendar has one calendar link at `/{calendarLinkToken}`. The token contains 64 random bits encoded as exactly 11 unpadded Base64URL characters.
 
-Members use the same URL as anonymous readers. Members see controls allowed by their role; anonymous readers receive a read-only view only while public access is enabled. Disabling public access keeps the URL valid for members. Regenerating the link immediately invalidates the previous URL for everyone.
+Members use the same calendar link as anonymous readers. Members see controls allowed by their role; anonymous readers receive a read-only view only while public access is enabled. Disabling public access keeps the calendar link valid for members. Regenerating the calendar link immediately invalidates the previous link for everyone.
 
-Calendar and invitation bearer URLs are marked `noindex`, use a no-referrer policy, and must not be logged. Treat them as secrets even though this is a low-risk private app.
+Calendar links and invitation links are marked `noindex`, use a no-referrer policy, and must not be logged. Treat each link as a bearer credential and a secret even though this is a low-risk private app.
 
 ## Invitations
 

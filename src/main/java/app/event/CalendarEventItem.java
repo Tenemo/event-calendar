@@ -7,10 +7,12 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
-public final class CalendarEventRow implements Serializable {
+public final class CalendarEventItem implements Serializable {
     private static final DateTimeFormatter DATE_LABEL_FORMAT = DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH);
     private static final DateTimeFormatter ALL_DAY_DATE_FORMAT = DateTimeFormatter.ofPattern("EEE, MMM d, yyyy", Locale.ENGLISH);
-    private static final DateTimeFormatter DATE_TIME_FORMAT = DateTimeFormatter.ofPattern("EEE, MMM d, yyyy 'at' HH:mm", Locale.ENGLISH);
+    private static final DateTimeFormatter FULL_DATE_FORMAT =
+            DateTimeFormatter.ofPattern("EEE, MMM d, yyyy", Locale.ENGLISH);
+    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm", Locale.ENGLISH);
 
     private final Long id;
     private final int version;
@@ -22,7 +24,7 @@ public final class CalendarEventRow implements Serializable {
     private final boolean allDay;
     private final LocalDate inclusiveEndDate;
 
-    private CalendarEventRow(
+    private CalendarEventItem(
             Long id,
             int version,
             String title,
@@ -43,12 +45,12 @@ public final class CalendarEventRow implements Serializable {
         this.inclusiveEndDate = inclusiveEndDate;
     }
 
-    public static CalendarEventRow from(
+    public static CalendarEventItem from(
             CalendarEvent event,
             String timeZone,
             CalendarTimeService calendarTimeService) {
         LocalDateTime calendarEndTime = calendarTimeService.toCalendarTime(event.getEndTime(), timeZone);
-        return new CalendarEventRow(
+        return new CalendarEventItem(
                 event.getId(),
                 event.getVersion(),
                 event.getTitle(),
@@ -114,13 +116,26 @@ public final class CalendarEventRow implements Serializable {
             }
             return "All day";
         }
-        return startTime.format(DATE_TIME_FORMAT) + " to " + endTime.format(DATE_TIME_FORMAT);
+        if (startTime.toLocalDate().equals(endTime.toLocalDate())) {
+            return startTime.format(FULL_DATE_FORMAT)
+                    + " · "
+                    + startTime.format(TIME_FORMAT)
+                    + "–"
+                    + endTime.format(TIME_FORMAT);
+        }
+        return startTime.format(FULL_DATE_FORMAT)
+                + " at "
+                + startTime.format(TIME_FORMAT)
+                + " to "
+                + endTime.format(FULL_DATE_FORMAT)
+                + " at "
+                + endTime.format(TIME_FORMAT);
     }
 
     public String getScheduleAndLocationLabel() {
         if (location == null || location.isBlank()) {
             return getScheduleLabel();
         }
-        return getScheduleLabel() + " at " + location;
+        return getScheduleLabel() + " · " + location;
     }
 }

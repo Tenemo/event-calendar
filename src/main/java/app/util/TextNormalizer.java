@@ -26,7 +26,7 @@ public final class TextNormalizer {
         return normalizedValue;
     }
 
-    public static String normalizeOptionalText(String value) {
+    private static String normalizeOptionalText(String value) {
         if (value == null || value.isBlank()) {
             return null;
         }

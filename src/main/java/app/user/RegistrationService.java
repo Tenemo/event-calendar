@@ -1,6 +1,7 @@
 package app.user;
 
 import app.calendar.CalendarService;
+import app.invitation.InvitationClaim;
 import app.invitation.InvitationService;
 import app.util.ValidationException;
 import jakarta.ejb.Stateless;
@@ -29,10 +30,10 @@ public class RegistrationService {
         }
         String normalizedInitialCalendarName =
                 calendarService.normalizeAndValidateCalendarName(initialCalendarName);
-        RegistrationAdmission admission = invitationService.claimRegistrationAdmission(invitationToken);
+        InvitationClaim invitationClaim = invitationService.claimInvitationForRegistration(invitationToken);
         ApplicationUser user = userService.createUser(username, displayName, password);
         calendarService.createCalendar(user, normalizedInitialCalendarName);
-        invitationService.acceptAdmission(admission, user);
+        invitationService.completeInvitationClaim(invitationClaim, user);
         return user;
     }
 }

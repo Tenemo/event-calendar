@@ -7,32 +7,20 @@
     <f:metadata>
         <f:viewParam name="token" value="#{signInView.invitationToken}"/>
         <f:viewParam name="passwordChanged" value="#{signInView.passwordChangedParameter}"/>
-        <f:viewParam name="reauthenticationRequired" value="#{signInView.reauthenticationRequiredParameter}"/>
     </f:metadata>
     <ui:define name="title">Sign in - Shared calendar</ui:define>
-    <ui:define name="messages">
-        <h:messages id="messages"
-                    showDetail="true"
-                    styleClass="lightweight-messages"
-                    pt:role="alert"/>
-    </ui:define>
 
     <ui:define name="content">
         <section class="narrow-section">
-            <h1 id="signInHeading">Sign in</h1>
+            <h1 id="sign-in-heading">Sign in</h1>
             <h:panelGroup layout="block"
                           styleClass="notice-message"
                           rendered="#{signInView.passwordChanged}">
                 Your password was changed. Sign in with the new password.
             </h:panelGroup>
             <h:panelGroup layout="block"
-                          styleClass="notice-message"
-                          rendered="#{signInView.reauthenticationRequired}">
-                Your session is no longer valid. Sign in again.
-            </h:panelGroup>
-            <h:panelGroup layout="block"
                           styleClass="surface-panel lightweight-panel"
-                          pt:aria-labelledby="signInHeading">
+                          pt:aria-labelledby="sign-in-heading">
                 <h:form styleClass="stacked-form">
                     <h:inputHidden id="invitationToken" value="#{signInView.invitationToken}"/>
                     <h:outputLabel for="username" value="Username"/>
@@ -49,7 +37,7 @@
                                    value="#{signInView.password}"
                                    styleClass="native-input"
                                    pt:autocomplete="current-password"
-                                   maxlength="#{passwordService.maximumPasswordTransportLength}"
+                                   maxlength="#{passwordService.maximumPasswordInputLength}"
                                    required="true"
                                    requiredMessage="Password is required."/>
 

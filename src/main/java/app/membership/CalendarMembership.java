@@ -31,10 +31,6 @@ public class CalendarMembership {
     @Column(name = "role_name", nullable = false, length = 20)
     private CalendarRole role;
 
-    public Calendar getCalendar() {
-        return calendar;
-    }
-
     public void setCalendar(Calendar calendar) {
         this.calendar = calendar;
     }

@@ -24,10 +24,10 @@ public class Calendar {
     private String calendarLinkToken;
 
     @Column(name = "time_zone", nullable = false, length = 80)
-    private String timeZone = "Europe/Warsaw";
+    private String timeZone;
 
     @Column(name = "public_access_enabled", nullable = false)
-    private boolean publicAccessEnabled = true;
+    private boolean publicAccessEnabled;
 
     @Version
     @Column(nullable = false)

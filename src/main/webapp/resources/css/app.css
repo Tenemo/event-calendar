@@ -55,7 +55,8 @@ body .ui-dialog .ui-button:focus,
 body .ui-datepicker a:focus,
 body .ui-datepicker button:focus,
 body .ui-datepicker input:focus,
-body .ui-messages .ui-messages-close:focus {
+body .ui-messages .ui-messages-close:focus,
+body .ui-messages:focus {
     outline: 3px solid var(--focus);
     outline-offset: 3px;
     box-shadow: none;
@@ -153,6 +154,11 @@ button,
 .app-nav a:hover,
 .link-button:hover {
     background: var(--surface-muted);
+}
+
+.app-nav .current-nav-item {
+    background: var(--surface-muted);
+    color: var(--primary-dark);
 }
 
 .app-nav .nav-action,
@@ -293,7 +299,7 @@ p {
 }
 
 .action-row,
-.row-actions,
+.item-actions,
 .member-actions {
     display: flex;
     flex-wrap: wrap;
@@ -354,6 +360,28 @@ p {
     gap: 0.75rem;
 }
 
+.member-card-list.ui-datalist,
+.member-card-list .ui-datalist-content {
+    border: 0;
+    background: transparent;
+}
+
+.member-card-list .ui-datalist-content {
+    padding: 0;
+}
+
+.member-card-list .ui-datalist-data {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    gap: 0.75rem;
+    list-style: none;
+}
+
+.member-card-list .ui-datalist-item {
+    padding: 0;
+}
+
 .list-card {
     display: flex;
     min-width: 0;
@@ -397,8 +425,10 @@ p {
     justify-content: flex-end;
 }
 
-.member-actions select {
-    width: auto;
+.member-role-label {
+    color: var(--muted);
+    font-size: 0.9rem;
+    font-weight: 700;
 }
 
 .invitation-card {
@@ -582,17 +612,6 @@ p {
     padding: 1.25rem;
 }
 
-.lightweight-messages {
-    margin: 0 0 1rem;
-    padding: 0.9rem 1rem;
-    border: 1px solid var(--danger);
-    border-radius: var(--radius);
-    background: var(--danger-soft);
-    color: var(--danger);
-    line-height: 1.5;
-    list-style: none;
-}
-
 body input.native-input,
 body select,
 body .ui-inputfield {
@@ -741,12 +760,11 @@ body .ui-chkbox .ui-chkbox-box.ui-state-active {
         overflow: visible;
     }
 
-    .row-actions,
-    .row-actions form,
-    .row-actions .ui-button,
+    .item-actions,
+    .item-actions form,
+    .item-actions .ui-button,
     .member-actions,
-    .member-actions .ui-button,
-    .member-actions select {
+    .member-actions .ui-button {
         width: 100%;
     }
 

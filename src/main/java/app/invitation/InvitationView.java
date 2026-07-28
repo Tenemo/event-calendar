@@ -17,11 +17,18 @@ import jakarta.inject.Inject;
 import jakarta.inject.Named;
 import java.io.Serializable;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
 
 @Named
 @ViewScoped
 public class InvitationView implements Serializable {
+    private static final DateTimeFormatter INVITATION_TIMESTAMP_FORMAT = DateTimeFormatter
+            .ofPattern("MMM d, yyyy 'at' HH:mm 'UTC'", Locale.ENGLISH)
+            .withZone(ZoneOffset.UTC);
+
     @Inject
     private CurrentUser currentUser;
 
@@ -36,7 +43,7 @@ public class InvitationView implements Serializable {
 
     private Long selectedCalendarId;
     private List<EditableCalendarOption> editableCalendars = List.of();
-    private List<InvitationRow> invitations = List.of();
+    private List<InvitationItem> invitations = List.of();
     private String generatedInvitationLink;
 
     @PostConstruct
@@ -99,14 +106,14 @@ public class InvitationView implements Serializable {
         }
     }
 
-    static Long parseInvitationId(String submittedInvitationId) {
+    private static Long parseInvitationId(String submittedInvitationId) {
         return ViewParameterParser.positiveLong(submittedInvitationId)
                 .orElseThrow(() -> new ValidationException("Invitation is invalid."));
     }
 
     private void refreshInvitations(ApplicationUser actingUser) {
         invitations = invitationService.listOutstandingInvitations(actingUser).stream()
-                .map(invitation -> new InvitationRow(
+                .map(invitation -> new InvitationItem(
                         invitation.id(),
                         invitationLink(invitation.invitationToken()),
                         invitation.calendarName() == null
@@ -137,7 +144,7 @@ public class InvitationView implements Serializable {
         return !editableCalendars.isEmpty();
     }
 
-    public List<InvitationRow> getInvitations() {
+    public List<InvitationItem> getInvitations() {
         return invitations;
     }
 
@@ -167,14 +174,14 @@ public class InvitationView implements Serializable {
         }
     }
 
-    public static final class InvitationRow implements Serializable {
+    public static final class InvitationItem implements Serializable {
         private final Long id;
         private final String invitationLink;
         private final String scope;
-        private final OffsetDateTime createdAt;
-        private final OffsetDateTime expiresAt;
+        private final String createdAtLabel;
+        private final String expiresAtLabel;
 
-        private InvitationRow(
+        private InvitationItem(
                 Long id,
                 String invitationLink,
                 String scope,
@@ -183,8 +190,8 @@ public class InvitationView implements Serializable {
             this.id = id;
             this.invitationLink = invitationLink;
             this.scope = scope;
-            this.createdAt = createdAt;
-            this.expiresAt = expiresAt;
+            this.createdAtLabel = formatTimestamp(createdAt);
+            this.expiresAtLabel = formatTimestamp(expiresAt);
         }
 
         public Long getId() {
@@ -199,12 +206,16 @@ public class InvitationView implements Serializable {
             return scope;
         }
 
-        public OffsetDateTime getCreatedAt() {
-            return createdAt;
+        public String getCreatedAtLabel() {
+            return createdAtLabel;
         }
 
-        public OffsetDateTime getExpiresAt() {
-            return expiresAt;
+        public String getExpiresAtLabel() {
+            return expiresAtLabel;
         }
+    }
+
+    static String formatTimestamp(OffsetDateTime timestamp) {
+        return INVITATION_TIMESTAMP_FORMAT.format(timestamp);
     }
 }
