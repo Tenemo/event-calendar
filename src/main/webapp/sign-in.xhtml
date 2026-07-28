@@ -9,6 +9,25 @@
         <f:viewParam name="passwordChanged" value="#{signInView.passwordChangedParameter}"/>
     </f:metadata>
     <ui:define name="title">Sign in - Shared calendar</ui:define>
+    <ui:define name="messages">
+        <h:panelGroup id="messages"
+                      layout="block"
+                      styleClass="lightweight-message-region"
+                      pt:role="#{facesContext.maximumSeverity ne null and facesContext.maximumSeverity.ordinal ge 2 ? 'alert' : 'status'}"
+                      pt:aria-live="#{facesContext.maximumSeverity ne null and facesContext.maximumSeverity.ordinal ge 2 ? 'assertive' : 'polite'}"
+                      pt:aria-atomic="true"
+                      pt:tabindex="-1">
+            <h:messages id="message-list"
+                        layout="list"
+                        showSummary="true"
+                        showDetail="true"
+                        styleClass="lightweight-messages"
+                        infoClass="lightweight-message-info"
+                        warnClass="lightweight-message-warn"
+                        errorClass="lightweight-message-error"
+                        fatalClass="lightweight-message-fatal"/>
+        </h:panelGroup>
+    </ui:define>
 
     <ui:define name="content">
         <section class="narrow-section">

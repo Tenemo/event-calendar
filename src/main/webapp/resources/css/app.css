@@ -19,6 +19,8 @@
     --danger-soft: #fef2f2;
     --success: #047857;
     --success-soft: #ecfdf5;
+    --warning: #92400e;
+    --warning-soft: #fffbeb;
     --focus: #0f3d9e;
     --radius: 0.55rem;
     --control-height: 2.75rem;
@@ -56,7 +58,8 @@ body .ui-datepicker a:focus,
 body .ui-datepicker button:focus,
 body .ui-datepicker input:focus,
 body .ui-messages .ui-messages-close:focus,
-body .ui-messages:focus {
+body .ui-messages:focus,
+.lightweight-message-region:focus {
     outline: 3px solid var(--focus);
     outline-offset: 3px;
     box-shadow: none;
@@ -610,6 +613,38 @@ p {
 
 .lightweight-panel {
     padding: 1.25rem;
+}
+
+.lightweight-messages {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0 0 1rem;
+    padding: 0;
+    line-height: 1.5;
+    list-style: none;
+}
+
+.lightweight-messages > li {
+    padding: 0.9rem 1rem;
+    border: 1px solid currentcolor;
+    border-left-width: 4px;
+    border-radius: var(--radius);
+}
+
+.lightweight-message-info {
+    background: var(--success-soft);
+    color: var(--success);
+}
+
+.lightweight-message-warn {
+    background: var(--warning-soft);
+    color: var(--warning);
+}
+
+.lightweight-message-error,
+.lightweight-message-fatal {
+    background: var(--danger-soft);
+    color: var(--danger);
 }
 
 body input.native-input,

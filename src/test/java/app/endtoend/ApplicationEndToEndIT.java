@@ -123,6 +123,16 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             inviterPage.locator("input[id$='password']").fill("definitely wrong");
             inviterPage.locator("input[type='submit'][value='Sign in']").click();
             assertThat(inviterPage.locator("body")).containsText("Sign-in failed.");
+            Locator signInMessages = inviterPage.locator("[id$='messages']");
+            assertThat(signInMessages).hasAttribute("role", "alert");
+            assertThat(signInMessages).hasAttribute("aria-live", "assertive");
+            assertThat(signInMessages.locator(".lightweight-message-error"))
+                    .containsText("Sign-in failed.");
+            assertFalse(
+                    (Boolean) inviterPage.evaluate(
+                            "() => Array.from(document.scripts).some(script => "
+                                    + "script.src.includes('/primefaces/components.js'))"),
+                    "The native sign-in form must not load the PrimeFaces component bundle.");
             assertAccessible(inviterPage);
 
             inviterPage.locator("input[id$='password']").fill(TEST_PASSWORD);
