@@ -10,7 +10,7 @@ body {
     margin: 0;
     padding: 1rem;
     background:
-        radial-gradient(circle at 18% 0, rgb(109 94 252 / 14%), transparent 28rem),
+        radial-gradient(circle at 18% 0, var(--color-canvas-glow), transparent 28rem),
         var(--color-canvas);
     color: var(--color-text);
     font-family: var(--font-family-body);

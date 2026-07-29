@@ -1,6 +1,6 @@
 .notice-message {
     padding: 0.9rem 1rem;
-    border: 1px solid rgb(154 167 255 / 38%);
+    border: 1px solid var(--color-primary-border);
     border-left: 4px solid var(--color-primary);
     border-radius: var(--radius-medium);
     background: var(--color-primary-soft);
@@ -13,7 +13,7 @@
     max-width: 100%;
     align-items: center;
     padding: 0.38rem 0.68rem;
-    border: 1px solid rgb(85 214 190 / 34%);
+    border: 1px solid var(--color-success-border);
     border-radius: var(--radius-pill);
     background: var(--color-success-soft);
     color: var(--color-success);
@@ -56,7 +56,7 @@
     padding: 1.4rem;
     border: 1px dashed var(--color-border-control);
     border-radius: var(--radius-medium);
-    background: rgb(18 26 43 / 52%);
+    background: var(--color-surface-translucent-subtle);
     text-align: center;
 }
 
@@ -65,7 +65,7 @@
     width: 2.5rem;
     height: 2.5rem;
     margin-bottom: 0.2rem;
-    border: 1px solid rgb(154 167 255 / 42%);
+    border: 1px solid var(--color-primary-border-strong);
     border-radius: 0.75rem;
     background: var(--color-primary-soft);
 }

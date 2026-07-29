@@ -35,6 +35,7 @@
     position: relative;
     display: grid;
     gap: 0.75rem;
+    isolation: isolate;
 }
 
 .event-board::before {
@@ -42,20 +43,23 @@
     top: 1rem;
     bottom: 1rem;
     left: 2.1rem;
-    z-index: -1;
+    z-index: 0;
     width: 1px;
     background: linear-gradient(var(--color-primary-soft), var(--color-border-subtle));
     content: "";
+    pointer-events: none;
 }
 
 .event-item {
+    position: relative;
+    z-index: 1;
     display: flex;
     align-items: flex-start;
     gap: 1rem;
     padding: 1rem;
     border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-medium);
-    background: rgb(18 26 43 / 88%);
+    background: var(--color-surface-translucent-strong);
 }
 
 .event-item > * {
@@ -70,7 +74,7 @@
     align-items: center;
     justify-content: center;
     padding: 0.4rem;
-    border: 1px solid rgb(154 167 255 / 36%);
+    border: 1px solid var(--color-primary-border);
     border-radius: var(--radius-medium);
     background: var(--color-primary-soft);
     color: var(--color-primary-hover);
@@ -96,7 +100,7 @@
 
 .event-copy p {
     margin-top: 0.3rem;
-    font-size: 0.92rem;
+    font-size: var(--font-size-compact);
 }
 
 .event-copy .description-text {
@@ -110,7 +114,7 @@
     top: 6.75rem;
     max-height: calc(100vh - 7.75rem);
     overflow-y: auto;
-    border-color: rgb(154 167 255 / 24%);
+    border-color: var(--color-primary-border-subtle);
 }
 
 .member-card-list.ui-datalist,

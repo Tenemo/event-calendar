@@ -32,12 +32,15 @@ body .ui-inputfield.ui-state-focus {
 }
 
 body .ui-inputfield:disabled,
-body .ui-inputfield.ui-state-disabled,
-body select:disabled {
+body .ui-inputfield.ui-state-disabled {
     border-color: var(--color-border-subtle);
     background: var(--color-canvas-muted);
     color: var(--color-text-subtle);
     opacity: 0.72;
+}
+
+body .ui-state-disabled {
+    cursor: not-allowed;
 }
 
 body .ui-button {
@@ -196,7 +199,7 @@ body .ui-dialog .ui-confirm-dialog-message {
 }
 
 body .ui-widget-overlay {
-    background: rgb(3 7 18 / 72%);
+    background: var(--color-backdrop);
     backdrop-filter: blur(3px);
 }
 
@@ -206,20 +209,20 @@ body .ui-messages {
 }
 
 body .ui-messages .ui-messages-info {
-    border-color: rgb(85 214 190 / 38%);
+    border-color: var(--color-success-border);
     background: var(--color-success-soft);
     color: var(--color-success);
 }
 
 body .ui-messages .ui-messages-warn {
-    border-color: rgb(246 200 106 / 38%);
+    border-color: var(--color-warning-border);
     background: var(--color-warning-soft);
     color: var(--color-warning);
 }
 
 body .ui-messages .ui-messages-error,
 body .ui-messages .ui-messages-fatal {
-    border-color: rgb(255 135 147 / 38%);
+    border-color: var(--color-danger-border);
     background: var(--color-danger-soft);
     color: var(--color-danger);
 }

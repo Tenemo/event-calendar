@@ -7,9 +7,9 @@
     justify-content: space-between;
     gap: 1.5rem;
     padding: 0.85rem max(1rem, calc((100vw - var(--content-width)) / 2 + 2.25rem));
-    border-bottom: 1px solid rgb(82 102 138 / 42%);
-    background: rgb(11 16 32 / 88%);
-    box-shadow: 0 8px 28px rgb(0 0 0 / 14%);
+    border-bottom: 1px solid var(--color-border-control-translucent);
+    background: var(--color-canvas-translucent-strong);
+    box-shadow: var(--shadow-header);
     backdrop-filter: blur(18px);
 }
 
@@ -38,7 +38,7 @@
     height: 2rem;
     flex: 0 0 auto;
     border-radius: 0.6rem;
-    box-shadow: 0 6px 18px rgb(0 0 0 / 24%);
+    box-shadow: var(--shadow-brand);
 }
 
 .app-subtitle {
@@ -84,7 +84,7 @@
 }
 
 .app-nav .current-nav-item {
-    border-color: rgb(154 167 255 / 32%);
+    border-color: var(--color-primary-border);
     background: var(--color-primary-soft);
     color: var(--color-primary-hover);
 }

@@ -55,10 +55,8 @@ body select,
 body .ui-inputfield {
     width: 100%;
     min-width: 0;
-    min-height: 2.7rem;
-    border-color: var(--color-border-control);
+    min-height: var(--control-height);
     border-radius: var(--radius-small);
-    color: var(--color-text);
     caret-color: var(--color-primary);
     font: inherit;
 }
@@ -66,9 +64,9 @@ body .ui-inputfield {
 body input.native-input,
 body select {
     padding: 0.6rem 0.75rem;
-    border-style: solid;
-    border-width: 1px;
+    border: 1px solid var(--color-border-control);
     background: var(--color-surface-raised);
+    color: var(--color-text);
 }
 
 body input.native-input::placeholder,
@@ -77,15 +75,17 @@ body .ui-inputfield::placeholder {
     opacity: 1;
 }
 
-body select:disabled,
-body .ui-state-disabled {
+body input.native-input:disabled,
+body select:disabled {
+    border-color: var(--color-border-subtle);
+    background: var(--color-canvas-muted);
+    color: var(--color-text-subtle);
     cursor: not-allowed;
+    opacity: 0.72;
 }
 
-body input.native-input:hover,
-body select:not(:disabled):hover,
-body .ui-inputfield.ui-state-hover,
-body .ui-chkbox .ui-chkbox-box.ui-state-hover {
+body input.native-input:not(:disabled):hover,
+body select:not(:disabled):hover {
     border-color: var(--color-primary);
 }
 

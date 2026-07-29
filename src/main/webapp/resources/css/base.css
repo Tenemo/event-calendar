@@ -13,8 +13,8 @@ body {
     min-height: 100vh;
     margin: 0;
     background:
-        radial-gradient(circle at 8% -10%, rgb(109 94 252 / 15%), transparent 30rem),
-        radial-gradient(circle at 92% 4%, rgb(85 214 190 / 8%), transparent 26rem),
+        radial-gradient(circle at 8% -10%, var(--color-canvas-glow), transparent 30rem),
+        radial-gradient(circle at 92% 4%, var(--color-success-highlight), transparent 26rem),
         var(--color-canvas);
     color: var(--color-text);
     font-family: var(--font-family-body);
@@ -167,10 +167,6 @@ strong {
 
 .form-footer {
     margin-bottom: 0;
-}
-
-.component-contents {
-    display: contents;
 }
 
 @media (forced-colors: active) {

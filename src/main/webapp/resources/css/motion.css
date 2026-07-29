@@ -1,59 +1,57 @@
-@media (prefers-reduced-motion: no-preference) {
-    .skip-link,
-    .app-nav a,
-    .link-button,
-    .button-link,
-    body input.native-button,
-    body .ui-button {
-        transition:
-            color var(--motion-duration-quick) var(--motion-easing-standard),
-            background-color var(--motion-duration-quick) var(--motion-easing-standard),
-            border-color var(--motion-duration-quick) var(--motion-easing-standard),
-            box-shadow var(--motion-duration-standard) var(--motion-easing-standard),
-            transform var(--motion-duration-quick) var(--motion-easing-standard);
-    }
+.skip-link,
+.app-nav a,
+.link-button,
+.button-link,
+body input.native-button,
+body .ui-button {
+    transition:
+        color var(--motion-duration-quick) var(--motion-easing-standard),
+        background-color var(--motion-duration-quick) var(--motion-easing-standard),
+        border-color var(--motion-duration-quick) var(--motion-easing-standard),
+        box-shadow var(--motion-duration-standard) var(--motion-easing-standard),
+        transform var(--motion-duration-quick) var(--motion-easing-standard);
+}
 
-    .list-card,
-    .event-item,
-    .home-preview-event {
-        transition:
-            background-color var(--motion-duration-standard) var(--motion-easing-standard),
-            border-color var(--motion-duration-standard) var(--motion-easing-standard),
-            box-shadow var(--motion-duration-standard) var(--motion-easing-standard),
-            transform var(--motion-duration-standard) var(--motion-easing-standard);
-    }
+.list-card,
+.event-item,
+.home-preview-event {
+    transition:
+        background-color var(--motion-duration-standard) var(--motion-easing-standard),
+        border-color var(--motion-duration-standard) var(--motion-easing-standard),
+        box-shadow var(--motion-duration-standard) var(--motion-easing-standard),
+        transform var(--motion-duration-standard) var(--motion-easing-standard);
+}
 
-    .button-link:hover,
-    body input.native-button:hover,
-    body .ui-button:not(.ui-state-disabled):hover {
-        transform: translateY(-1px);
-    }
+.button-link:hover,
+body input.native-button:hover,
+body .ui-button:not(.ui-state-disabled):hover {
+    transform: translateY(-1px);
+}
 
-    .button-link:active,
-    body input.native-button:active,
-    body .ui-button:not(.ui-state-disabled):active {
-        transform: translateY(0);
-    }
+.button-link:active,
+body input.native-button:active,
+body .ui-button:not(.ui-state-disabled):active {
+    transform: translateY(0);
+}
 
-    .list-card:hover,
-    .list-card:focus-within,
-    .event-item:focus-within {
-        border-color: rgb(154 167 255 / 42%);
-        background: var(--color-surface-interactive);
-        box-shadow: 0 12px 28px rgb(0 0 0 / 16%);
-        transform: translateY(-1px);
-    }
+.list-card:hover,
+.list-card:focus-within,
+.event-item:focus-within {
+    border-color: var(--color-primary-border-strong);
+    background: var(--color-surface-interactive);
+    box-shadow: var(--shadow-interactive);
+    transform: translateY(-1px);
+}
 
-    .home-preview-event:hover {
-        border-color: rgb(154 167 255 / 34%);
-        transform: translateX(-2px);
-    }
+.home-preview-event:hover {
+    border-color: var(--color-primary-border);
+    transform: translateX(-2px);
+}
 
-    .generated-invitation,
-    .lightweight-messages > li,
-    body .ui-messages {
-        animation: feedback-enter var(--motion-duration-deliberate) var(--motion-easing-emphasized);
-    }
+.generated-invitation,
+.lightweight-messages > li,
+body .ui-messages {
+    animation: feedback-enter var(--motion-duration-deliberate) var(--motion-easing-emphasized);
 }
 
 @keyframes feedback-enter {
@@ -65,15 +63,5 @@
     to {
         opacity: 1;
         transform: translateY(0);
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-        scroll-behavior: auto !important;
-        animation: none !important;
-        transition: none !important;
     }
 }
