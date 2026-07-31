@@ -34,19 +34,20 @@
                              rendered="#{empty calendarListView.calendarMemberships}"/>
             <div class="card-list">
                 <ui:repeat value="#{calendarListView.calendarMemberships}" var="calendar">
-                    <article class="list-card">
-                        <div>
+                    <article class="list-card calendar-card">
+                        <div class="calendar-card-copy">
                             <h2 class="card-heading">
-                                <h:outputLink value="#{request.contextPath}/#{calendar.calendarLinkToken}">#{calendar.calendarName}</h:outputLink>
+                                <h:outputLink value="#{request.contextPath}/#{calendar.calendarLinkToken}"
+                                              styleClass="calendar-card-link">#{calendar.calendarName}</h:outputLink>
                             </h2>
                             <p class="secondary-line">#{calendar.role.displayName} · Public access #{calendar.publicAccessEnabled ? 'enabled' : 'disabled'}</p>
                         </div>
                         <div class="item-actions">
                             <h:outputLink value="#{request.contextPath}/#{calendar.calendarLinkToken}"
-                                          styleClass="button-link secondary-link"
+                                          styleClass="app-button app-button-secondary"
                                           pt:aria-label="Open #{calendar.calendarName}">Open</h:outputLink>
                             <h:outputLink value="#{request.contextPath}/app/calendar-settings"
-                                          styleClass="button-link secondary-link"
+                                          styleClass="app-button app-button-secondary"
                                           pt:aria-label="Open settings for #{calendar.calendarName}"
                                           rendered="#{calendar.admin}">
                                 Settings

@@ -169,7 +169,15 @@ abstract class SharedCalendarEndToEndSupport {
         assertTrue(
                 results.getViolations().isEmpty(),
                 () -> "Accessibility violations: "
-                        + results.getViolations().stream().map(violation -> violation.getId()).toList());
+                        + results.getViolations().stream()
+                                .map(violation -> violation.getId()
+                                        + ": "
+                                        + violation.getNodes().stream()
+                                                .map(node -> node.getTarget()
+                                                        + " - "
+                                                        + node.getFailureSummary())
+                                                .toList())
+                                .toList());
     }
 
     void assertResponsiveAndAccessible(Page page, int width, int height) {

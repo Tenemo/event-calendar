@@ -89,23 +89,6 @@ body select:not(:disabled):hover {
     border-color: var(--color-primary);
 }
 
-body input.native-button {
-    min-height: var(--control-height);
-    padding: 0.7rem 1rem;
-    border: 1px solid var(--color-primary);
-    border-radius: var(--radius-small);
-    background: var(--color-primary);
-    color: var(--color-on-primary);
-    cursor: pointer;
-    font: inherit;
-    font-weight: var(--font-weight-strong);
-}
-
-body input.native-button:hover {
-    border-color: var(--color-primary-hover);
-    background: var(--color-primary-hover);
-}
-
 @media (width <= 52rem) {
     .two-column-fields {
         grid-template-columns: 1fr;
@@ -117,7 +100,7 @@ body input.native-button:hover {
         grid-template-columns: 1fr;
     }
 
-    .copy-control .button-link {
+    .copy-control .app-button {
         width: 100%;
     }
 }

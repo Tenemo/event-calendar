@@ -51,13 +51,13 @@
                             </p:commandButton>
                         </h:form>
                         <h:outputLink value="#{request.contextPath}/app/calendar-members"
-                                      styleClass="button-link secondary-link"
+                                      styleClass="app-button app-button-secondary"
                                       rendered="#{calendarView.admin}">
                             Members
                             <f:param name="id" value="#{calendarView.calendarId}"/>
                         </h:outputLink>
                         <h:outputLink value="#{request.contextPath}/app/calendar-settings"
-                                      styleClass="button-link secondary-link"
+                                      styleClass="app-button app-button-secondary"
                                       rendered="#{calendarView.admin}">
                             Settings
                             <f:param name="id" value="#{calendarView.calendarId}"/>
@@ -88,8 +88,7 @@
                     <h:panelGroup layout="block" styleClass="event-board" rendered="#{not empty calendarView.events}">
                         <ui:repeat value="#{calendarView.events}" var="event">
                             <article id="event-#{event.id}"
-                                     class="event-item"
-                                     tabindex="-1">
+                                     class="event-item">
                                 <span class="event-date">#{event.dateLabel}</span>
                                 <div class="event-copy">
                                     <h3>#{event.title}</h3>
@@ -256,7 +255,7 @@
             <p>This calendar link no longer works. It may have been regenerated, or public access may be disabled.</p>
             <p>Ask a calendar member for the current link.</p>
             <h:outputLink value="#{request.contextPath}/app/calendars"
-                          styleClass="button-link primary-link"
+                          styleClass="app-button app-button-primary"
                           rendered="#{currentUser.signedIn}">My calendars</h:outputLink>
         </h:panelGroup>
         </h:panelGroup>

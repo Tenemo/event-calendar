@@ -24,7 +24,7 @@
                          pt:aria-label="#{empty cc.attrs.inputAriaLabel ? null : cc.attrs.inputAriaLabel}"
                          pt:aria-describedby="#{empty cc.attrs.help ? null : cc.clientId.concat(':help')}"/>
             <button type="button"
-                    class="button-link secondary-link"
+                    class="app-button app-button-secondary"
                     aria-label="#{empty cc.attrs.buttonAriaLabel ? cc.attrs.buttonLabel : cc.attrs.buttonAriaLabel}"
                     onclick="copyLink(this); return false;">#{cc.attrs.buttonLabel}</button>
             <h:panelGroup id="status"

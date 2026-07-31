@@ -41,6 +41,7 @@
     --color-warning-border: rgb(246 200 106 / 38%);
     --color-danger: #ff8793;
     --color-danger-hover: #ffa0a9;
+    --color-danger-active: #ed6f7c;
     --color-danger-soft: rgb(255 135 147 / 13%);
     --color-danger-border: rgb(255 135 147 / 38%);
     --color-focus: #bac3ff;
@@ -68,10 +69,8 @@
     --shadow-surface: 0 12px 36px rgb(0 0 0 / 18%);
     --shadow-raised: 0 18px 50px rgb(0 0 0 / 28%);
     --shadow-header: 0 8px 28px rgb(0 0 0 / 14%);
-    --shadow-interactive: 0 12px 28px rgb(0 0 0 / 16%);
     --shadow-brand: 0 6px 18px rgb(0 0 0 / 24%);
     --shadow-preview: 0 20px 50px rgb(0 0 0 / 24%);
-    --shadow-primary: 0 8px 22px rgb(71 81 170 / 24%);
     --scroll-offset: 5.5rem;
     --content-width: 72rem;
     --motion-duration-quick: 120ms;

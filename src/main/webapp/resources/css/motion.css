@@ -1,51 +1,13 @@
-.skip-link,
-.app-nav a,
-.link-button,
-.button-link,
-body input.native-button,
-body .ui-button {
+.skip-link {
+    transition: transform var(--motion-duration-quick) var(--motion-easing-standard);
+}
+
+.app-nav a {
     transition:
         color var(--motion-duration-quick) var(--motion-easing-standard),
         background-color var(--motion-duration-quick) var(--motion-easing-standard),
         border-color var(--motion-duration-quick) var(--motion-easing-standard),
-        box-shadow var(--motion-duration-standard) var(--motion-easing-standard),
-        transform var(--motion-duration-quick) var(--motion-easing-standard);
-}
-
-.list-card,
-.event-item,
-.home-preview-event {
-    transition:
-        background-color var(--motion-duration-standard) var(--motion-easing-standard),
-        border-color var(--motion-duration-standard) var(--motion-easing-standard),
-        box-shadow var(--motion-duration-standard) var(--motion-easing-standard),
-        transform var(--motion-duration-standard) var(--motion-easing-standard);
-}
-
-.button-link:hover,
-body input.native-button:hover,
-body .ui-button:not(.ui-state-disabled):hover {
-    transform: translateY(-1px);
-}
-
-.button-link:active,
-body input.native-button:active,
-body .ui-button:not(.ui-state-disabled):active {
-    transform: translateY(0);
-}
-
-.list-card:hover,
-.list-card:focus-within,
-.event-item:focus-within {
-    border-color: var(--color-primary-border-strong);
-    background: var(--color-surface-interactive);
-    box-shadow: var(--shadow-interactive);
-    transform: translateY(-1px);
-}
-
-.home-preview-event:hover {
-    border-color: var(--color-primary-border);
-    transform: translateX(-2px);
+        box-shadow var(--motion-duration-standard) var(--motion-easing-standard);
 }
 
 .generated-invitation,

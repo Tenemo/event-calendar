@@ -1,0 +1,41 @@
+.calendar-card {
+    position: relative;
+    isolation: isolate;
+    cursor: pointer;
+    transform: none;
+    transition:
+        background-color var(--motion-duration-quick) var(--motion-easing-standard),
+        border-color var(--motion-duration-quick) var(--motion-easing-standard),
+        box-shadow var(--motion-duration-standard) var(--motion-easing-standard);
+}
+
+.calendar-card:hover,
+.calendar-card:focus-within {
+    border-color: var(--color-primary-border-strong);
+    background: var(--color-surface-interactive);
+    box-shadow: inset 0 0 0 1px var(--color-primary-border-subtle);
+    transform: none;
+}
+
+.calendar-card-link::after {
+    position: absolute;
+    z-index: 0;
+    border-radius: var(--radius-medium);
+    content: "";
+    cursor: pointer;
+    inset: 0;
+}
+
+.calendar-card-link:focus-visible {
+    outline: none;
+}
+
+.calendar-card-link:focus-visible::after {
+    outline: 3px solid var(--color-focus);
+    outline-offset: 3px;
+}
+
+.calendar-card .item-actions {
+    position: relative;
+    z-index: 1;
+}

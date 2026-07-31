@@ -17,8 +17,10 @@
     <h:outputStylesheet library="css" name="base.css"/>
     <h:outputStylesheet library="css" name="layout.css"/>
     <h:outputStylesheet library="css" name="components/navigation.css"/>
+    <h:outputStylesheet library="css" name="components/buttons.css"/>
     <h:outputStylesheet library="css" name="components/actions.css"/>
     <h:outputStylesheet library="css" name="components/surfaces.css"/>
+    <h:outputStylesheet library="css" name="components/calendar-list.css"/>
     <h:outputStylesheet library="css" name="components/forms.css"/>
     <h:outputStylesheet library="css" name="components/feedback.css"/>
     <h:outputStylesheet library="css" name="components/calendar.css"/>
@@ -51,7 +53,9 @@
                           pt:aria-current="#{request.servletPath.startsWith('/app/account-settings') ? 'page' : null}">Account settings</h:outputLink>
             <h:outputLink value="#{request.contextPath}/sign-in" rendered="#{not currentUser.signedIn}">Sign in</h:outputLink>
             <h:form styleClass="nav-form" rendered="#{currentUser.signedIn}">
-                <h:commandButton value="Sign out" action="#{signOutView.signOut}" styleClass="nav-action link-button"/>
+                <h:commandButton value="Sign out"
+                                 action="#{signOutView.signOut}"
+                                 styleClass="app-button app-button-secondary"/>
             </h:form>
         </nav>
     </header>

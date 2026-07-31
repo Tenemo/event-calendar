@@ -3,6 +3,7 @@ package app.endtoend;
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.microsoft.playwright.Browser;
@@ -12,6 +13,7 @@ import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.Response;
+import com.microsoft.playwright.options.BoundingBox;
 import com.microsoft.playwright.options.Cookie;
 import com.microsoft.playwright.options.SameSiteAttribute;
 import java.net.URI;
@@ -174,6 +176,66 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             assertTrue(Boolean.TRUE.equals(authenticationCookie.httpOnly));
             assertEquals(SameSiteAttribute.LAX, authenticationCookie.sameSite);
 
+            assertUnifiedButtonGeometry(inviterPage);
+
+            Locator calendarCard = inviterPage.locator("article.calendar-card").filter(
+                    new Locator.FilterOptions().setHasText("Invitation calendar " + suffix));
+            Locator calendarCardLink = calendarCard.locator(".calendar-card-link");
+            String calendarPath = URI.create(calendarCardLink.getAttribute("href")).getPath();
+            BoundingBox restingCalendarCardBounds = calendarCard.boundingBox();
+            String restingCalendarCardBackground = computedStyle(calendarCard, "backgroundColor");
+            String restingCalendarCardBorder = computedStyle(calendarCard, "borderColor");
+            calendarCard.hover();
+            waitForElementAnimations(calendarCard);
+            BoundingBox highlightedCalendarCardBounds = calendarCard.boundingBox();
+            assertFalse(
+                    restingCalendarCardBackground.equals(
+                            computedStyle(calendarCard, "backgroundColor")),
+                    "Hovering a clickable calendar card should highlight its background.");
+            assertFalse(
+                    restingCalendarCardBorder.equals(computedStyle(calendarCard, "borderColor")),
+                    "Hovering a clickable calendar card should highlight its border.");
+            assertEquals(
+                    restingCalendarCardBounds.y,
+                    highlightedCalendarCardBounds.y,
+                    0.01,
+                    "Hovering a calendar card should not move it.");
+            assertEquals(
+                    "none",
+                    computedStyle(calendarCard, "transform"),
+                    "Hovering a calendar card should not move it.");
+            assertEquals(
+                    "pointer",
+                    computedStyle(calendarCard, "cursor"),
+                    "A clickable calendar card should use the pointer cursor.");
+            calendarCardLink.focus();
+            assertThat(calendarCardLink).isFocused();
+            assertEquals(
+                    highlightedCalendarCardBounds.y,
+                    calendarCard.boundingBox().y,
+                    0.01,
+                    "Keyboard focus should not move a calendar card.");
+
+            inviterPage.mouse().click(
+                    highlightedCalendarCardBounds.x + highlightedCalendarCardBounds.width / 2,
+                    highlightedCalendarCardBounds.y + highlightedCalendarCardBounds.height / 2);
+            inviterPage.waitForURL(url -> URI.create(url).getPath().equals(calendarPath));
+            assertThat(inviterPage.locator("h1"))
+                    .hasText("Invitation calendar " + suffix);
+
+            navigate(inviterPage, "/app/calendars");
+            Locator calendarSettingsLink = inviterPage
+                    .locator("article.calendar-card")
+                    .filter(new Locator.FilterOptions()
+                            .setHasText("Invitation calendar " + suffix))
+                    .locator("a[aria-label='Open settings for Invitation calendar "
+                            + suffix
+                            + "']");
+            calendarSettingsLink.click();
+            inviterPage.waitForURL("**/app/calendar-settings?id=*");
+            assertThat(inviterPage.locator("h1")).hasText("Settings");
+            navigate(inviterPage, "/app/calendars");
+
             String invitationLink = createRegistrationInvitation(inviterPage);
             assertThat(inviterPage.locator("body")).containsText("Registration invitation");
             assertEquals(
@@ -295,7 +357,38 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
 
             Locator eventCard = ownerPage.locator("article.event-item").filter(
                     new Locator.FilterOptions().setHasText(eventTitle));
-            eventCard.locator("button:has-text('Edit')").click();
+            assertNull(
+                    eventCard.getAttribute("tabindex"),
+                    "A non-clickable event card should not accept focus.");
+            String restingEventCardBackground = computedStyle(eventCard, "backgroundColor");
+            String restingEventCardBorder = computedStyle(eventCard, "borderColor");
+            String restingEventCardShadow = computedStyle(eventCard, "boxShadow");
+            Locator editEventButton = eventCard.locator("button:has-text('Edit')");
+            editEventButton.focus();
+            waitForElementAnimations(eventCard);
+            assertEquals(
+                    restingEventCardBackground,
+                    computedStyle(eventCard, "backgroundColor"),
+                    "Focusing an event action should not select the whole event card.");
+            assertEquals(
+                    restingEventCardBorder,
+                    computedStyle(eventCard, "borderColor"),
+                    "Focusing an event action should not change the card border.");
+            assertEquals(
+                    restingEventCardShadow,
+                    computedStyle(eventCard, "boxShadow"),
+                    "Focusing an event action should not elevate the card.");
+            assertEquals(
+                    "none",
+                    computedStyle(eventCard, "transform"),
+                    "Focusing an event action should not move the card.");
+            editEventButton.hover();
+            waitForElementAnimations(editEventButton);
+            assertEquals(
+                    "none",
+                    computedStyle(editEventButton, "transform"),
+                    "Hovering an action should not move it.");
+            editEventButton.click();
             assertThat(ownerPage.locator("button:has-text('Save changes')")).isVisible();
             String updatedEventTitle = eventTitle + " updated";
             ownerPage.locator("input[id$='eventTitle']").fill(updatedEventTitle);
@@ -666,6 +759,71 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
                     "A concurrent disposable registration request failed.",
                     exception);
         }
+    }
+
+    private static String computedStyle(Locator element, String propertyName) {
+        return (String) element.evaluate(
+                "(element, propertyName) => getComputedStyle(element)[propertyName]",
+                propertyName);
+    }
+
+    private static void assertUnifiedButtonGeometry(Page page) {
+        String mismatchSummary = (String) page.evaluate(
+                """
+                () => {
+                    const renderedButtons = Array.from(document.querySelectorAll(
+                            ".app-button, .ui-button:not(.ui-datepicker-trigger)"))
+                            .filter(button => button.getClientRects().length > 0);
+                    if (renderedButtons.length < 4) {
+                        return `Expected at least four rendered buttons, found ${renderedButtons.length}.`;
+                    }
+
+                    const referenceStyles = getComputedStyle(renderedButtons[0]);
+                    const expectedHeight = Number.parseFloat(referenceStyles.minHeight);
+                    const sharedProperties = [
+                        "borderRadius",
+                        "borderWidth",
+                        "fontFamily",
+                        "fontSize",
+                        "fontWeight",
+                        "lineHeight",
+                        "paddingLeft",
+                        "paddingRight"
+                    ];
+                    const mismatches = [];
+
+                    for (const button of renderedButtons) {
+                        const buttonStyles = getComputedStyle(button);
+                        const buttonLabel = button.value
+                                || button.textContent.trim()
+                                || button.getAttribute("aria-label")
+                                || button.tagName;
+                        const buttonHeight = button.getBoundingClientRect().height;
+                        if (Math.abs(buttonHeight - expectedHeight) > 0.01) {
+                            mismatches.push(
+                                    `${buttonLabel} height ${buttonHeight}px != ${expectedHeight}px`);
+                        }
+                        for (const propertyName of sharedProperties) {
+                            if (buttonStyles[propertyName] !== referenceStyles[propertyName]) {
+                                mismatches.push(
+                                        `${buttonLabel} ${propertyName} ${buttonStyles[propertyName]}`
+                                        + ` != ${referenceStyles[propertyName]}`);
+                            }
+                        }
+                    }
+                    return mismatches.join("; ");
+                }
+                """);
+        assertEquals(
+                "",
+                mismatchSummary,
+                "Every standard application button should use the shared button geometry.");
+    }
+
+    private static void waitForElementAnimations(Locator element) {
+        element.evaluate(
+                "element => Promise.all("
+                        + "element.getAnimations().map(animation => animation.finished))");
     }
 
     private InvitationAcceptanceResult attemptEditorInvitationAcceptance(

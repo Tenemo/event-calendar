@@ -59,15 +59,12 @@
     margin: 0;
 }
 
-.app-nav a,
-.link-button {
-    appearance: none;
+.app-nav a {
     padding: 0.68rem 0.78rem;
     border: 1px solid transparent;
     border-radius: var(--radius-small);
     background: transparent;
     color: var(--color-text-muted);
-    cursor: pointer;
     font: inherit;
     font-size: 0.9rem;
     font-weight: var(--font-weight-medium);
@@ -76,8 +73,7 @@
     white-space: nowrap;
 }
 
-.app-nav a:hover,
-.link-button:hover {
+.app-nav a:hover {
     border-color: var(--color-border-subtle);
     background: var(--color-surface-hover);
     color: var(--color-text);
@@ -87,17 +83,6 @@
     border-color: var(--color-primary-border);
     background: var(--color-primary-soft);
     color: var(--color-primary-hover);
-}
-
-.app-nav .nav-action {
-    border-color: var(--color-border-control);
-    background: var(--color-surface);
-    color: var(--color-text);
-}
-
-.app-nav .nav-action:hover {
-    border-color: var(--color-primary);
-    background: var(--color-surface-hover);
 }
 
 @media (width <= 52rem) {
@@ -123,8 +108,7 @@
         display: none;
     }
 
-    .app-nav a,
-    .link-button {
+    .app-nav a {
         padding-inline: 0.65rem;
         font-size: 0.86rem;
     }
