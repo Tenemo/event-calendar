@@ -1,0 +1,21 @@
+.member-card-list.ui-datalist,
+.member-card-list .ui-datalist-content {
+    border: 0;
+    background: transparent;
+}
+
+.member-card-list .ui-datalist-content {
+    padding: 0;
+}
+
+.member-card-list .ui-datalist-data {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    gap: 0.75rem;
+    list-style: none;
+}
+
+.member-card-list .ui-datalist-item {
+    padding: 0;
+}

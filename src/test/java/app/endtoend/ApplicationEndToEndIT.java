@@ -3,7 +3,6 @@ package app.endtoend;
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.microsoft.playwright.Browser;
@@ -70,6 +69,7 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             assertFalse(Boolean.TRUE.equals(page.evaluate(
                     "() => document.documentElement.scrollWidth "
                             + "> document.documentElement.clientWidth")));
+            assertMobileNavigationTargets(page);
             assertAccessible(page);
 
             page.keyboard().press("Tab");
@@ -341,90 +341,155 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             String originalCalendarLinkToken =
                     queryText("select calendar_link_token from calendar where id = ?", calendarId);
             navigate(ownerPage, "/" + originalCalendarLinkToken);
+            assertThat(ownerPage.locator(".calendar-schedule.fc")).isVisible();
+            assertThat(ownerPage.locator(".fc-dayGridMonth-button")).hasText("Month");
+            assertThat(ownerPage.locator(".fc-timeGridWeek-button")).hasText("Week");
+            assertEquals(
+                    0,
+                    ownerPage.locator(".fc-listMonth-button").count(),
+                    "Agenda should be a permanent sidebar, not a calendar view button.");
+            Locator agenda = ownerPage.locator(".calendar-agenda");
+            assertThat(agenda).isVisible();
+            assertThat(agenda.locator("h2")).hasText("Agenda");
+            assertThat(agenda).containsText("No events yet.");
+            BoundingBox desktopScheduleBounds = ownerPage.locator(".calendar-schedule").boundingBox();
+            BoundingBox desktopAgendaBounds = agenda.boundingBox();
+            assertTrue(
+                    desktopScheduleBounds != null && desktopAgendaBounds != null,
+                    "The desktop calendar and agenda should have visible bounds.");
+            assertTrue(
+                    desktopAgendaBounds.x > desktopScheduleBounds.x + desktopScheduleBounds.width,
+                    "The agenda should remain beside the calendar on desktop.");
             assertResponsiveAndAccessible(ownerPage, 320, 900);
+            assertMobileNavigationTargets(ownerPage);
+            BoundingBox phoneScheduleBounds = ownerPage.locator(".calendar-schedule").boundingBox();
+            BoundingBox phoneAgendaBounds = agenda.boundingBox();
+            assertTrue(
+                    phoneScheduleBounds != null && phoneAgendaBounds != null,
+                    "The phone calendar and agenda should have visible bounds.");
+            assertTrue(
+                    phoneAgendaBounds.y >= phoneScheduleBounds.y + phoneScheduleBounds.height,
+                    "The permanent agenda should follow the calendar on a phone.");
+            ownerPage.setViewportSize(1280, 900);
+            ownerPage.locator(".fc-dayGridMonth-button").click();
 
-            ownerPage.locator("button:has-text('Create event')").click();
+            ownerPage.locator("button:has-text('New event')").click();
+            assertThat(ownerPage.locator(".event-dialog .ui-dialog-title"))
+                    .hasText("Create event");
+            assertThat(ownerPage.locator("input[id$='eventTitle']")).isFocused();
+            ownerPage.locator(".event-dialog button:has-text('Create event')").click();
             assertThat(ownerPage.locator("body")).containsText("Event title is required.");
             ownerPage.waitForFunction(
                     "() => document.activeElement && document.activeElement.id.endsWith('eventTitle')");
+
+            Locator startDatePickerButton =
+                    ownerPage.locator("span[id$='eventStart'] .ui-datepicker-trigger");
+            startDatePickerButton.click();
+            Locator visibleDatePicker = ownerPage.locator(".event-date-picker-panel:visible");
+            assertThat(visibleDatePicker).isVisible();
+            BoundingBox datePickerBounds = visibleDatePicker.boundingBox();
+            assertTrue(datePickerBounds != null, "The date picker should have visible bounds.");
+            assertTrue(
+                    datePickerBounds.width <= 320,
+                    () -> "The date picker should remain compact, but was "
+                            + datePickerBounds.width
+                            + "px wide.");
+            assertTrue(
+                    datePickerBounds.height <= 420,
+                    () -> "The date picker should remain compact, but was "
+                            + datePickerBounds.height
+                            + "px tall.");
+            assertEquals(
+                    2,
+                    visibleDatePicker.locator(".ui-timepicker-timeinput input").count(),
+                    "Timed date pickers should expose typed hour and minute controls.");
+            assertEquals(
+                    0,
+                    visibleDatePicker
+                            .locator(".ui-picker-up:visible, .ui-picker-down:visible")
+                            .count(),
+                    "Typed time controls should not retain the old spinner arrows.");
+            ownerPage.keyboard().press("Escape");
+            ownerPage.keyboard().press("Escape");
+            assertThat(ownerPage.locator(".event-dialog")).isHidden();
+            ownerPage.locator("button:has-text('New event')").click();
+            assertThat(ownerPage.locator("input[id$='eventTitle']")).isFocused();
 
             createTimedEvent(
                     ownerPage,
                     eventTitle,
                     "River bank",
-                    "2026-08-22 10:00",
-                    "2026-08-22 13:00");
+                    "22 Aug 2026, 10:00",
+                    "22 Aug 2026, 13:00");
 
-            Locator eventCard = ownerPage.locator("article.event-item").filter(
+            Locator agendaEvent = ownerPage.locator(".calendar-agenda-event").filter(
                     new Locator.FilterOptions().setHasText(eventTitle));
-            assertNull(
-                    eventCard.getAttribute("tabindex"),
-                    "A non-clickable event card should not accept focus.");
-            String restingEventCardBackground = computedStyle(eventCard, "backgroundColor");
-            String restingEventCardBorder = computedStyle(eventCard, "borderColor");
-            String restingEventCardShadow = computedStyle(eventCard, "boxShadow");
-            Locator editEventButton = eventCard.locator("button:has-text('Edit')");
-            editEventButton.focus();
-            waitForElementAnimations(eventCard);
+            assertThat(agendaEvent).isVisible();
             assertEquals(
-                    restingEventCardBackground,
-                    computedStyle(eventCard, "backgroundColor"),
-                    "Focusing an event action should not select the whole event card.");
+                    "pointer",
+                    computedStyle(agendaEvent, "cursor"),
+                    "The full agenda card should be clickable.");
+            agendaEvent.click();
+            assertThat(ownerPage.locator(".event-dialog .ui-dialog-title"))
+                    .hasText("Edit event");
+            assertThat(ownerPage.locator("input[id$='eventTitle']")).isFocused();
+            ownerPage.locator(".event-dialog .ui-dialog-titlebar-close").click();
+
+            Locator calendarEvent = ownerPage.locator(".calendar-schedule .fc-event").filter(
+                    new Locator.FilterOptions().setHasText(eventTitle));
             assertEquals(
-                    restingEventCardBorder,
-                    computedStyle(eventCard, "borderColor"),
-                    "Focusing an event action should not change the card border.");
+                    "pointer",
+                    computedStyle(calendarEvent, "cursor"),
+                    "The full calendar event should be clickable.");
+            calendarEvent.scrollIntoViewIfNeeded();
+            BoundingBox restingEventBounds = calendarEvent.boundingBox();
+            assertTrue(restingEventBounds != null, "The calendar event should have visible bounds.");
+            calendarEvent.hover();
+            waitForElementAnimations(calendarEvent);
+            BoundingBox highlightedEventBounds = calendarEvent.boundingBox();
+            assertTrue(
+                    highlightedEventBounds != null,
+                    "The highlighted calendar event should have visible bounds.");
             assertEquals(
-                    restingEventCardShadow,
-                    computedStyle(eventCard, "boxShadow"),
-                    "Focusing an event action should not elevate the card.");
-            assertEquals(
-                    "none",
-                    computedStyle(eventCard, "transform"),
-                    "Focusing an event action should not move the card.");
-            editEventButton.hover();
-            waitForElementAnimations(editEventButton);
-            assertEquals(
-                    "none",
-                    computedStyle(editEventButton, "transform"),
-                    "Hovering an action should not move it.");
-            editEventButton.click();
-            assertThat(ownerPage.locator("button:has-text('Save changes')")).isVisible();
+                    restingEventBounds.y,
+                    highlightedEventBounds.y,
+                    0.1,
+                    "Hovering a calendar event should not move it.");
+            calendarEvent.click();
+            assertThat(ownerPage.locator(".event-dialog .ui-dialog-title"))
+                    .hasText("Edit event");
+            assertThat(ownerPage.locator("input[id$='eventTitle']")).isFocused();
+            assertThat(ownerPage.locator(".event-dialog button:has-text('Save changes')"))
+                    .isVisible();
             String updatedEventTitle = eventTitle + " updated";
             ownerPage.locator("input[id$='eventTitle']").fill(updatedEventTitle);
-            ownerPage.locator("button:has-text('Save changes')").click();
+            ownerPage.locator(".event-dialog button:has-text('Save changes')").click();
             assertThat(ownerPage.locator("body")).containsText("Event updated.");
-            assertThat(ownerPage.locator("article.event-item").filter(
+            assertThat(ownerPage.locator(".calendar-schedule .fc-event").filter(
+                             new Locator.FilterOptions().setHasText(updatedEventTitle)))
+                    .isVisible();
+            assertThat(ownerPage.locator(".calendar-agenda-event").filter(
                             new Locator.FilterOptions().setHasText(updatedEventTitle)))
                     .isVisible();
 
-            ownerPage.locator(".event-editor .ui-chkbox-box").click();
+            ownerPage.locator("button:has-text('New event')").click();
+            ownerPage.locator(".event-dialog .ui-chkbox-box").click();
             ownerPage.locator("input[id$='eventTitle']").fill(allDayEventTitle);
-            ownerPage.locator("input[id$='eventFirstDay_input']").fill("2026-08-23");
-            ownerPage.locator("input[id$='eventLastDay_input']").fill("2026-08-24");
-            ownerPage.locator("button:has-text('Create event')").click();
-            assertThat(ownerPage.locator("article.event-item").filter(
+            ownerPage.locator("input[id$='eventFirstDay_input']").fill("23 Aug 2026");
+            ownerPage.locator("input[id$='eventLastDay_input']").fill("24 Aug 2026");
+            ownerPage.locator("textarea[id$='eventDescription']").click();
+            ownerPage.locator(".event-dialog button:has-text('Create event')").click();
+            assertThat(ownerPage.locator(".calendar-schedule .calendar-event-all-day").filter(
+                             new Locator.FilterOptions().setHasText(allDayEventTitle))
+                    .first())
+                    .isVisible();
+            assertThat(ownerPage.locator(".calendar-agenda-event-all-day").filter(
                             new Locator.FilterOptions().setHasText(allDayEventTitle)))
-                    .containsText("All day from Sun, Aug 23, 2026 to Mon, Aug 24, 2026");
-            ownerPage.setViewportSize(1280, 900);
-            Locator eventBoard = ownerPage.locator(".event-board");
-            assertThat(eventBoard).isVisible();
-            assertEquals(
-                    "isolate",
-                    eventBoard.evaluate("board => getComputedStyle(board).isolation"),
-                    "The event board should contain its timeline stacking context.");
-            assertEquals(
-                    "0",
-                    eventBoard.evaluate(
-                            "board => getComputedStyle(board, '::before').zIndex"),
-                    "The timeline should render above the board background.");
-            assertTrue(
-                    Boolean.TRUE.equals(eventBoard.evaluate(
-                            "board => Array.from(board.querySelectorAll('.event-item'))"
-                                    + ".length >= 2 && Array.from("
-                                    + "board.querySelectorAll('.event-item'))"
-                                    + ".every(item => getComputedStyle(item).zIndex === '1')")),
-                    "Every event card should render above the timeline.");
+                    .isVisible();
+            ownerPage.locator(".fc-timeGridWeek-button").click();
+            assertThat(ownerPage.locator(".fc-timeGridWeek-view")).isVisible();
+            ownerPage.locator(".fc-dayGridMonth-button").click();
+            assertThat(ownerPage.locator(".fc-dayGridMonth-view")).isVisible();
             String originalAllDayStart = queryText(
                     "select start_at::text from calendar_event where calendar_id = ? and title = ?",
                     calendarId,
@@ -436,7 +501,17 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             assertEquals("noindex, nofollow", publicResponse.headerValue("x-robots-tag"));
             assertThat(readerPage.locator("body")).containsText(updatedEventTitle);
             assertThat(readerPage.locator("body")).containsText("Read-only");
-            assertEquals(0, readerPage.locator("button:has-text('Create event')").count());
+            assertThat(readerPage.locator(".calendar-schedule.fc")).isVisible();
+            assertThat(readerPage.locator(".calendar-agenda")).isVisible();
+            assertEquals(0, readerPage.locator("button:has-text('New event')").count());
+            readerPage.locator(".calendar-schedule .fc-event").filter(
+                            new Locator.FilterOptions().setHasText(updatedEventTitle))
+                    .click();
+            assertThat(readerPage.locator(".event-dialog .ui-dialog-title"))
+                    .hasText("Event details");
+            assertThat(readerPage.locator(".event-details h2")).hasText(updatedEventTitle);
+            assertThat(readerPage.locator(".event-details")).containsText("River bank");
+            readerPage.locator(".event-dialog .ui-dialog-titlebar-close").click();
 
             navigate(ownerPage, "/app/calendar-settings?id=" + calendarId);
             assertThat(ownerPage.locator("input[id$='calendarName']")).isFocused();
@@ -481,9 +556,15 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             assertEquals(200, readerPage.reload().status());
 
             navigate(ownerPage, "/" + originalCalendarLinkToken);
-            assertThat(ownerPage.locator("article.event-item").filter(
-                            new Locator.FilterOptions().setHasText(allDayEventTitle)))
-                    .containsText("All day from Sun, Aug 23, 2026 to Mon, Aug 24, 2026");
+            ownerPage.locator(".calendar-schedule .fc-event").filter(
+                            new Locator.FilterOptions().setHasText(allDayEventTitle))
+                    .first()
+                    .click();
+            assertThat(ownerPage.locator("input[id$='eventFirstDay_input']"))
+                    .hasValue("23 Aug 2026");
+            assertThat(ownerPage.locator("input[id$='eventLastDay_input']"))
+                    .hasValue("24 Aug 2026");
+            ownerPage.locator(".event-dialog .ui-dialog-titlebar-close").click();
             String originalLink = ownerPage.url();
             ownerPage.locator("button:has-text('Regenerate link')").click();
             assertThat(ownerPage.locator(".ui-confirmdialog-no")).isFocused();
@@ -824,6 +905,20 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
         element.evaluate(
                 "element => Promise.all("
                         + "element.getAnimations().map(animation => animation.finished))");
+    }
+
+    private static void assertMobileNavigationTargets(Page page) {
+        for (Locator navigationTarget : page.locator(".app-brand, .app-nav a, .app-nav .app-button").all()) {
+            BoundingBox bounds = navigationTarget.boundingBox();
+            assertTrue(bounds != null, "Each mobile navigation target should have visible bounds.");
+            assertTrue(
+                    bounds.height >= 44,
+                    () -> "Mobile navigation target '"
+                            + navigationTarget.innerText()
+                            + "' should be at least 44px tall, but was "
+                            + bounds.height
+                            + "px.");
+        }
     }
 
     private InvitationAcceptanceResult attemptEditorInvitationAcceptance(

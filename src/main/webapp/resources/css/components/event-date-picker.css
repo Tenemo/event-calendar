@@ -1,0 +1,198 @@
+body .ui-datepicker-trigger.ui-button {
+    width: var(--control-height);
+    min-width: var(--control-height);
+    padding: 0;
+    border-color: var(--color-border-control);
+    background: var(--color-surface-raised);
+    color: var(--color-primary-hover);
+}
+
+body .ui-datepicker-trigger.ui-button:not(.ui-state-disabled):hover {
+    border-color: var(--color-primary);
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+}
+
+body .ui-datepicker {
+    border: 1px solid var(--color-border-control);
+    border-radius: var(--radius-medium);
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+    box-shadow: var(--shadow-raised);
+}
+
+body .event-date-picker-panel.ui-datepicker {
+    width: min(20rem, calc(100vw - 1rem)) !important;
+    min-width: 0 !important;
+    padding: 0.65rem;
+}
+
+body .event-date-picker-panel .ui-datepicker-group {
+    width: 100%;
+    background: transparent;
+}
+
+body .ui-datepicker .ui-datepicker-header,
+body .ui-datepicker .ui-timepicker,
+body .ui-datepicker .ui-datepicker-buttonbar {
+    border-color: var(--color-border-subtle);
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+}
+
+body .event-date-picker-panel .ui-datepicker-header {
+    min-height: 2.5rem;
+    padding: 0.2rem 0 0.65rem;
+    border-width: 0 0 1px;
+}
+
+body .event-date-picker-panel .ui-datepicker-prev,
+body .event-date-picker-panel .ui-datepicker-next {
+    display: inline-grid;
+    width: 2.5rem;
+    height: 2.5rem;
+    border: 0;
+    border-radius: var(--radius-small);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    place-items: center;
+}
+
+body .event-date-picker-panel .ui-datepicker-prev:hover,
+body .event-date-picker-panel .ui-datepicker-next:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+}
+
+body .event-date-picker-panel .ui-datepicker-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.5rem;
+    gap: 0.35rem;
+    color: var(--color-text);
+    font-family: var(--font-family-heading);
+    font-weight: var(--font-weight-strong);
+}
+
+body .event-date-picker-panel .ui-datepicker-title select {
+    width: auto;
+    min-height: 2.25rem;
+    padding: 0.3rem 1.75rem 0.3rem 0.55rem;
+    border-color: var(--color-border-subtle);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: var(--font-size-small);
+}
+
+body .event-date-picker-panel .ui-datepicker-calendar {
+    width: 100%;
+    margin: 0.45rem 0 0;
+    table-layout: fixed;
+}
+
+body .ui-datepicker .ui-datepicker-calendar th {
+    color: var(--color-text-muted);
+}
+
+body .event-date-picker-panel .ui-datepicker-calendar th {
+    padding: 0.35rem 0.1rem;
+    font-size: 0.75rem;
+    font-weight: var(--font-weight-strong);
+}
+
+body .event-date-picker-panel .ui-datepicker-calendar td {
+    padding: 0.08rem;
+}
+
+body .ui-datepicker .ui-datepicker-calendar td > a,
+body .ui-datepicker .ui-datepicker-calendar td > span {
+    border-radius: 0.4rem;
+    color: var(--color-text);
+}
+
+body .event-date-picker-panel .ui-datepicker-calendar td > a,
+body .event-date-picker-panel .ui-datepicker-calendar td > span {
+    display: grid;
+    width: 100%;
+    min-height: 2.25rem;
+    padding: 0;
+    font-size: var(--font-size-small);
+    place-items: center;
+}
+
+body .ui-datepicker .ui-datepicker-calendar td > a.ui-state-hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+}
+
+body .ui-datepicker .ui-datepicker-calendar td > a.ui-state-active {
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+}
+
+body .ui-datepicker .ui-datepicker-calendar td.ui-datepicker-today > a {
+    border: 1px solid var(--color-primary);
+    background: var(--color-primary-soft);
+    color: var(--color-primary-hover);
+}
+
+body .event-date-picker-panel .ui-datepicker-other-month > a,
+body .event-date-picker-panel .ui-datepicker-other-month > span {
+    color: var(--color-text-subtle);
+    opacity: 0.58;
+}
+
+body .event-date-picker-panel .ui-timepicker {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 3.5rem;
+    padding: 0.65rem 0 0;
+    border-width: 1px 0 0;
+    gap: 0.35rem;
+}
+
+body .event-date-picker-panel .ui-timepicker-timeinput .ui-picker-up,
+body .event-date-picker-panel .ui-timepicker-timeinput .ui-picker-down {
+    display: none;
+}
+
+body .event-date-picker-panel .ui-timepicker-timeinput .ui-hour-picker,
+body .event-date-picker-panel .ui-timepicker-timeinput .ui-minute-picker,
+body .event-date-picker-panel .ui-timepicker-timeinput .ui-separator {
+    display: grid;
+    width: auto;
+    height: auto;
+    place-items: center;
+}
+
+body .event-date-picker-panel .ui-timepicker-timeinput .ui-inputfield {
+    width: 3.25rem;
+    min-height: 2.5rem;
+    padding: 0.35rem;
+    text-align: center;
+}
+
+body .event-date-picker-panel .ui-timepicker-timeinput .ui-separator {
+    color: var(--color-text-muted);
+    font-weight: var(--font-weight-strong);
+}
+
+body .event-form .ui-calendar {
+    display: flex;
+    width: 100%;
+}
+
+body .event-form .ui-calendar > .event-date-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    border-radius: var(--radius-small) 0 0 var(--radius-small);
+}
+
+body .event-form .ui-calendar > .ui-datepicker-trigger {
+    flex: 0 0 var(--control-height);
+    border-left: 0;
+    border-radius: 0 var(--radius-small) var(--radius-small) 0;
+}

@@ -149,6 +149,10 @@ abstract class SharedCalendarEndToEndSupport {
         page.locator("input[id$='eventLocation']").fill(location);
         page.locator("input[id$='eventStart_input']").fill(startTime);
         page.locator("input[id$='eventEnd_input']").fill(endTime);
+        assertEquals(
+                0,
+                page.locator(".event-date-picker-panel:visible").count(),
+                "Typing a date should not open the date picker.");
         Response createEventResponse = page.waitForResponse(
                 response -> "POST".equals(response.request().method()),
                 () -> page.locator("button:has-text('Create event')").click());
@@ -159,7 +163,7 @@ abstract class SharedCalendarEndToEndSupport {
                         + " from "
                         + createEventResponse.url());
         assertThat(page.locator("body")).containsText("Event created.");
-        assertThat(page.locator("article.event-item").filter(
+        assertThat(page.locator(".calendar-schedule .fc-event").filter(
                         new com.microsoft.playwright.Locator.FilterOptions().setHasText(title)))
                 .isVisible();
     }

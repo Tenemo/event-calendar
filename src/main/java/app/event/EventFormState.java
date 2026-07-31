@@ -32,6 +32,31 @@ public final class EventFormState implements Serializable {
         reset(timeZone, Clock.systemUTC());
     }
 
+    public void resetForCalendarSelection(LocalDateTime selectedDateTime, String timeZone) {
+        reset(timeZone);
+        if (selectedDateTime == null) {
+            return;
+        }
+
+        selectedEventId = null;
+        selectedEventVersion = null;
+        title = null;
+        description = null;
+        location = null;
+        if (selectedDateTime.toLocalTime().equals(LocalTime.MIDNIGHT)) {
+            firstDay = selectedDateTime.toLocalDate();
+            lastDay = selectedDateTime.toLocalDate();
+            setAllDay(true);
+            return;
+        }
+
+        startTime = selectedDateTime;
+        endTime = selectedDateTime.plusHours(1);
+        firstDay = selectedDateTime.toLocalDate();
+        lastDay = selectedDateTime.toLocalDate();
+        setAllDay(false);
+    }
+
     void reset(String timeZone, Clock clock) {
         selectedEventId = null;
         selectedEventVersion = null;

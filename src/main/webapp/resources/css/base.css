@@ -116,7 +116,6 @@ strong {
 }
 
 .lead-text,
-.event-item p,
 .form-footer {
     color: var(--color-text-muted);
     line-height: 1.65;
@@ -145,7 +144,6 @@ strong {
 .secondary-line,
 .field-help,
 .copy-status,
-.subsection-header p,
 .empty-state-description,
 .status-line,
 .settings-grid .ui-panel-content p {

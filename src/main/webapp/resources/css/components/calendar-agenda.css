@@ -1,0 +1,186 @@
+.calendar-workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(17rem, 20rem);
+    gap: var(--space-medium);
+    align-items: start;
+}
+
+.calendar-agenda {
+    position: sticky;
+    top: calc(var(--scroll-offset) + var(--space-small));
+    display: grid;
+    min-width: 0;
+    max-height: calc(100vh - var(--scroll-offset) - 2rem);
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: hidden;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-large);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-surface);
+}
+
+.calendar-agenda-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-small);
+    padding: var(--space-medium);
+    border-bottom: 1px solid var(--color-border-subtle);
+    background: var(--color-surface-raised);
+}
+
+.calendar-agenda-header h2,
+.calendar-agenda-header p {
+    margin: 0;
+}
+
+.calendar-agenda-header h2 {
+    font-size: 1.05rem;
+    letter-spacing: -0.01em;
+}
+
+.calendar-agenda-header p {
+    margin-top: 0.15rem;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-small);
+}
+
+.calendar-agenda-count {
+    display: inline-grid;
+    min-width: 2rem;
+    min-height: 2rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: var(--radius-pill);
+    background: var(--color-primary-soft);
+    color: var(--color-primary-hover);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-strong);
+    place-items: center;
+}
+
+.calendar-agenda-list {
+    display: grid;
+    min-height: 0;
+    margin: 0;
+    padding: 0.75rem;
+    overflow-y: auto;
+    gap: 0.6rem;
+}
+
+body .calendar-agenda-event {
+    display: grid;
+    min-width: 0;
+    min-height: 5rem;
+    grid-template-columns: 3.5rem minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: start;
+    padding: 0.75rem;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-medium);
+    background: var(--color-canvas-muted);
+    color: var(--color-text);
+    cursor: pointer;
+    text-decoration: none;
+    transition:
+        background-color var(--motion-duration-quick) var(--motion-easing-standard),
+        border-color var(--motion-duration-quick) var(--motion-easing-standard),
+        box-shadow var(--motion-duration-standard) var(--motion-easing-standard);
+}
+
+body .calendar-agenda-event:hover {
+    border-color: var(--color-primary-border-strong);
+    background: var(--color-surface-interactive);
+    color: var(--color-text);
+    box-shadow: inset 0 0 0 1px var(--color-primary-border-subtle);
+}
+
+body .calendar-agenda-event:focus-visible {
+    outline: 3px solid var(--color-focus);
+    outline-offset: 2px;
+}
+
+.calendar-agenda-date {
+    display: grid;
+    min-height: 3.5rem;
+    padding: 0.35rem;
+    border: 1px solid var(--color-primary-border);
+    border-radius: var(--radius-small);
+    background: var(--color-primary-soft);
+    color: var(--color-primary-hover);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-heading);
+    line-height: 1.1;
+    place-items: center;
+    text-align: center;
+}
+
+.calendar-agenda-event-all-day .calendar-agenda-date {
+    border-color: var(--color-success-border);
+    background: var(--color-success-soft);
+    color: var(--color-success);
+}
+
+.calendar-agenda-copy,
+.calendar-agenda-copy strong,
+.calendar-agenda-meta,
+.calendar-agenda-description {
+    display: block;
+    min-width: 0;
+}
+
+.calendar-agenda-copy strong {
+    line-height: 1.35;
+}
+
+.calendar-agenda-meta,
+.calendar-agenda-description {
+    margin-top: 0.22rem;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-small);
+    line-height: 1.45;
+}
+
+.calendar-agenda-description {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.calendar-agenda-empty {
+    padding: 2rem var(--space-medium);
+    color: var(--color-text-muted);
+    text-align: center;
+}
+
+@media (width <= 68rem) {
+    .calendar-workspace {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .calendar-agenda {
+        position: static;
+        max-height: none;
+    }
+
+    .calendar-agenda-list {
+        overflow-y: visible;
+    }
+}
+
+@media (width <= 36rem) {
+    .calendar-agenda-list {
+        padding: 0.625rem;
+    }
+
+    body .calendar-agenda-event {
+        grid-template-columns: 3rem minmax(0, 1fr);
+        padding: 0.65rem;
+    }
+
+    .calendar-agenda-date {
+        min-height: 3rem;
+        padding-inline: 0.2rem;
+        font-size: 0.78rem;
+    }
+}

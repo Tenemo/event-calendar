@@ -14,16 +14,11 @@ body .ui-panel.surface-panel .ui-panel-content {
 }
 
 body .ui-inputfield,
-body .ui-inputfield.ui-state-default,
-body .ui-datepicker-trigger.ui-button {
+body .ui-inputfield.ui-state-default {
     border-color: var(--color-border-control);
     background: var(--color-surface-raised);
     color: var(--color-text);
     box-shadow: none;
-}
-
-body .ui-datepicker-trigger.ui-button {
-    padding: 0;
 }
 
 body .ui-inputfield.ui-state-hover {
@@ -62,48 +57,6 @@ body .ui-chkbox .ui-chkbox-box.ui-state-active {
     border-color: var(--color-primary);
     background: var(--color-primary);
     color: var(--color-on-primary);
-}
-
-body .ui-datepicker {
-    border: 1px solid var(--color-border-control);
-    border-radius: var(--radius-medium);
-    background: var(--color-surface-raised);
-    color: var(--color-text);
-    box-shadow: var(--shadow-raised);
-}
-
-body .ui-datepicker .ui-datepicker-header,
-body .ui-datepicker .ui-timepicker-div,
-body .ui-datepicker .ui-datepicker-buttonbar {
-    border-color: var(--color-border-subtle);
-    background: var(--color-surface-raised);
-    color: var(--color-text);
-}
-
-body .ui-datepicker .ui-datepicker-calendar th {
-    color: var(--color-text-muted);
-}
-
-body .ui-datepicker .ui-datepicker-calendar td > a,
-body .ui-datepicker .ui-datepicker-calendar td > span {
-    border-radius: 0.4rem;
-    color: var(--color-text);
-}
-
-body .ui-datepicker .ui-datepicker-calendar td > a.ui-state-hover {
-    background: var(--color-surface-hover);
-    color: var(--color-text);
-}
-
-body .ui-datepicker .ui-datepicker-calendar td > a.ui-state-active {
-    background: var(--color-primary);
-    color: var(--color-on-primary);
-}
-
-body .ui-datepicker .ui-datepicker-calendar td.ui-datepicker-today > a {
-    border: 1px solid var(--color-primary);
-    background: var(--color-primary-soft);
-    color: var(--color-primary-hover);
 }
 
 body .ui-dialog {

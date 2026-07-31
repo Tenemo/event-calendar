@@ -1,6 +1,7 @@
 .app-button,
 body input.app-button,
-body .ui-button {
+body .ui-button,
+body .fc .fc-button {
     display: inline-flex;
     appearance: none;
     align-items: center;
@@ -38,6 +39,30 @@ body .ui-button .ui-button-text {
     padding: 0;
     color: inherit;
     line-height: 1;
+}
+
+body .fc .fc-button-primary {
+    border-color: var(--color-border-control);
+    background: var(--color-surface);
+    color: var(--color-text);
+}
+
+body .fc .fc-button-primary:not(:disabled):hover {
+    border-color: var(--color-primary);
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+}
+
+body .fc .fc-button-primary:not(:disabled):active,
+body .fc .fc-button-primary.fc-button-active {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+}
+
+body .fc .fc-button-primary:not(:disabled):focus {
+    border-color: var(--color-focus);
+    box-shadow: 0 0 0 3px var(--color-primary-border);
 }
 
 .app-button-primary,
@@ -151,7 +176,8 @@ body .ui-button.ui-button-danger.ui-button-outlined:not(.ui-state-disabled):acti
 
 .app-button:disabled,
 .app-button[aria-disabled="true"],
-body .ui-button.ui-state-disabled {
+body .ui-button.ui-state-disabled,
+body .fc .fc-button:disabled {
     cursor: not-allowed;
     opacity: 0.62;
 }
