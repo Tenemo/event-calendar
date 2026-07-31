@@ -52,6 +52,8 @@ mise run reseed-local
 
 The task starts local PostgreSQL when needed, refuses non-loopback database hosts, verifies that the target is empty or belongs to calendar.social, rebuilds the pre-launch schema from `V1`, and inserts fixed data in one transaction. It creates the local `admin` account, two additional members, three calendars, seven memberships, and fifteen realistic events. The fixtures cover public and private calendars, `ADMIN` and `EDITOR` roles, Warsaw and Lisbon time zones, past and future events, events crossing midnight, and single-day and multi-day all-day events.
 
+The local Docker application automatically establishes a normal authenticated session for the seeded `admin` account on the first home, sign-in, or authenticated application request. Explicitly signing out suppresses automatic sign-in for that browser session, so the ordinary sign-in flow remains available with `admin` as both the username and password. This shortcut is disabled by default outside Docker Compose and refuses to start when enabled for a non-loopback application origin.
+
 This command permanently deletes all application data in the configured local database. It cannot target a non-loopback host and does not run against the disposable end-to-end database unless that local database is explicitly selected through the `PG*` environment variables.
 
 ## First account
@@ -73,6 +75,7 @@ Leave `APP_BOOTSTRAP_INVITATION_TOKEN` blank when bootstrap registration should 
 | `APP_BASE_URL` | `http://localhost:9080` | Public origin used in generated links. It must be an HTTP or HTTPS origin without credentials, a path, query parameters, or a fragment. |
 | `APP_DEFAULT_TIME_ZONE` | `Europe/Warsaw` | IANA time zone assigned to new calendars. |
 | `APP_BOOTSTRAP_INVITATION_TOKEN` | blank | Optional one-time invitation for the first account in a fresh database. |
+| `APP_LOCAL_AUTO_SIGN_IN` | `true` in local Docker Compose | Automatically authenticates the deterministic `admin` fixture. It is disabled when unset and can be enabled only with a loopback `APP_BASE_URL`. |
 | `APP_LTPA_KEYS_PASSWORD` | `local-development-only` | Password protecting Liberty authentication keys. Use a stable secret in Railway. |
 | `APP_SSO_REQUIRES_SSL` | `false` locally | Controls the Secure attribute on the Liberty authentication cookie. Keep this `true` outside loopback-only local development. |
 | `PGHOST` | `localhost` | PostgreSQL host. |

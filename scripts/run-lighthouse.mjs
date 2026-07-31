@@ -4,7 +4,7 @@ import path from "node:path";
 import {launch} from "chrome-launcher";
 import lighthouse from "lighthouse";
 
-const applicationBaseUrl = process.env.APP_BASE_URL ?? "https://localhost:9443";
+const applicationBaseUrl = process.env.APP_BASE_URL ?? "http://localhost:9080";
 const auditedPages = [
   {name: "Landing page", url: new URL("/", applicationBaseUrl), fileName: "landing"},
   {name: "Sign-in page", url: new URL("/sign-in", applicationBaseUrl), fileName: "sign-in"},

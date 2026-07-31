@@ -470,7 +470,8 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
                             .filter(result -> "/register".equals(result.resultingPath())
                                     && result.pageText().contains("Invitation could not be accepted."))
                             .count(),
-                    "The request that loses the invitation race should receive a clear rejection.");
+                    "The request that loses the invitation race should receive a clear rejection. Results: "
+                            + acceptanceResults);
 
             String editorUsername = acceptanceResults.stream()
                     .filter(result -> acceptedCalendarPath.equals(result.resultingPath()))
@@ -652,9 +653,13 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             if (!submitForms.await(30, TimeUnit.SECONDS)) {
                 throw new IllegalStateException("Concurrent registration was not released.");
             }
-            page.locator("button:has-text('Register')")
-                    .click(new Locator.ClickOptions().setTimeout(Duration.ofSeconds(60).toMillis()));
-            page.waitForLoadState();
+            Locator registerButton = page.locator("button:has-text('Register')");
+            registerButton.click(
+                    new Locator.ClickOptions().setTimeout(Duration.ofSeconds(60).toMillis()));
+            page.locator("h1:has-text('My calendars')")
+                    .or(page.locator(".ui-messages-error"))
+                    .waitFor(new Locator.WaitForOptions()
+                            .setTimeout(Duration.ofSeconds(60).toMillis()));
             return URI.create(page.url()).getPath();
         } catch (Exception exception) {
             throw new IllegalStateException(
@@ -687,7 +692,10 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             }
             acceptInvitationButton.click(
                     new Locator.ClickOptions().setTimeout(Duration.ofSeconds(60).toMillis()));
-            page.waitForLoadState();
+            page.locator("#calendarPage")
+                    .or(page.locator(".ui-messages-error"))
+                    .waitFor(new Locator.WaitForOptions()
+                            .setTimeout(Duration.ofSeconds(60).toMillis()));
             return new InvitationAcceptanceResult(
                     username,
                     URI.create(page.url()).getPath(),

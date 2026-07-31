@@ -28,8 +28,14 @@ public class DatabaseIdentityStore implements IdentityStore {
     @Inject
     private ClientRequestSourceResolver clientRequestSourceResolver;
 
+    @Inject
+    private LocalDevelopmentAutoSignIn localDevelopmentAutoSignIn;
+
     @Override
     public CredentialValidationResult validate(Credential credential) {
+        if (credential instanceof LocalDevelopmentAutoSignInCredential) {
+            return validateLocalDevelopmentCredential();
+        }
         if (!(credential instanceof UsernamePasswordCredential submittedCredential)) {
             return CredentialValidationResult.NOT_VALIDATED_RESULT;
         }
@@ -60,6 +66,15 @@ public class DatabaseIdentityStore implements IdentityStore {
             return CredentialValidationResult.INVALID_RESULT;
         }
         return new CredentialValidationResult(user.getUsername(), Set.of("USER"));
+    }
+
+    private CredentialValidationResult validateLocalDevelopmentCredential() {
+        if (!localDevelopmentAutoSignIn.isEnabled()) {
+            return CredentialValidationResult.INVALID_RESULT;
+        }
+        return userService.findByUsername(localDevelopmentAutoSignIn.getAdminUsername())
+                .map(user -> new CredentialValidationResult(user.getUsername(), Set.of("USER")))
+                .orElse(CredentialValidationResult.INVALID_RESULT);
     }
 
     private CredentialValidationResult validateMissingUserPassword(String password) {
