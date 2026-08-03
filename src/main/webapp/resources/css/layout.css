@@ -61,8 +61,7 @@
 }
 
 .page-header-actions,
-.page-header-action-group,
-.page-header-meta-group {
+.page-header-action-group {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -75,11 +74,6 @@
 
 .page-header-meta {
     margin-bottom: 0.75rem;
-}
-
-.page-header-meta-group {
-    color: var(--color-text-muted);
-    font-size: var(--font-size-small);
 }
 
 .settings-grid,

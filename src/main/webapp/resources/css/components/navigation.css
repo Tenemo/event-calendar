@@ -6,7 +6,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 1.5rem;
-    padding: 0.85rem max(1rem, calc((100vw - var(--content-width)) / 2 + 2.25rem));
+    padding: 0.85rem var(--space-extra-large);
     border-bottom: 1px solid var(--color-border-control-translucent);
     background: var(--color-canvas-translucent-strong);
     box-shadow: var(--shadow-header);
@@ -40,12 +40,6 @@
     flex: 0 0 auto;
     border-radius: 0.6rem;
     box-shadow: var(--shadow-brand);
-}
-
-.app-subtitle {
-    margin: 0.18rem 0 0 2.7rem;
-    color: var(--color-text-subtle);
-    font-size: 0.8rem;
 }
 
 .app-nav {
@@ -102,16 +96,9 @@
         justify-content: flex-start;
     }
 
-    .app-subtitle {
-        margin-left: 2.7rem;
-    }
 }
 
 @media (width <= 32rem) {
-    .app-subtitle {
-        display: none;
-    }
-
     .app-nav a {
         padding-inline: 0.65rem;
         font-size: 0.86rem;

@@ -121,14 +121,16 @@
 }
 
 .home-preview-date {
-    display: grid;
+    display: flex;
     min-height: 3.25rem;
+    align-items: center;
+    flex-direction: column;
+    justify-content: center;
     border-radius: var(--radius-small);
     background: var(--color-primary-soft);
     color: var(--color-primary-hover);
     font-weight: var(--font-weight-heading);
     line-height: 1.05;
-    place-items: center;
     text-align: center;
 }
 
@@ -142,17 +144,17 @@
     color: var(--color-warning);
 }
 
-.home-preview-event strong,
-.home-preview-event span {
+.home-preview-copy strong,
+.home-preview-copy span {
     display: block;
 }
 
-.home-preview-event strong {
+.home-preview-copy strong {
     color: var(--color-text);
     font-size: var(--font-size-compact);
 }
 
-.home-preview-event span:not(.home-preview-date) {
+.home-preview-copy span {
     margin-top: 0.18rem;
     color: var(--color-text-muted);
     font-size: 0.8rem;

@@ -18,37 +18,47 @@
     <ui:define name="content">
         <h:panelGroup id="calendarPage" layout="block">
         <h:panelGroup layout="block" styleClass="page-section" rendered="#{calendarView.available}">
-            <app:page-header id="calendarHeader"
-                             title="#{calendarView.calendarName}"
-                             description="#{calendarView.calendarDescription}"
-                             supportingText="#{calendarView.editable ? 'Share the calendar link for read-only access while public access is enabled.' : ''}"
-                             compact="true"
-                             focusable="true"
-                             focusIdentifier="calendarHeading">
-                <f:facet name="meta">
-                    <h:panelGroup layout="block" styleClass="page-header-meta-group">
+            <section class="calendar-section calendar-workspace" aria-labelledby="calendar-heading">
+                <aside class="calendar-sidebar" aria-labelledby="calendar-heading">
+                    <div class="calendar-sidebar-meta">
                         <span class="role-chip">#{not calendarView.editable ? 'Read-only' : calendarView.role.displayName}</span>
-                        <span>#{calendarView.timeZone}</span>
-                        <h:panelGroup rendered="#{calendarView.editable}">
-                            <span>#{calendarView.publicAccessEnabled ? 'Public access enabled' : 'Public access disabled'}</span>
-                        </h:panelGroup>
-                    </h:panelGroup>
-                </f:facet>
-                <f:facet name="actions">
-                    <h:panelGroup layout="block" styleClass="page-header-action-group">
-                        <h:form rendered="#{calendarView.editable}">
-                            <p:commandButton value="Regenerate link"
-                                             action="#{calendarView.regenerateCalendarLink}"
-                                             ajax="false"
-                                             styleClass="ui-button-danger ui-button-outlined">
-                                <p:confirm header="Regenerate calendar link"
-                                           message="The current calendar link will stop working for everyone. Continue?"
-                                           yesButtonLabel="Regenerate link"
-                                           yesButtonClass="ui-button-danger"
-                                           noButtonLabel="Cancel"
-                                           noButtonClass="ui-button-secondary ui-button-outlined"
-                                           beforeShow="focusConfirmationCancelButton();"/>
-                            </p:commandButton>
+                        <h:outputText value="#{calendarView.publicAccessEnabled ? 'Public access enabled' : 'Public access disabled'}"
+                                      rendered="#{calendarView.editable}"/>
+                    </div>
+
+                    <div class="calendar-sidebar-copy">
+                        <h1 id="calendar-heading" tabindex="-1">#{calendarView.calendarName}</h1>
+                        <h:outputText value="#{calendarView.calendarDescription}"
+                                      styleClass="calendar-sidebar-description"
+                                      rendered="#{not empty calendarView.calendarDescription}"/>
+                    </div>
+
+                    <div class="calendar-sidebar-guidance">
+                        <h2>Calendar</h2>
+                        <p>
+                            Times use #{calendarView.timeZone}.
+                            #{calendarView.editable
+                              ? 'Select a date to add an event or select an event to edit it.'
+                              : 'Select an event to see its details.'}
+                        </p>
+                        <h:outputText
+                                value="Share the calendar link for read-only access while public access is enabled."
+                                styleClass="calendar-sidebar-supporting"
+                                rendered="#{calendarView.editable}"/>
+                    </div>
+
+                    <h:panelGroup layout="block"
+                                  styleClass="calendar-sidebar-actions"
+                                  rendered="#{calendarView.editable}">
+                        <h:form>
+                            <p:commandButton id="newEventButton"
+                                             value="New event"
+                                             action="#{calendarView.resetEventForm}"
+                                             ajax="true"
+                                             process="@this"
+                                             update=":messages :eventDialogTitle :eventDialogContent"
+                                             oncomplete="showEventDialog();"
+                                             styleClass="ui-button-outlined"/>
                         </h:form>
                         <h:outputLink value="#{request.contextPath}/app/calendar-members"
                                       styleClass="app-button app-button-secondary"
@@ -62,34 +72,23 @@
                             Settings
                             <f:param name="id" value="#{calendarView.calendarId}"/>
                         </h:outputLink>
+                        <h:form>
+                            <p:commandButton value="Regenerate link"
+                                             action="#{calendarView.regenerateCalendarLink}"
+                                             ajax="false"
+                                             styleClass="ui-button-danger ui-button-outlined">
+                                <p:confirm header="Regenerate calendar link"
+                                           message="The current calendar link will stop working for everyone. Continue?"
+                                           yesButtonLabel="Regenerate link"
+                                           yesButtonClass="ui-button-danger"
+                                           noButtonLabel="Cancel"
+                                           noButtonClass="ui-button-secondary ui-button-outlined"
+                                           beforeShow="focusConfirmationCancelButton();"/>
+                            </p:commandButton>
+                        </h:form>
                     </h:panelGroup>
-                </f:facet>
-            </app:page-header>
+                </aside>
 
-            <section class="calendar-section" aria-labelledby="calendar-heading">
-                <div class="calendar-section-header">
-                    <div>
-                        <h2 id="calendar-heading" tabindex="-1">Calendar</h2>
-                        <p>
-                            Times use #{calendarView.timeZone}.
-                            #{calendarView.editable
-                              ? 'Select a date to add an event or select an event to edit it.'
-                              : 'Select an event to see its details.'}
-                        </p>
-                    </div>
-                    <h:form rendered="#{calendarView.editable}">
-                        <p:commandButton id="newEventButton"
-                                         value="New event"
-                                         action="#{calendarView.resetEventForm}"
-                                         ajax="true"
-                                         process="@this"
-                                         update=":messages :eventDialogTitle :eventDialogContent"
-                                         oncomplete="showEventDialog();"
-                                         styleClass="ui-button-outlined"/>
-                    </h:form>
-                </div>
-
-                <div class="calendar-workspace">
                     <h:form id="scheduleForm" styleClass="calendar-schedule-form">
                         <p:schedule id="schedule"
                                     widgetVar="calendarSchedule"
@@ -166,7 +165,6 @@
                             No events yet.
                         </h:panelGroup>
                     </h:panelGroup>
-                </div>
             </section>
 
             <p:dialog id="eventDialog"

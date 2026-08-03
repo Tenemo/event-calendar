@@ -1,0 +1,113 @@
+.calendar-section {
+    min-width: 0;
+}
+
+.calendar-workspace {
+    display: grid;
+    grid-template-columns: minmax(13rem, 15rem) minmax(0, 1fr) minmax(16rem, 18rem);
+    gap: var(--space-medium);
+    align-items: start;
+}
+
+.calendar-sidebar {
+    position: sticky;
+    top: calc(var(--scroll-offset) + var(--space-small));
+    display: grid;
+    min-width: 0;
+    gap: var(--space-medium);
+    padding: var(--space-medium);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-large);
+    background:
+        linear-gradient(145deg, var(--color-primary-highlight), transparent 45%),
+        var(--color-surface);
+    box-shadow: var(--shadow-surface);
+}
+
+.calendar-sidebar-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-small);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-small);
+}
+
+.calendar-sidebar-copy,
+.calendar-sidebar-guidance {
+    display: grid;
+    gap: var(--space-extra-small);
+}
+
+.calendar-sidebar h1,
+.calendar-sidebar h2,
+.calendar-sidebar p {
+    margin: 0;
+}
+
+.calendar-sidebar h1 {
+    overflow-wrap: anywhere;
+    font-size: clamp(1.55rem, 3vw, 2rem);
+    font-weight: var(--font-weight-heading);
+    letter-spacing: -0.035em;
+    line-height: 1.08;
+}
+
+.calendar-sidebar h2 {
+    font-size: 1rem;
+    letter-spacing: -0.01em;
+}
+
+.calendar-sidebar-description,
+.calendar-sidebar-guidance p,
+.calendar-sidebar-supporting {
+    color: var(--color-text-muted);
+    line-height: 1.55;
+}
+
+.calendar-sidebar-description,
+.calendar-sidebar-supporting {
+    display: block;
+}
+
+.calendar-sidebar-guidance {
+    padding-top: var(--space-medium);
+    border-top: 1px solid var(--color-border-subtle);
+}
+
+.calendar-sidebar-actions {
+    display: grid;
+    gap: var(--space-small);
+    padding-top: var(--space-medium);
+    border-top: 1px solid var(--color-border-subtle);
+}
+
+.calendar-sidebar-actions form {
+    margin: 0;
+}
+
+.calendar-sidebar-actions form,
+.calendar-sidebar-actions .ui-button,
+.calendar-sidebar-actions .app-button {
+    width: 100%;
+}
+
+@media (width <= 76rem) {
+    .calendar-workspace {
+        grid-template-columns: minmax(13rem, 15rem) minmax(0, 1fr);
+    }
+
+    .calendar-agenda {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (width <= 52rem) {
+    .calendar-workspace {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .calendar-sidebar {
+        position: static;
+    }
+}

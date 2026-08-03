@@ -49,6 +49,11 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             assertEquals(200, homeResponse.status());
             assertThat(page).hasTitle("calendar.social");
             assertThat(page.locator(".app-brand span")).hasText("calendar.social");
+            assertFalse(
+                    page.locator(".app-header")
+                            .innerText()
+                            .contains("Events for friends, clubs, and group plans."),
+                    "The shared header should not display a subtitle.");
             Locator brandMark = page.locator(".app-brand-mark");
             assertThat(brandMark).isVisible();
             assertTrue(
@@ -57,6 +62,24 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
                                     + "&& image.naturalHeight > 0")),
                     "The calendar mark should load successfully.");
             assertThat(page.locator("h1")).hasText("Shared event calendars for real plans");
+            Locator homePreviewDates = page.locator(".home-preview-date");
+            assertEquals(3, homePreviewDates.count(), "The homepage should show three example dates.");
+            for (Locator homePreviewDate : homePreviewDates.all()) {
+                assertTrue(
+                        Boolean.TRUE.equals(homePreviewDate.evaluate(
+                                "tile => {"
+                                        + "const children = tile.children;"
+                                        + "if (getComputedStyle(tile).display !== 'flex' "
+                                        + "|| children.length !== 2) return false;"
+                                        + "const tileBounds = tile.getBoundingClientRect();"
+                                        + "const firstLineBounds = children[0].getBoundingClientRect();"
+                                        + "const lastLineBounds = children[1].getBoundingClientRect();"
+                                        + "const topSpace = firstLineBounds.top - tileBounds.top;"
+                                        + "const bottomSpace = tileBounds.bottom - lastLineBounds.bottom;"
+                                        + "return Math.abs(topSpace - bottomSpace) <= 1;"
+                                        + "}")),
+                        "Each example date should be vertically centered inside its tile.");
+            }
             assertSecurityHeaders(homeResponse);
             assertEquals(
                     "dark",
@@ -76,6 +99,9 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             assertThat(page.locator(".skip-link:focus")).hasText("Skip to main content");
             page.keyboard().press("Enter");
             assertEquals("main-content", page.evaluate("document.activeElement.id"));
+
+            page.setViewportSize(1920, 900);
+            assertHeaderUsesViewportWidth(page);
 
             navigate(page, "/sign-in");
             assertThat(page).hasTitle("Sign in - calendar.social");
@@ -342,6 +368,11 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
                     queryText("select calendar_link_token from calendar where id = ?", calendarId);
             navigate(ownerPage, "/" + originalCalendarLinkToken);
             assertThat(ownerPage.locator(".calendar-schedule.fc")).isVisible();
+            Locator previousMonthButton = ownerPage.locator(".fc-prev-button");
+            Locator nextMonthButton = ownerPage.locator(".fc-next-button");
+            assertThat(previousMonthButton).hasText("Previous");
+            assertThat(nextMonthButton).hasText("Next");
+            assertCalendarNavigationIcons(previousMonthButton, nextMonthButton);
             assertThat(ownerPage.locator(".fc-dayGridMonth-button")).hasText("Month");
             assertThat(ownerPage.locator(".fc-timeGridWeek-button")).hasText("Week");
             assertEquals(
@@ -349,14 +380,24 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
                     ownerPage.locator(".fc-listMonth-button").count(),
                     "Agenda should be a permanent sidebar, not a calendar view button.");
             Locator agenda = ownerPage.locator(".calendar-agenda");
+            Locator calendarSidebar = ownerPage.locator(".calendar-sidebar");
             assertThat(agenda).isVisible();
             assertThat(agenda.locator("h2")).hasText("Agenda");
             assertThat(agenda).containsText("No events yet.");
+            assertThat(calendarSidebar).isVisible();
+            assertThat(calendarSidebar.locator("h1")).hasText(createdCalendarName);
+            assertThat(calendarSidebar).containsText("Times use Europe/Warsaw.");
             BoundingBox desktopScheduleBounds = ownerPage.locator(".calendar-schedule").boundingBox();
             BoundingBox desktopAgendaBounds = agenda.boundingBox();
+            BoundingBox desktopSidebarBounds = calendarSidebar.boundingBox();
             assertTrue(
-                    desktopScheduleBounds != null && desktopAgendaBounds != null,
-                    "The desktop calendar and agenda should have visible bounds.");
+                    desktopSidebarBounds != null
+                            && desktopScheduleBounds != null
+                            && desktopAgendaBounds != null,
+                    "The desktop sidebars and calendar should have visible bounds.");
+            assertTrue(
+                    desktopSidebarBounds.x + desktopSidebarBounds.width < desktopScheduleBounds.x,
+                    "The calendar information should remain beside and left of the calendar on desktop.");
             assertTrue(
                     desktopAgendaBounds.x > desktopScheduleBounds.x + desktopScheduleBounds.width,
                     "The agenda should remain beside the calendar on desktop.");
@@ -364,9 +405,15 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             assertMobileNavigationTargets(ownerPage);
             BoundingBox phoneScheduleBounds = ownerPage.locator(".calendar-schedule").boundingBox();
             BoundingBox phoneAgendaBounds = agenda.boundingBox();
+            BoundingBox phoneSidebarBounds = calendarSidebar.boundingBox();
             assertTrue(
-                    phoneScheduleBounds != null && phoneAgendaBounds != null,
-                    "The phone calendar and agenda should have visible bounds.");
+                    phoneSidebarBounds != null
+                            && phoneScheduleBounds != null
+                            && phoneAgendaBounds != null,
+                    "The phone calendar information, calendar, and agenda should have visible bounds.");
+            assertTrue(
+                    phoneScheduleBounds.y >= phoneSidebarBounds.y + phoneSidebarBounds.height,
+                    "The calendar information should precede the calendar on a phone.");
             assertTrue(
                     phoneAgendaBounds.y >= phoneScheduleBounds.y + phoneScheduleBounds.height,
                     "The permanent agenda should follow the calendar on a phone.");
@@ -846,6 +893,63 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
         return (String) element.evaluate(
                 "(element, propertyName) => getComputedStyle(element)[propertyName]",
                 propertyName);
+    }
+
+    private static void assertHeaderUsesViewportWidth(Page page) {
+        BoundingBox brandBounds = page.locator(".app-brand").boundingBox();
+        BoundingBox navigationBounds = page.locator(".app-nav").boundingBox();
+        Number viewportWidth = (Number) page.evaluate("window.innerWidth");
+        assertTrue(
+                brandBounds != null && navigationBounds != null,
+                "The header brand and navigation should have visible bounds.");
+        assertTrue(
+                brandBounds.x <= 48,
+                () -> "The header brand should use the viewport width, but its left edge was "
+                        + brandBounds.x
+                        + "px from the viewport edge.");
+        double navigationRightGap =
+                viewportWidth.doubleValue() - navigationBounds.x - navigationBounds.width;
+        assertTrue(
+                navigationRightGap <= 48,
+                () -> "The header navigation should use the viewport width, but its right edge was "
+                        + navigationRightGap
+                        + "px from the viewport edge.");
+    }
+
+    private static void assertCalendarNavigationIcons(
+            Locator previousMonthButton, Locator nextMonthButton) {
+        assertTrue(
+                Boolean.TRUE.equals(previousMonthButton.evaluate(
+                        """
+                        button => {
+                            const iconStyles = getComputedStyle(button, "::before");
+                            return iconStyles.content === '\"\"'
+                                    && Number.parseFloat(iconStyles.width) >= 8
+                                    && Number.parseFloat(iconStyles.height) >= 8
+                                    && Number.parseFloat(iconStyles.borderRightWidth) >= 2
+                                    && iconStyles.transform !== "none";
+                        }
+                        """)),
+                "The previous-month button should have a visible leading arrow icon.");
+        assertTrue(
+                Boolean.TRUE.equals(nextMonthButton.evaluate(
+                        """
+                        button => {
+                            const iconStyles = getComputedStyle(button, "::after");
+                            return iconStyles.content === '\"\"'
+                                    && Number.parseFloat(iconStyles.width) >= 8
+                                    && Number.parseFloat(iconStyles.height) >= 8
+                                    && Number.parseFloat(iconStyles.borderRightWidth) >= 2
+                                    && iconStyles.transform !== "none";
+                        }
+                        """)),
+                "The next-month button should have a visible trailing arrow icon.");
+        assertFalse(
+                previousMonthButton
+                        .evaluate("button => getComputedStyle(button, '::before').transform")
+                        .equals(nextMonthButton.evaluate(
+                                "button => getComputedStyle(button, '::after').transform")),
+                "The previous- and next-month arrows should point in opposite directions.");
     }
 
     private static void assertUnifiedButtonGeometry(Page page) {

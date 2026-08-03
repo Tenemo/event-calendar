@@ -1,31 +1,3 @@
-.calendar-section {
-    min-width: 0;
-    margin-top: var(--space-large);
-}
-
-.calendar-section-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-medium);
-    margin-bottom: var(--space-medium);
-}
-
-.calendar-section-header h2,
-.calendar-section-header p {
-    margin: 0;
-}
-
-.calendar-section-header h2 {
-    font-size: 1.15rem;
-    letter-spacing: -0.01em;
-}
-
-.calendar-section-header p {
-    margin-top: var(--space-extra-small);
-    color: var(--color-text-muted);
-}
-
 .calendar-schedule-form {
     margin: 0;
 }
@@ -82,6 +54,29 @@ body .calendar-schedule.fc .fc-button {
     font-weight: var(--font-weight-strong);
     line-height: 1;
     box-shadow: none;
+}
+
+body .calendar-schedule.fc .fc-prev-button,
+body .calendar-schedule.fc .fc-next-button {
+    gap: 0.5rem;
+}
+
+body .calendar-schedule.fc .fc-prev-button::before,
+body .calendar-schedule.fc .fc-next-button::after {
+    width: 0.5rem;
+    height: 0.5rem;
+    flex: 0 0 auto;
+    border: solid currentcolor;
+    border-width: 0 0.125rem 0.125rem 0;
+    content: "";
+}
+
+body .calendar-schedule.fc .fc-prev-button::before {
+    transform: rotate(135deg);
+}
+
+body .calendar-schedule.fc .fc-next-button::after {
+    transform: rotate(-45deg);
 }
 
 body .calendar-schedule.fc .fc-button-primary {
@@ -266,16 +261,6 @@ body .ui-tooltip .ui-tooltip-text {
 }
 
 @media (width <= 48rem) {
-    .calendar-section-header {
-        align-items: stretch;
-        flex-direction: column;
-    }
-
-    .calendar-section-header form,
-    .calendar-section-header .ui-button {
-        width: 100%;
-    }
-
     body .calendar-schedule {
         padding: 0.625rem;
     }

@@ -259,6 +259,16 @@ public final class LocalDatabaseSeeder {
                     (select count(*) from calendar_membership),
                     (select count(*) from calendar_event),
                     (select count(*) from calendar_event where all_day),
+                    (select count(*) from calendar_event event
+                        join calendar event_calendar on event_calendar.id = event.calendar_id
+                        where event_calendar.name = 'Weekend adventures'),
+                    (select count(*) from calendar_event event
+                        join calendar event_calendar on event_calendar.id = event.calendar_id
+                        where event_calendar.name = 'Weekend adventures'
+                            and event.title = 'Skiing in Italy'
+                            and event.start_at = timestamptz '2027-01-15 23:00:00+00'
+                            and event.end_at = timestamptz '2027-01-23 23:00:00+00'
+                            and event.all_day),
                     (select count(*) from calendar where public_access_enabled),
                     (select count(distinct time_zone) from calendar),
                     (select count(*) from invitation),
@@ -278,7 +288,9 @@ public final class LocalDatabaseSeeder {
                     resultSet.getInt(6),
                     resultSet.getInt(7),
                     resultSet.getInt(8),
-                    resultSet.getInt(9));
+                    resultSet.getInt(9),
+                    resultSet.getInt(10),
+                    resultSet.getInt(11));
         }
     }
 
@@ -313,6 +325,8 @@ public final class LocalDatabaseSeeder {
             int membershipCount,
             int eventCount,
             int allDayEventCount,
+            int weekendAdventureEventCount,
+            int italySkiTripCount,
             int publicCalendarCount,
             int timeZoneCount,
             int invitationCount,
@@ -321,8 +335,10 @@ public final class LocalDatabaseSeeder {
             if (userCount != 3
                     || calendarCount != 3
                     || membershipCount != 7
-                    || eventCount != 15
-                    || allDayEventCount != 4
+                    || eventCount != 25
+                    || allDayEventCount != 6
+                    || weekendAdventureEventCount != 15
+                    || italySkiTripCount != 1
                     || publicCalendarCount != 2
                     || timeZoneCount != 2
                     || invitationCount != 0

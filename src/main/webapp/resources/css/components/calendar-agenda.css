@@ -1,10 +1,3 @@
-.calendar-workspace {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(17rem, 20rem);
-    gap: var(--space-medium);
-    align-items: start;
-}
-
 .calendar-agenda {
     position: sticky;
     top: calc(var(--scroll-offset) + var(--space-small));
@@ -153,11 +146,7 @@ body .calendar-agenda-event:focus-visible {
     text-align: center;
 }
 
-@media (width <= 68rem) {
-    .calendar-workspace {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
+@media (width <= 76rem) {
     .calendar-agenda {
         position: static;
         max-height: none;
