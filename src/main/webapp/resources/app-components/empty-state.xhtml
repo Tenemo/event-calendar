@@ -1,12 +1,10 @@
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml"
       xmlns:cc="jakarta.faces.composite"
-      xmlns:h="jakarta.faces.html"
-      xmlns:ui="jakarta.faces.facelets">
+      xmlns:h="jakarta.faces.html">
 <cc:interface>
     <cc:attribute name="title" required="true"/>
     <cc:attribute name="description"/>
-    <cc:facet name="actions"/>
 </cc:interface>
 <cc:implementation>
     <div class="empty-state">
@@ -15,9 +13,6 @@
         <h:outputText value="#{cc.attrs.description}"
                       styleClass="empty-state-description"
                       rendered="#{not empty cc.attrs.description}"/>
-        <ui:fragment rendered="#{not empty cc.facets['actions']}">
-            <cc:renderFacet name="actions"/>
-        </ui:fragment>
     </div>
 </cc:implementation>
 </html>

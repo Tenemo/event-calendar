@@ -86,22 +86,18 @@ body .ui-button:not(.ui-state-disabled):active {
     color: var(--color-on-primary);
 }
 
-.app-button-outlined,
-body input.app-button.app-button-outlined,
 body .ui-button.ui-button-outlined {
     border-color: var(--color-primary);
     background: transparent;
     color: var(--color-primary-hover);
 }
 
-.app-button-outlined:not(:disabled):hover,
 body .ui-button.ui-button-outlined:not(.ui-state-disabled):hover {
     border-color: var(--color-primary-hover);
     background: var(--color-primary-soft);
     color: var(--color-primary-hover);
 }
 
-.app-button-outlined:not(:disabled):active,
 body .ui-button.ui-button-outlined:not(.ui-state-disabled):active {
     border-color: var(--color-primary-active);
     background: var(--color-primary-highlight);
@@ -130,44 +126,36 @@ body .ui-button.ui-button-secondary:not(.ui-state-disabled):active {
     color: var(--color-text);
 }
 
-.app-button-danger,
-body input.app-button.app-button-danger,
 body .ui-button.ui-button-danger {
     border-color: var(--color-danger);
     background: var(--color-danger);
     color: var(--color-on-primary);
 }
 
-.app-button-danger:not(:disabled):hover,
 body .ui-button.ui-button-danger:not(.ui-state-disabled):hover {
     border-color: var(--color-danger-hover);
     background: var(--color-danger-hover);
     color: var(--color-on-primary);
 }
 
-.app-button-danger:not(:disabled):active,
 body .ui-button.ui-button-danger:not(.ui-state-disabled):active {
     border-color: var(--color-danger-active);
     background: var(--color-danger-active);
     color: var(--color-on-primary);
 }
 
-.app-button-danger.app-button-outlined,
-body input.app-button.app-button-danger.app-button-outlined,
 body .ui-button.ui-button-danger.ui-button-outlined {
     border-color: var(--color-danger);
     background: transparent;
     color: var(--color-danger);
 }
 
-.app-button-danger.app-button-outlined:not(:disabled):hover,
 body .ui-button.ui-button-danger.ui-button-outlined:not(.ui-state-disabled):hover {
     border-color: var(--color-danger-hover);
     background: var(--color-danger-soft);
     color: var(--color-danger-hover);
 }
 
-.app-button-danger.app-button-outlined:not(:disabled):active,
 body .ui-button.ui-button-danger.ui-button-outlined:not(.ui-state-disabled):active {
     border-color: var(--color-danger-active);
     background: var(--color-danger-soft);

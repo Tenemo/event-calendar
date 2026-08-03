@@ -1,14 +1,15 @@
 package app.development;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
+import app.fixture.CanonicalCalendarFixture;
+import app.fixture.CanonicalCalendarFixture.FixtureSummary;
+import app.fixture.CanonicalCalendarFixture.Installation;
+import app.fixture.CanonicalCalendarFixture.Scope;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.OffsetDateTime;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -22,7 +23,15 @@ public final class LocalDatabaseSeeder {
     static final String REQUIRED_CONFIRMATION = "calendar.social-local-only";
     static final String RESEED_APPLICATION_NAME = "calendar-social-local-reseed";
 
-    private static final String SEED_RESOURCE = "/db/local-development-seed.sql";
+    private static final String ADMIN_PASSWORD_HASH =
+            "PBKDF2WithHmacSHA256:600000:ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8=:"
+                    + "xI7oQ7nFFZ0B3d9uVkzb1GXB1RLQvYYpEVk8dPM9xDc=";
+    private static final String MAYA_PASSWORD_HASH =
+            "PBKDF2WithHmacSHA256:600000:QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8=:"
+                    + "rPPiqJDII1ElPaGFy6r9pfgnIe2c6hZn3JLs2yFB6TE=";
+    private static final String TOMASZ_PASSWORD_HASH =
+            "PBKDF2WithHmacSHA256:600000:YGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn8=:"
+                    + "KHGGJ8gaxdaGF7xTQEbCiAm3PPciFdyX+RZCVMvCspg=";
     private static final String DEFAULT_DATABASE_HOST = "localhost";
     private static final int DEFAULT_DATABASE_PORT = 5432;
     private static final String DEFAULT_DATABASE_NAME = "calendar";
@@ -43,14 +52,14 @@ public final class LocalDatabaseSeeder {
     public static void main(String[] arguments) throws Exception {
         requireLocalReseedConfirmation(System.getProperty(CONFIRMATION_PROPERTY));
         LocalDatabaseConnectionSettings connectionSettings = connectionSettingsFromEnvironment(System.getenv());
-        String seedSql = readSeedSql();
+        Installation fixtureInstallation = localFixtureInstallation();
 
         try (Connection lockConnection = openConnection(connectionSettings)) {
             acquireReseedLock(lockConnection);
             try {
                 verifyDatabaseBeforeReset(lockConnection, connectionSettings);
                 rebuildSchema(connectionSettings);
-                SeedSummary seedSummary = seedDatabase(connectionSettings, seedSql);
+                FixtureSummary seedSummary = seedDatabase(connectionSettings, fixtureInstallation);
                 seedSummary.verifyExpectedFixtureShape();
                 System.out.printf(
                         Locale.ROOT,
@@ -131,15 +140,6 @@ public final class LocalDatabaseSeeder {
                     variableName + " must be an unquoted PostgreSQL identifier for local reseeding.");
         }
         return configuredValue;
-    }
-
-    private static String readSeedSql() throws IOException {
-        try (InputStream inputStream = LocalDatabaseSeeder.class.getResourceAsStream(SEED_RESOURCE)) {
-            if (inputStream == null) {
-                throw new IllegalStateException("Local development seed SQL is missing from the test classpath.");
-            }
-            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
-        }
     }
 
     private static Connection openConnection(LocalDatabaseConnectionSettings connectionSettings) throws SQLException {
@@ -233,16 +233,15 @@ public final class LocalDatabaseSeeder {
         }
     }
 
-    private static SeedSummary seedDatabase(
+    private static FixtureSummary seedDatabase(
             LocalDatabaseConnectionSettings connectionSettings,
-            String seedSql) throws SQLException {
+            Installation fixtureInstallation) throws SQLException {
         try (Connection connection = openConnection(connectionSettings)) {
             connection.setAutoCommit(false);
             try {
-                try (Statement statement = connection.createStatement()) {
-                    statement.execute(seedSql);
-                }
-                SeedSummary seedSummary = readSeedSummary(connection);
+                CanonicalCalendarFixture.install(connection, fixtureInstallation);
+                FixtureSummary seedSummary =
+                        CanonicalCalendarFixture.readSummary(connection, fixtureInstallation);
                 connection.commit();
                 return seedSummary;
             } catch (RuntimeException | SQLException exception) {
@@ -252,47 +251,23 @@ public final class LocalDatabaseSeeder {
         }
     }
 
-    private static SeedSummary readSeedSummary(Connection connection) throws SQLException {
-        String summaryQuery = """
-                select
-                    (select count(*) from app_user),
-                    (select count(*) from calendar),
-                    (select count(*) from calendar_membership),
-                    (select count(*) from calendar_event),
-                    (select count(*) from calendar_event where all_day),
-                    (select count(*) from calendar_event event
-                        join calendar event_calendar on event_calendar.id = event.calendar_id
-                        where event_calendar.name = 'Weekend adventures'),
-                    (select count(*) from calendar_event event
-                        join calendar event_calendar on event_calendar.id = event.calendar_id
-                        where event_calendar.name = 'Weekend adventures'
-                            and event.title = 'Skiing in Italy'
-                            and event.start_at = timestamptz '2027-01-15 23:00:00+00'
-                            and event.end_at = timestamptz '2027-01-23 23:00:00+00'
-                            and event.all_day),
-                    (select count(*) from calendar where public_access_enabled),
-                    (select count(distinct time_zone) from calendar),
-                    (select count(*) from invitation),
-                    (select count(*) from registration_bootstrap where consumed_at is not null)
-                """;
-        try (PreparedStatement statement = connection.prepareStatement(summaryQuery);
-                ResultSet resultSet = statement.executeQuery()) {
-            if (!resultSet.next()) {
-                throw new IllegalStateException("The local seed summary query returned no row.");
-            }
-            return new SeedSummary(
-                    resultSet.getInt(1),
-                    resultSet.getInt(2),
-                    resultSet.getInt(3),
-                    resultSet.getInt(4),
-                    resultSet.getInt(5),
-                    resultSet.getInt(6),
-                    resultSet.getInt(7),
-                    resultSet.getInt(8),
-                    resultSet.getInt(9),
-                    resultSet.getInt(10),
-                    resultSet.getInt(11));
-        }
+    private static Installation localFixtureInstallation() {
+        return new Installation(
+                Scope.LOCAL,
+                "admin",
+                "Local admin",
+                ADMIN_PASSWORD_HASH,
+                false,
+                "maya",
+                MAYA_PASSWORD_HASH,
+                false,
+                "tomasz",
+                TOMASZ_PASSWORD_HASH,
+                false,
+                "3e508947ceA",
+                "ca62893117E",
+                "f812ffe4b2I",
+                OffsetDateTime.parse("2026-07-01T10:00:00Z"));
     }
 
     record LocalDatabaseConnectionSettings(
@@ -320,32 +295,4 @@ public final class LocalDatabaseSeeder {
         }
     }
 
-    private record SeedSummary(
-            int userCount,
-            int calendarCount,
-            int membershipCount,
-            int eventCount,
-            int allDayEventCount,
-            int weekendAdventureEventCount,
-            int italySkiTripCount,
-            int publicCalendarCount,
-            int timeZoneCount,
-            int invitationCount,
-            int consumedBootstrapCount) {
-        void verifyExpectedFixtureShape() {
-            if (userCount != 3
-                    || calendarCount != 3
-                    || membershipCount != 7
-                    || eventCount != 25
-                    || allDayEventCount != 6
-                    || weekendAdventureEventCount != 15
-                    || italySkiTripCount != 1
-                    || publicCalendarCount != 2
-                    || timeZoneCount != 2
-                    || invitationCount != 0
-                    || consumedBootstrapCount != 1) {
-                throw new IllegalStateException("The local seed did not produce the expected deterministic fixture shape.");
-            }
-        }
-    }
 }

@@ -14,8 +14,18 @@ const outputDirectory = path.resolve(".build", "lighthouse");
 const runCount = 3;
 const budgets = [
   {name: "Performance score", minimum: 0.9, value: result => result.categories.performance.score},
-  {name: "First contentful paint", audit: "first-contentful-paint", maximum: 2_000, unit: "ms"},
-  {name: "Largest contentful paint", audit: "largest-contentful-paint", maximum: 2_500, unit: "ms"},
+  {
+    name: "First contentful paint",
+    audit: "first-contentful-paint",
+    maximum: 2_000,
+    unit: "ms",
+  },
+  {
+    name: "Largest contentful paint",
+    audit: "largest-contentful-paint",
+    maximum: 2_500,
+    unit: "ms",
+  },
   {name: "Total blocking time", audit: "total-blocking-time", maximum: 300, unit: "ms"},
   {name: "Cumulative layout shift", audit: "cumulative-layout-shift", maximum: 0.1},
 ];
@@ -39,18 +49,15 @@ function formatValue(value, budget) {
   return `${Math.round(value * 100) / 100}${budget.unit ?? ""}`;
 }
 
+await rm(outputDirectory, {recursive: true, force: true});
 await mkdir(outputDirectory, {recursive: true});
 const browserProfileDirectory = await mkdtemp(
     path.resolve(".build", "lighthouse-browser-profile-"));
 let chrome;
 const pageResults = [];
-try {
-  chrome = await launch({
-    chromeFlags: ["--headless=new", "--no-sandbox", "--ignore-certificate-errors"],
-    userDataDir: browserProfileDirectory,
-  });
 
-  for (const page of auditedPages) {
+async function auditPages(pages) {
+  for (const page of pages) {
     const results = [];
     for (let runNumber = 1; runNumber <= runCount; runNumber++) {
       const lighthouseRun = await lighthouse(page.url.href, {
@@ -76,6 +83,15 @@ try {
     }
     pageResults.push({...page, results});
   }
+}
+
+try {
+  chrome = await launch({
+    chromeFlags: ["--headless=new", "--no-sandbox", "--ignore-certificate-errors"],
+    userDataDir: browserProfileDirectory,
+  });
+
+  await auditPages(auditedPages);
 } finally {
   if (chrome) {
     const browserClosed = chrome.process.exitCode === null

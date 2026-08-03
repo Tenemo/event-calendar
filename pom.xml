@@ -409,7 +409,7 @@
                                 <PGUSER>shared_calendar_verification</PGUSER>
                             </environmentVariables>
                             <includes>
-                                <include>**/*EndToEndIT.java</include>
+                                <include>**/ApplicationEndToEndIT.java</include>
                             </includes>
                         </configuration>
                         <executions>

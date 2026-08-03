@@ -107,9 +107,9 @@ public class CalendarService {
             ApplicationUser actingUser,
             Long calendarId,
             Integer expectedVersion) {
-        calendarAccessService.requireCanEdit(actingUser, calendarId);
+        calendarAccessService.requireCanAdminister(actingUser, calendarId);
         Calendar calendar = requireCalendar(calendarId, LockModeType.PESSIMISTIC_WRITE);
-        calendarAccessService.requireCanEdit(actingUser, calendarId);
+        calendarAccessService.requireCanAdminister(actingUser, calendarId);
         requireExpectedVersion(calendar, expectedVersion);
         calendar.setCalendarLinkToken(tokenService.generateCalendarLinkToken());
         flushWithConflictMessage();

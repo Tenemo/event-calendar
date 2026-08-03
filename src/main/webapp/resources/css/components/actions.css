@@ -11,10 +11,6 @@
     margin-top: 1.5rem;
 }
 
-.compact-actions {
-    margin-top: 0;
-}
-
 .member-actions {
     justify-content: flex-end;
 }
