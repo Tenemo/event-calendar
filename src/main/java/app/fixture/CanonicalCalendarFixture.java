@@ -188,8 +188,7 @@ public final class CanonicalCalendarFixture {
 
     public enum Scope {
         LOCAL,
-        PREVIEW,
-        PRODUCTION
+        PREVIEW
     }
 
     public record Installation(

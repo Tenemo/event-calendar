@@ -740,9 +740,10 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
                     1,
                     acceptanceResults.stream()
                             .filter(result -> "/register".equals(result.resultingPath())
-                                    && result.pageText().contains("Invitation could not be accepted."))
+                                    && result.pageText()
+                                            .contains("Invitation is invalid or no longer available."))
                             .count(),
-                    "The request that loses the invitation race should receive a clear rejection. Results: "
+                    "The request that loses the invitation race should receive the canonical rejection. Results: "
                             + acceptanceResults);
 
             String editorUsername = acceptanceResults.stream()
@@ -1129,6 +1130,12 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             }
             acceptInvitationButton.click(
                     new Locator.ClickOptions().setTimeout(Duration.ofSeconds(60).toMillis()));
+            page.locator("#calendarPage")
+                    .or(page.getByText(
+                            "Invitation is invalid or no longer available.",
+                            new Page.GetByTextOptions().setExact(true)))
+                    .waitFor(new Locator.WaitForOptions()
+                            .setTimeout(Duration.ofSeconds(60).toMillis()));
             return new InvitationAcceptanceResult(
                     username,
                     URI.create(page.url()).getPath(),

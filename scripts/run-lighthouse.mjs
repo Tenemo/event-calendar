@@ -3,40 +3,12 @@ import path from "node:path";
 
 import {launch} from "chrome-launcher";
 import lighthouse from "lighthouse";
-import {connect} from "puppeteer-core";
 
 const applicationBaseUrl = process.env.APP_BASE_URL ?? "http://localhost:9080";
-const authenticationUsername = process.env.REMOTE_VERIFICATION_USERNAME;
-const authenticationPassword = process.env.REMOTE_VERIFICATION_PASSWORD;
-if (Boolean(authenticationUsername) !== Boolean(authenticationPassword)) {
-  throw new Error(
-      "REMOTE_VERIFICATION_USERNAME and REMOTE_VERIFICATION_PASSWORD must be configured together.");
-}
-
-const publicPages = [
+const auditedPages = [
   {name: "Landing page", url: new URL("/", applicationBaseUrl), fileName: "landing"},
   {name: "Sign-in page", url: new URL("/sign-in", applicationBaseUrl), fileName: "sign-in"},
 ];
-const authenticatedPages = authenticationUsername ? [
-  {
-    name: "My calendars",
-    url: new URL("/app/calendars", applicationBaseUrl),
-    fileName: "calendars",
-    authenticated: true,
-  },
-  {
-    name: "Invitations",
-    url: new URL("/app/invitations", applicationBaseUrl),
-    fileName: "invitations",
-    authenticated: true,
-  },
-  {
-    name: "Account settings",
-    url: new URL("/app/account-settings", applicationBaseUrl),
-    fileName: "account-settings",
-    authenticated: true,
-  },
-] : [];
 
 const outputDirectory = path.resolve(".build", "lighthouse");
 const runCount = 3;
@@ -46,14 +18,12 @@ const budgets = [
     name: "First contentful paint",
     audit: "first-contentful-paint",
     maximum: 2_000,
-    authenticatedMaximum: 3_000,
     unit: "ms",
   },
   {
     name: "Largest contentful paint",
     audit: "largest-contentful-paint",
     maximum: 2_500,
-    authenticatedMaximum: 3_000,
     unit: "ms",
   },
   {name: "Total blocking time", audit: "total-blocking-time", maximum: 300, unit: "ms"},
@@ -86,7 +56,7 @@ const browserProfileDirectory = await mkdtemp(
 let chrome;
 const pageResults = [];
 
-async function auditPages(pages, disableStorageReset) {
+async function auditPages(pages) {
   for (const page of pages) {
     const results = [];
     for (let runNumber = 1; runNumber <= runCount; runNumber++) {
@@ -95,7 +65,6 @@ async function auditPages(pages, disableStorageReset) {
         output: "html",
         logLevel: "error",
         onlyCategories: ["performance"],
-        disableStorageReset,
       });
       if (!lighthouseRun || lighthouseRun.lhr.runtimeError) {
         const runtimeMessage = lighthouseRun?.lhr.runtimeError?.message ?? "Lighthouse returned no result.";
@@ -116,37 +85,13 @@ async function auditPages(pages, disableStorageReset) {
   }
 }
 
-async function authenticateChromeProfile() {
-  const browser = await connect({browserURL: `http://127.0.0.1:${chrome.port}`});
-  const page = await browser.newPage();
-  try {
-    await page.goto(new URL("/sign-in", applicationBaseUrl).href, {waitUntil: "networkidle2"});
-    await page.locator("input[id$='username']").fill(authenticationUsername);
-    await page.locator("input[id$='password']").fill(authenticationPassword);
-    await Promise.all([
-      page.waitForNavigation({waitUntil: "networkidle2"}),
-      page.locator("input[type='submit'][value='Sign in']").click(),
-    ]);
-    if (new URL(page.url()).pathname !== "/app/calendars") {
-      throw new Error("Remote verification sign-in did not reach the calendars page.");
-    }
-  } finally {
-    await page.close();
-    browser.disconnect();
-  }
-}
-
 try {
   chrome = await launch({
     chromeFlags: ["--headless=new", "--no-sandbox", "--ignore-certificate-errors"],
     userDataDir: browserProfileDirectory,
   });
 
-  await auditPages(publicPages, false);
-  if (authenticatedPages.length > 0) {
-    await authenticateChromeProfile();
-    await auditPages(authenticatedPages, true);
-  }
+  await auditPages(auditedPages);
 } finally {
   if (chrome) {
     const browserClosed = chrome.process.exitCode === null
@@ -161,11 +106,8 @@ try {
 const summary = pageResults.flatMap(page => budgets.map(budget => {
   const measured = median(page.results.map(result => budgetValue(budget, result)));
   const usesMaximum = budget.minimum === undefined;
-  const maximum = page.authenticated
-    ? (budget.authenticatedMaximum ?? budget.maximum)
-    : budget.maximum;
-  const passed = usesMaximum ? measured <= maximum : measured >= budget.minimum;
-  const threshold = usesMaximum ? maximum : budget.minimum;
+  const passed = usesMaximum ? measured <= budget.maximum : measured >= budget.minimum;
+  const threshold = usesMaximum ? budget.maximum : budget.minimum;
   const limit = `${usesMaximum ? "at most" : "at least"} ${formatValue(threshold, budget)}`;
   return {page: page.name, url: page.url.href, ...budget, measured, passed, limit};
 }));

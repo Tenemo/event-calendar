@@ -7,18 +7,9 @@ public final class ApplicationEnvironmentVariables {
     public static final String LOCAL_AUTO_SIGN_IN = "APP_LOCAL_AUTO_SIGN_IN";
     public static final String PREVIEW_VERIFICATION_PASSWORD = "PREVIEW_VERIFICATION_PASSWORD";
     public static final String PREVIEW_VERIFICATION_USERNAME = "PREVIEW_VERIFICATION_USERNAME";
-    public static final String PRODUCTION_VERIFICATION_ENABLED = "PRODUCTION_VERIFICATION_ENABLED";
-    public static final String PRODUCTION_VERIFICATION_ENVIRONMENT_ID =
-            "PRODUCTION_VERIFICATION_ENVIRONMENT_ID";
-    public static final String PRODUCTION_VERIFICATION_PASSWORD =
-            "PRODUCTION_VERIFICATION_PASSWORD";
-    public static final String PRODUCTION_VERIFICATION_PROJECT_ID =
-            "PRODUCTION_VERIFICATION_PROJECT_ID";
-    public static final String PRODUCTION_VERIFICATION_USERNAME =
-            "PRODUCTION_VERIFICATION_USERNAME";
     public static final String RAILWAY_ENVIRONMENT_ID = "RAILWAY_ENVIRONMENT_ID";
     public static final String RAILWAY_ENVIRONMENT_NAME = "RAILWAY_ENVIRONMENT_NAME";
-    public static final String RAILWAY_PROJECT_ID = "RAILWAY_PROJECT_ID";
+
     private ApplicationEnvironmentVariables() {
     }
 }

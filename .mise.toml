@@ -55,20 +55,6 @@ run = [
     "npm run lighthouse",
 ]
 
-[tasks.verify-production]
-description = "Run production-safe browser checks and authenticated Lighthouse budgets"
-env = { APP_BASE_URL = "https://calendar.social", REMOTE_VERIFICATION_BASE_URL = "https://calendar.social" }
-run = [
-    "mvn -B -ntp -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.classpathScope=test -Dexec.args=\"install chromium\" org.codehaus.mojo:exec-maven-plugin:3.5.0:java",
-    "mvn -B -ntp -Pproduction-verification verify",
-    "npm ci --ignore-scripts",
-    "npm run lighthouse",
-]
-
-[tasks.reset-production-verification]
-description = "Reset only the isolated production verification fixture through a verified loopback database tunnel"
-run = "mvn -B -ntp -Dproduction.verification.reset.confirmation=calendar.social-production-verification-only -Dexec.mainClass=app.startup.ProductionVerificationFixtureResetter -Dexec.classpathScope=test test-compile org.codehaus.mojo:exec-maven-plugin:3.5.0:java"
-
 [tasks.docker-build]
 description = "Build the production image"
 run = "docker build --tag shared-calendar:local ."

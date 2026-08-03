@@ -52,7 +52,7 @@ mise run reseed-local
 
 The task starts local PostgreSQL when needed, refuses non-loopback database hosts, verifies that the target is empty or belongs to calendar.social, rebuilds the pre-launch schema from `V1`, and inserts fixed data in one transaction. It creates the local `admin` account, two additional members, three calendars, seven memberships, and twenty-five realistic events. The fixtures cover public and private calendars, `ADMIN` and `EDITOR` roles, Warsaw and Lisbon time zones, past and future events, events crossing midnight and daylight-saving changes, and single-day and multi-day all-day events. The heavier Weekend adventures calendar spans late July through a January ski trip so calendar navigation and long agendas can be exercised immediately.
 
-Local, pull-request, and production verification accounts all use the same canonical fixture definition at `src/main/resources/db/fixture/canonical-calendar-fixture.sql`. Account names, password hashes, and bearer links remain environment-specific, while calendars, descriptions, memberships, event content, and event times stay identical.
+Local and pull-request accounts use the same canonical fixture definition at `src/main/resources/db/fixture/canonical-calendar-fixture.sql`. Account names, password hashes, and bearer links remain environment-specific, while calendars, descriptions, memberships, event content, and event times stay identical.
 
 The local Docker application automatically establishes a normal authenticated session for the seeded `admin` account on the first home, sign-in, or authenticated application request. Explicitly signing out suppresses automatic sign-in for that browser session, so the ordinary sign-in flow remains available with `admin` as both the username and password. This shortcut is disabled by default outside Docker Compose and refuses to start when enabled for a non-loopback application origin.
 
@@ -114,8 +114,6 @@ mise run lint-css
 mise run lint-workflows
 mise run end-to-end
 mise run lighthouse
-mise run verify-production
-mise run reset-production-verification
 mise run docker-build
 ```
 
@@ -130,7 +128,7 @@ Every pull request runs:
 - browser tests against an isolated disposable database;
 - Lighthouse against an isolated production container.
 
-Lighthouse measures both `/` and `/sign-in` three times and checks their median results. The committed public-page budgets require a performance score of at least `0.90`, first contentful paint at most `2,000 ms`, largest contentful paint at most `2,500 ms`, total blocking time at most `300 ms`, and cumulative layout shift at most `0.10`. Authenticated production verification also measures `/app/calendars`, `/app/invitations`, and `/app/account-settings`; those PrimeFaces pages keep the same score, blocking-time, and layout-shift budgets with `3,000 ms` paint budgets.
+Lighthouse measures both `/` and `/sign-in` three times and checks their median results. The committed budgets require a performance score of at least `0.90`, first contentful paint at most `2,000 ms`, largest contentful paint at most `2,500 ms`, total blocking time at most `300 ms`, and cumulative layout shift at most `0.10`.
 
 CodeQL also runs on pushes to `master`, weekly, and on demand.
 
@@ -178,36 +176,6 @@ When Railway identifies an environment as non-production, every response is mark
 Pull-request environments clone the `preview-base` service configuration, but Railway gives each PostgreSQL service a fresh volume rather than copying the base volume's data. On startup, the application recognizes only `preview-base` and exact `event-calendar-pr-<number>` environments and provisions the configured non-production account with the full canonical fixture when the database is fresh. The three calendars, seven memberships, and twenty-five events match local development. Ordinary redeployments preserve later changes and restore the configured password hash if it has drifted. An older untouched `Preview calendar` fixture is replaced automatically; a modified preview database is preserved.
 
 The preview login source of truth is `preview-base` → `shared-calendar-web` → Variables. `PREVIEW_VERIFICATION_USERNAME` stores the fixed username and `PREVIEW_VERIFICATION_PASSWORD` stores the fixed password. Do not change either value per pull request or store the plaintext password in the repository. Fixture installation atomically consumes the database bootstrap state; `APP_BOOTSTRAP_INVITATION_TOKEN` is not the preview login. Pull-request code may receive these intentionally reusable preview-only values; they are never used as production credentials.
-
-## Production verification
-
-Production can have a dedicated persistent verification account without making ordinary users or calendars test data. Configure these variables on the production web service:
-
-| Variable | Purpose |
-| --- | --- |
-| `PRODUCTION_VERIFICATION_ENABLED` | Must be exactly `true` to enable production fixture provisioning. Missing or `false` leaves production unchanged. |
-| `PRODUCTION_VERIFICATION_PROJECT_ID` | Must equal Railway's `RAILWAY_PROJECT_ID`. This prevents copied configuration from provisioning another project. |
-| `PRODUCTION_VERIFICATION_ENVIRONMENT_ID` | Must equal Railway's `RAILWAY_ENVIRONMENT_ID`. This prevents provisioning another environment. |
-| `PRODUCTION_VERIFICATION_USERNAME` | Stable, dedicated production test username. |
-| `PRODUCTION_VERIFICATION_PASSWORD` | Stable, strong production-only password. Store it in Railway and the owner's password manager, never in the repository. |
-
-The first enabled startup creates the dedicated account, two inaccessible companion accounts, and the canonical fixture even when ordinary production accounts already exist. Later startups preserve its calendar data by default and only restore the configured login password when needed. The configured username is never allowed to take over an existing account with a different display name.
-
-Set the same credentials only in the current shell as `REMOTE_VERIFICATION_USERNAME` and `REMOTE_VERIFICATION_PASSWORD`, then run:
-
-```text
-mise run verify-production
-```
-
-This command targets `https://calendar.social`, runs a production-safe Chromium suite over the landing page, sign-in, calendars, invitations, account settings, keyboard focus, mobile layout, security headers, and accessibility, then runs the five-page Lighthouse matrix. It does not create, edit, or delete calendars or events. The ordinary seven-test `mise run end-to-end` suite intentionally consumes bootstrap registration, creates users, changes passwords, regenerates bearer links, and deletes data, so it must continue to run only against its isolated disposable database rather than live production.
-
-Production fixture data can be returned to the canonical state on demand. Start a Railway SSH database tunnel to the exact production PostgreSQL service, expose it only on loopback, load the production web service's Railway target variables and verification variables into the second shell, set `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, and `PGPASSWORD` for that tunnel, then run:
-
-```text
-mise run reset-production-verification
-```
-
-The reset refuses non-loopback database hosts, mismatched Railway project or environment identifiers, an unrecognized schema, missing fixture accounts, or any calendar shared with a non-fixture account. It deletes every calendar isolated to the three fixture accounts, including temporary calendars created while testing, and recreates the exact canonical data in one transaction. Restart the production web service after a reset to clear application and session caches, then run `mise run verify-production`. Do not leave a Railway database tunnel running after the reset.
 
 Unauthenticated sessions expire after ten idle minutes. Successful sign-in extends that server-side idle lifetime to 30 days. Use one application replica because sessions are stored in memory; a restart or redeploy requires users to sign in again.
 

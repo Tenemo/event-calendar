@@ -2,6 +2,7 @@ package app.startup;
 
 import app.fixture.CanonicalCalendarFixture;
 import app.fixture.CanonicalCalendarFixture.Installation;
+import app.fixture.CanonicalCalendarFixture.Scope;
 import app.security.PasswordService;
 import app.security.TokenService;
 import jakarta.annotation.Resource;
@@ -20,7 +21,7 @@ import java.util.Set;
 import javax.sql.DataSource;
 
 @Stateless
-public class VerificationEnvironmentProvisioningService {
+public class PreviewEnvironmentProvisioningService {
     private static final String LEGACY_PREVIEW_CALENDAR_NAME = "Preview calendar";
 
     @Resource(lookup = "jdbc/CalendarDataSource")
@@ -32,16 +33,16 @@ public class VerificationEnvironmentProvisioningService {
     @Inject
     private TokenService tokenService;
 
-    public void ensureProvisioned(VerificationEnvironmentConfiguration configuration) {
+    public void ensureProvisioned(PreviewEnvironmentConfiguration configuration) {
         try (Connection connection = dataSource.getConnection()) {
             acquireProvisioningLock(connection);
             lockRegistrationBootstrapState(connection);
 
             Optional<AccountState> ownerAccount = findAccount(connection, configuration.username());
             if (ownerAccount.isEmpty()) {
-                if (!configuration.permitsNonemptyDatabase() && countUsers(connection) != 0) {
+                if (countUsers(connection) != 0) {
                     throw new IllegalStateException(
-                            "Preview verification provisioning refuses to add an account to a nonempty database.");
+                            "Preview provisioning refuses to add an account to a nonempty database.");
                 }
                 installFixture(connection, configuration, Optional.empty());
                 return;
@@ -55,21 +56,19 @@ public class VerificationEnvironmentProvisioningService {
                 installFixture(connection, configuration, Optional.of(synchronizedOwner));
                 return;
             }
-            if (configuration.environmentKind()
-                            == VerificationEnvironmentConfiguration.EnvironmentKind.PREVIEW
-                    && membershipCount == 1
+            if (membershipCount == 1
                     && removeLegacyPreviewCalendar(connection, synchronizedOwner.id())) {
                 installFixture(connection, configuration, Optional.of(synchronizedOwner));
             }
         } catch (SQLException exception) {
             throw new IllegalStateException(
-                    "Verification fixture provisioning could not access the database.", exception);
+                    "Preview fixture provisioning could not access the database.", exception);
         }
     }
 
     private void installFixture(
             Connection connection,
-            VerificationEnvironmentConfiguration configuration,
+            PreviewEnvironmentConfiguration configuration,
             Optional<AccountState> existingOwner) throws SQLException {
         Optional<AccountState> existingMaya = findFixtureCompanion(
                 connection, configuration.mayaUsername(), "Maya Nowak");
@@ -92,7 +91,7 @@ public class VerificationEnvironmentProvisioningService {
                         configuration.tomaszUsername(), tokenService.generateInvitationToken()));
 
         Installation installation = new Installation(
-                configuration.fixtureScope(),
+                Scope.PREVIEW,
                 configuration.username(),
                 configuration.displayName(),
                 ownerPasswordHash,
@@ -115,10 +114,10 @@ public class VerificationEnvironmentProvisioningService {
     private AccountState synchronizeExistingOwner(
             Connection connection,
             AccountState owner,
-            VerificationEnvironmentConfiguration configuration) throws SQLException {
+            PreviewEnvironmentConfiguration configuration) throws SQLException {
         if (!configuration.displayName().equals(owner.displayName())) {
             throw new IllegalStateException(
-                    "Verification provisioning refuses to take over an existing account with an unexpected display name.");
+                    "Preview provisioning refuses to take over an existing account with an unexpected display name.");
         }
         if (passwordService.verifyPassword(configuration.password(), owner.passwordHash())) {
             return owner;
@@ -131,10 +130,12 @@ public class VerificationEnvironmentProvisioningService {
             statement.setString(1, replacementPasswordHash);
             statement.setLong(2, owner.id());
             if (statement.executeUpdate() != 1) {
-                throw new IllegalStateException("Verification account password synchronization updated no account.");
+                throw new IllegalStateException(
+                        "Preview account password synchronization updated no account.");
             }
         }
-        return new AccountState(owner.id(), owner.username(), owner.displayName(), replacementPasswordHash);
+        return new AccountState(
+                owner.id(), owner.username(), owner.displayName(), replacementPasswordHash);
     }
 
     private Optional<AccountState> findFixtureCompanion(
@@ -144,7 +145,7 @@ public class VerificationEnvironmentProvisioningService {
         Optional<AccountState> account = findAccount(connection, username);
         if (account.isPresent() && !expectedDisplayName.equals(account.orElseThrow().displayName())) {
             throw new IllegalStateException(
-                    "Verification provisioning found a companion username owned by an unexpected account.");
+                    "Preview provisioning found a companion username owned by an unexpected account.");
         }
         return account;
     }
@@ -169,7 +170,7 @@ public class VerificationEnvironmentProvisioningService {
     private void acquireProvisioningLock(Connection connection) throws SQLException {
         try (Statement statement = connection.createStatement()) {
             statement.execute(
-                    "select pg_advisory_xact_lock(hashtext('calendar.social verification fixture'))");
+                    "select pg_advisory_xact_lock(hashtext('calendar.social preview fixture'))");
         }
     }
 
@@ -187,7 +188,7 @@ public class VerificationEnvironmentProvisioningService {
         try (Statement statement = connection.createStatement();
                 ResultSet resultSet = statement.executeQuery("select count(*) from app_user")) {
             if (!resultSet.next()) {
-                throw new IllegalStateException("Verification user count query returned no row.");
+                throw new IllegalStateException("Preview user count query returned no row.");
             }
             return resultSet.getLong(1);
         }
@@ -199,7 +200,7 @@ public class VerificationEnvironmentProvisioningService {
             statement.setLong(1, userId);
             try (ResultSet resultSet = statement.executeQuery()) {
                 if (!resultSet.next()) {
-                    throw new IllegalStateException("Verification membership count query returned no row.");
+                    throw new IllegalStateException("Preview membership count query returned no row.");
                 }
                 return resultSet.getLong(1);
             }
@@ -271,6 +272,5 @@ public class VerificationEnvironmentProvisioningService {
             long id,
             String username,
             String displayName,
-            String passwordHash) {
-    }
+            String passwordHash) {}
 }
