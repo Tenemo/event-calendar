@@ -72,7 +72,7 @@
                             Settings
                             <f:param name="id" value="#{calendarView.calendarId}"/>
                         </h:outputLink>
-                        <h:form>
+                        <h:form rendered="#{calendarView.admin}">
                             <p:commandButton value="Regenerate link"
                                              action="#{calendarView.regenerateCalendarLink}"
                                              ajax="false"

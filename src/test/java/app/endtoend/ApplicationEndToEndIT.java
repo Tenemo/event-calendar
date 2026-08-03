@@ -24,6 +24,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
@@ -114,6 +116,17 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             page.keyboard().press("Tab");
             assertThat(signInButton).isFocused();
             assertAccessible(page);
+
+            assertEquals(200, navigate(page, "/error.html").status());
+            Locator errorPageStylesheets = page.locator("link[rel='stylesheet']");
+            assertEquals(2, errorPageStylesheets.count());
+            assertEquals(
+                    "/resources/css/tokens.css",
+                    errorPageStylesheets.nth(0).getAttribute("href"));
+            assertEquals(
+                    "/resources/css/error-page.css",
+                    errorPageStylesheets.nth(1).getAttribute("href"));
+
             navigate(page, "/app/calendars");
             page.waitForURL("**/sign-in");
         }
@@ -448,7 +461,20 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             ownerPage.locator("button:has-text('New event')").click();
             assertThat(ownerPage.locator(".event-dialog .ui-dialog-title"))
                     .hasText("Create event");
-            assertThat(ownerPage.locator("input[id$='eventTitle']")).isFocused();
+            Locator eventTitleInput = ownerPage.locator("input[id$='eventTitle']");
+            assertThat(eventTitleInput).isFocused();
+            String controlBorderColor = computedStyle(eventTitleInput, "borderTopColor");
+            String dialogBackgroundColor = computedStyle(
+                    ownerPage.locator(".event-dialog .ui-dialog-content"),
+                    "backgroundColor");
+            double controlBoundaryContrast = contrastRatio(
+                    controlBorderColor,
+                    dialogBackgroundColor);
+            assertTrue(
+                    controlBoundaryContrast >= 3,
+                    () -> "Dialog control boundary contrast should be at least 3:1, but was "
+                            + controlBoundaryContrast
+                            + ":1.");
             ownerPage.locator(".event-dialog button:has-text('Create event')").click();
             assertThat(ownerPage.locator("body")).containsText("Event title is required.");
             ownerPage.waitForFunction(
@@ -755,6 +781,11 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             try (BrowserContext editorContext = newBrowserContext()) {
                 Page editorPage = editorContext.newPage();
                 signIn(editorPage, editorUsername, TEST_PASSWORD);
+                assertEquals(200, navigate(editorPage, acceptedCalendarPath).status());
+                assertEquals(
+                        0,
+                        editorPage.locator("button:has-text('Regenerate link')").count(),
+                        "Editors must not be offered calendar-link administration.");
                 Response settingsResponse = navigate(
                         editorPage, "/app/calendar-settings?id=" + calendar.id());
                 assertEquals(404, settingsResponse.status());
@@ -920,6 +951,30 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
                 propertyName);
     }
 
+    private static double contrastRatio(String firstColor, String secondColor) {
+        double firstLuminance = relativeLuminance(firstColor);
+        double secondLuminance = relativeLuminance(secondColor);
+        return (Math.max(firstLuminance, secondLuminance) + 0.05)
+                / (Math.min(firstLuminance, secondLuminance) + 0.05);
+    }
+
+    private static double relativeLuminance(String color) {
+        Matcher colorComponents = Pattern.compile("\\d+").matcher(color);
+        double[] linearComponents = new double[3];
+        for (int componentIndex = 0; componentIndex < linearComponents.length; componentIndex++) {
+            if (!colorComponents.find()) {
+                throw new IllegalArgumentException("Expected an RGB color, but received " + color + ".");
+            }
+            double colorComponent = Integer.parseInt(colorComponents.group()) / 255.0;
+            linearComponents[componentIndex] = colorComponent <= 0.04045
+                    ? colorComponent / 12.92
+                    : Math.pow((colorComponent + 0.055) / 1.055, 2.4);
+        }
+        return 0.2126 * linearComponents[0]
+                + 0.7152 * linearComponents[1]
+                + 0.0722 * linearComponents[2];
+    }
+
     private static void assertHeaderUsesViewportWidth(Page page) {
         BoundingBox brandBounds = page.locator(".app-brand").boundingBox();
         BoundingBox navigationBounds = page.locator(".app-nav").boundingBox();
@@ -1074,10 +1129,6 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             }
             acceptInvitationButton.click(
                     new Locator.ClickOptions().setTimeout(Duration.ofSeconds(60).toMillis()));
-            page.locator("#calendarPage")
-                    .or(page.locator(".ui-messages-error"))
-                    .waitFor(new Locator.WaitForOptions()
-                            .setTimeout(Duration.ofSeconds(60).toMillis()));
             return new InvitationAcceptanceResult(
                     username,
                     URI.create(page.url()).getPath(),
