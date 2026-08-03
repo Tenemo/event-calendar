@@ -2,6 +2,9 @@ package app.event;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -66,6 +69,46 @@ final class EventFormStateTest {
                         eventForm.getEndTime()),
                 () -> assertEquals(LocalDate.parse("2026-04-05"), eventForm.getFirstDay()),
                 () -> assertEquals(LocalDate.parse("2026-04-05"), eventForm.getLastDay()));
+    }
+
+    @Test
+    void selectingAMonthDayCreatesAnInclusiveSingleDayAllDayRange() {
+        EventFormState eventForm = new EventFormState();
+        eventForm.setTitle("Old title");
+        eventForm.setDescription("Old description");
+        eventForm.setLocation("Old location");
+
+        eventForm.resetForCalendarSelection(
+                LocalDateTime.parse("2026-08-23T00:00:00"), "Europe/Warsaw");
+
+        assertAll(
+                () -> assertNull(eventForm.getTitle()),
+                () -> assertNull(eventForm.getDescription()),
+                () -> assertNull(eventForm.getLocation()),
+                () -> assertEquals(LocalDate.parse("2026-08-23"), eventForm.getFirstDay()),
+                () -> assertEquals(LocalDate.parse("2026-08-23"), eventForm.getLastDay()),
+                () -> assertTrue(eventForm.isAllDay()),
+                () -> assertTrue(eventForm.isAllDaySelection()));
+    }
+
+    @Test
+    void selectingATimeSlotCreatesAOneHourTimedRange() {
+        EventFormState eventForm = new EventFormState();
+
+        eventForm.resetForCalendarSelection(
+                LocalDateTime.parse("2026-08-23T10:30:00"), "Europe/Warsaw");
+
+        assertAll(
+                () -> assertEquals(
+                        LocalDateTime.parse("2026-08-23T10:30:00"),
+                        eventForm.getStartTime()),
+                () -> assertEquals(
+                        LocalDateTime.parse("2026-08-23T11:30:00"),
+                        eventForm.getEndTime()),
+                () -> assertEquals(LocalDate.parse("2026-08-23"), eventForm.getFirstDay()),
+                () -> assertEquals(LocalDate.parse("2026-08-23"), eventForm.getLastDay()),
+                () -> assertFalse(eventForm.isAllDay()),
+                () -> assertFalse(eventForm.isAllDaySelection()));
     }
 
     @Test

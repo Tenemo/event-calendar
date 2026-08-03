@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:cc="jakarta.faces.composite"
+      xmlns:h="jakarta.faces.html"
+      xmlns:p="primefaces"
+      xmlns:pt="jakarta.faces.passthrough">
+<cc:interface>
+    <cc:attribute name="value" required="true"/>
+    <cc:attribute name="label"/>
+    <cc:attribute name="help"/>
+    <cc:attribute name="buttonLabel" default="Copy link"/>
+    <cc:attribute name="inputAriaLabel"/>
+    <cc:attribute name="buttonAriaLabel"/>
+</cc:interface>
+<cc:implementation>
+    <h:panelGroup layout="block" styleClass="copy-field">
+        <p:outputLabel for="value"
+                       value="#{cc.attrs.label}"
+                       rendered="#{not empty cc.attrs.label}"/>
+        <div class="copy-control">
+            <p:inputText id="value"
+                         value="#{cc.attrs.value}"
+                         readonly="true"
+                         pt:aria-label="#{empty cc.attrs.inputAriaLabel ? null : cc.attrs.inputAriaLabel}"
+                         pt:aria-describedby="#{empty cc.attrs.help ? null : cc.clientId.concat(':help')}"/>
+            <button type="button"
+                    class="app-button app-button-secondary"
+                    aria-label="#{empty cc.attrs.buttonAriaLabel ? cc.attrs.buttonLabel : cc.attrs.buttonAriaLabel}"
+                    onclick="copyLink(this); return false;">#{cc.attrs.buttonLabel}</button>
+            <h:panelGroup id="status"
+                          layout="block"
+                          styleClass="copy-status"
+                          pt:role="status"
+                          pt:aria-live="polite"/>
+        </div>
+        <h:outputText id="help"
+                      value="#{cc.attrs.help}"
+                      styleClass="field-help copy-help"
+                      rendered="#{not empty cc.attrs.help}"/>
+    </h:panelGroup>
+</cc:implementation>
+</html>

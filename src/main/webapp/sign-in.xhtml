@@ -8,7 +8,7 @@
         <f:viewParam name="token" value="#{signInView.invitationToken}"/>
         <f:viewParam name="passwordChanged" value="#{signInView.passwordChangedParameter}"/>
     </f:metadata>
-    <ui:define name="title">Sign in - Shared calendar</ui:define>
+    <ui:define name="title">Sign in - calendar.social</ui:define>
     <ui:define name="messages">
         <h:panelGroup id="messages"
                       layout="block"
@@ -40,7 +40,7 @@
             <h:panelGroup layout="block"
                           styleClass="surface-panel lightweight-panel"
                           pt:aria-labelledby="sign-in-heading">
-                <h:form styleClass="stacked-form">
+                <h:form styleClass="stacked-form" pt:data-initial-focus="true">
                     <h:inputHidden id="invitationToken" value="#{signInView.invitationToken}"/>
                     <h:outputLabel for="username" value="Username"/>
                     <h:inputText id="username"
@@ -56,13 +56,14 @@
                                    value="#{signInView.password}"
                                    styleClass="native-input"
                                    pt:autocomplete="current-password"
+                                   pt:data-error-focus="true"
                                    maxlength="#{passwordService.maximumPasswordInputLength}"
                                    required="true"
                                    requiredMessage="Password is required."/>
 
                     <h:commandButton value="Sign in"
                                      action="#{signInView.signIn}"
-                                     styleClass="native-button"/>
+                                     styleClass="app-button app-button-primary"/>
                 </h:form>
                 <p class="form-footer">
                     Registration requires an invitation link.

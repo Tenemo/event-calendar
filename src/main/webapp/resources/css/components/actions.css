@@ -1,0 +1,36 @@
+.action-row,
+.item-actions,
+.member-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-small);
+}
+
+.action-row {
+    margin-top: 1.5rem;
+}
+
+.compact-actions {
+    margin-top: 0;
+}
+
+.member-actions {
+    justify-content: flex-end;
+}
+
+@media (width <= 52rem) {
+    .item-actions,
+    .item-actions form,
+    .item-actions .app-button,
+    .item-actions .ui-button,
+    .member-actions,
+    .member-actions .app-button,
+    .member-actions .ui-button {
+        width: 100%;
+    }
+
+    .member-actions {
+        justify-content: stretch;
+    }
+}

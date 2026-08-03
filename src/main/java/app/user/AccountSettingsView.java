@@ -2,6 +2,7 @@ package app.user;
 
 import app.security.AuthenticatedSessionSecurity;
 import app.security.CurrentUser;
+import app.security.LocalDevelopmentAutoSignIn;
 import app.util.AuthorizationException;
 import app.util.ValidationException;
 import app.web.FacesMessages;
@@ -22,6 +23,9 @@ public class AccountSettingsView {
 
     @Inject
     private UserService userService;
+
+    @Inject
+    private LocalDevelopmentAutoSignIn localDevelopmentAutoSignIn;
 
     private String currentPassword;
     private String newPassword;
@@ -51,6 +55,7 @@ public class AccountSettingsView {
         FacesContext facesContext = FacesContext.getCurrentInstance();
         HttpServletRequest request = (HttpServletRequest) facesContext.getExternalContext().getRequest();
         AuthenticatedSessionSecurity.invalidateSessionAndLogout(request);
+        localDevelopmentAutoSignIn.suppressAfterExplicitSignOut(request);
         RelativeRedirect.send(facesContext, "/sign-in?passwordChanged=true");
     }
 

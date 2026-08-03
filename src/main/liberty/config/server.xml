@@ -8,6 +8,7 @@
     <variable name="HTTPS_PORT" defaultValue="9443"/>
     <variable name="HTTP_HOST" defaultValue="127.0.0.1"/>
     <variable name="APP_LTPA_KEYS_PASSWORD" value="${env.APP_LTPA_KEYS_PASSWORD}"/>
+    <variable name="APP_SSO_REQUIRES_SSL" defaultValue="true"/>
 
     <variable name="PGHOST" defaultValue="localhost"/>
     <variable name="PGPORT" defaultValue="5432"/>
@@ -46,7 +47,7 @@
     <webAppSecurity httpOnlyCookies="true"
                     sameSiteCookie="Lax"
                     ssoCookieName="LtpaToken2"
-                    ssoRequiresSSL="true"
+                    ssoRequiresSSL="${APP_SSO_REQUIRES_SSL}"
                     trackLoggedOutSSOCookies="true"/>
 
     <httpSession cookieHttpOnly="true"

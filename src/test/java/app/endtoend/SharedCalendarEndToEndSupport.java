@@ -124,7 +124,9 @@ abstract class SharedCalendarEndToEndSupport {
     String createRegistrationInvitation(Page page) {
         navigate(page, "/app/invitations");
         page.locator("button:has-text('Generate registration link')").click();
-        return page.locator("input[id$='generatedInvitationLink']").inputValue();
+        return page.getByLabel(
+                        "Generated link", new Page.GetByLabelOptions().setExact(true))
+                .inputValue();
     }
 
     String createEditorInvitation(Page page, String calendarName) {
@@ -132,7 +134,9 @@ abstract class SharedCalendarEndToEndSupport {
         page.locator("select[id$='calendar']")
                 .selectOption(new SelectOption().setLabel(calendarName));
         page.locator("button:has-text('Generate editor link')").click();
-        return page.locator("input[id$='generatedInvitationLink']").inputValue();
+        return page.getByLabel(
+                        "Generated link", new Page.GetByLabelOptions().setExact(true))
+                .inputValue();
     }
 
     void createTimedEvent(
@@ -145,6 +149,10 @@ abstract class SharedCalendarEndToEndSupport {
         page.locator("input[id$='eventLocation']").fill(location);
         page.locator("input[id$='eventStart_input']").fill(startTime);
         page.locator("input[id$='eventEnd_input']").fill(endTime);
+        assertEquals(
+                0,
+                page.locator(".event-date-picker-panel:visible").count(),
+                "Typing a date should not open the date picker.");
         Response createEventResponse = page.waitForResponse(
                 response -> "POST".equals(response.request().method()),
                 () -> page.locator("button:has-text('Create event')").click());
@@ -155,7 +163,7 @@ abstract class SharedCalendarEndToEndSupport {
                         + " from "
                         + createEventResponse.url());
         assertThat(page.locator("body")).containsText("Event created.");
-        assertThat(page.locator("article.event-item").filter(
+        assertThat(page.locator(".calendar-schedule .fc-event").filter(
                         new com.microsoft.playwright.Locator.FilterOptions().setHasText(title)))
                 .isVisible();
     }
@@ -165,7 +173,15 @@ abstract class SharedCalendarEndToEndSupport {
         assertTrue(
                 results.getViolations().isEmpty(),
                 () -> "Accessibility violations: "
-                        + results.getViolations().stream().map(violation -> violation.getId()).toList());
+                        + results.getViolations().stream()
+                                .map(violation -> violation.getId()
+                                        + ": "
+                                        + violation.getNodes().stream()
+                                                .map(node -> node.getTarget()
+                                                        + " - "
+                                                        + node.getFailureSummary())
+                                                .toList())
+                                .toList());
     }
 
     void assertResponsiveAndAccessible(Page page, int width, int height) {

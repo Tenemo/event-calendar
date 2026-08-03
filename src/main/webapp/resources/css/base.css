@@ -1,0 +1,180 @@
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    min-height: 100%;
+    background: var(--color-canvas);
+}
+
+body {
+    min-height: 100vh;
+    margin: 0;
+    background:
+        radial-gradient(circle at 8% -10%, var(--color-canvas-glow), transparent 30rem),
+        radial-gradient(circle at 92% 4%, var(--color-success-highlight), transparent 26rem),
+        var(--color-canvas);
+    color: var(--color-text);
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-body);
+    line-height: 1.5;
+}
+
+::selection {
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+}
+
+a {
+    color: var(--color-primary);
+    text-decoration-line: underline;
+    text-decoration-thickness: 0.08em;
+    text-underline-offset: 0.18em;
+}
+
+a:hover {
+    color: var(--color-primary-hover);
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+body .ui-button:focus-visible,
+body .ui-button.ui-state-focus,
+body .ui-inputfield.ui-state-focus,
+body .ui-chkbox:focus-within .ui-chkbox-box,
+body .ui-dialog .ui-button:focus,
+body .ui-datepicker a:focus,
+body .ui-datepicker button:focus,
+body .ui-datepicker input:focus,
+body .ui-messages .ui-messages-close:focus,
+body .ui-messages:focus,
+.lightweight-message-region:focus {
+    outline: 3px solid var(--color-focus);
+    outline-offset: 3px;
+    box-shadow: none;
+}
+
+:target,
+h1,
+h2,
+h3,
+input,
+select,
+textarea,
+button,
+[tabindex] {
+    scroll-margin-block-start: var(--scroll-offset);
+}
+
+h1,
+h2,
+h3,
+p {
+    overflow-wrap: anywhere;
+}
+
+h1,
+h2,
+h3 {
+    color: var(--color-text);
+    font-family: var(--font-family-heading);
+}
+
+strong {
+    font-weight: var(--font-weight-strong);
+}
+
+.skip-link {
+    position: fixed;
+    top: 0.75rem;
+    left: 0.75rem;
+    z-index: 1000;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--color-primary);
+    border-radius: var(--radius-medium);
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+    font-weight: var(--font-weight-strong);
+    text-decoration: none;
+    transform: translateY(-200%);
+}
+
+.skip-link:focus {
+    transform: translateY(0);
+}
+
+.lead-text,
+.form-footer {
+    color: var(--color-text-muted);
+    line-height: 1.65;
+}
+
+.lead-text {
+    display: block;
+    max-width: 43rem;
+    margin: 0.9rem 0 0;
+    font-size: var(--font-size-lead);
+}
+
+.description-text {
+    white-space: pre-wrap;
+}
+
+.eyebrow {
+    margin: 0 0 0.45rem;
+    color: var(--color-primary);
+    font-size: 0.78rem;
+    font-weight: var(--font-weight-strong);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.secondary-line,
+.field-help,
+.copy-status,
+.empty-state-description,
+.status-line,
+.settings-grid .ui-panel-content p {
+    color: var(--color-text-muted);
+}
+
+.secondary-line {
+    display: block;
+    margin: 0.3rem 0 0;
+    font-size: var(--font-size-small);
+    line-height: 1.5;
+}
+
+.field-help {
+    margin-top: -0.35rem;
+    font-size: var(--font-size-small);
+    line-height: 1.5;
+}
+
+.form-footer {
+    margin-bottom: 0;
+}
+
+@media (forced-colors: active) {
+    .role-chip,
+    .status-dot,
+    .empty-state-mark {
+        border: 1px solid currentcolor;
+    }
+
+    .status-dot {
+        background: CanvasText;
+    }
+}

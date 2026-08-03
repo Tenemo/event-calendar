@@ -1,4 +1,5 @@
 <ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:app="jakarta.faces.composite/app-components"
                 xmlns:f="jakarta.faces.core"
                 xmlns:h="jakarta.faces.html"
                 xmlns:ui="jakarta.faces.facelets"
@@ -9,7 +10,7 @@
         <f:viewAction action="#{calendarView.load}" onPostback="false"/>
     </f:metadata>
 
-    <ui:define name="title">#{calendarView.available ? calendarView.calendarName : 'Calendar link unavailable'} - Shared calendar</ui:define>
+    <ui:define name="title">#{calendarView.available ? calendarView.calendarName : 'Calendar link unavailable'} - calendar.social</ui:define>
     <ui:define name="head">
         <meta name="robots" content="noindex, nofollow"/>
     </ui:define>
@@ -17,244 +18,374 @@
     <ui:define name="content">
         <h:panelGroup id="calendarPage" layout="block">
         <h:panelGroup layout="block" styleClass="page-section" rendered="#{calendarView.available}">
-            <div class="section-header compact-heading">
-                <div>
-                    <div class="heading-meta">
+            <section class="calendar-section calendar-workspace" aria-labelledby="calendar-heading">
+                <aside class="calendar-sidebar" aria-labelledby="calendar-heading">
+                    <div class="calendar-sidebar-meta">
                         <span class="role-chip">#{not calendarView.editable ? 'Read-only' : calendarView.role.displayName}</span>
-                        <span>#{calendarView.timeZone}</span>
-                        <h:panelGroup rendered="#{calendarView.editable}">
-                            <span>#{calendarView.publicAccessEnabled ? 'Public access enabled' : 'Public access disabled'}</span>
-                        </h:panelGroup>
+                        <h:outputText value="#{calendarView.publicAccessEnabled ? 'Public access enabled' : 'Public access disabled'}"
+                                      rendered="#{calendarView.editable}"/>
                     </div>
-                    <h1 id="calendarHeading" tabindex="-1">#{calendarView.calendarName}</h1>
-                    <h:outputText value="#{calendarView.calendarDescription}"
-                                  styleClass="lead-text description-text"
-                                  rendered="#{not empty calendarView.calendarDescription}"/>
-                    <h:outputText value="Share the calendar link for read-only access while public access is enabled."
-                                  styleClass="secondary-line"
-                                  rendered="#{calendarView.editable}"/>
-                </div>
-                <div class="action-row compact-actions">
-                    <h:form rendered="#{calendarView.editable}">
-                        <p:commandButton value="Regenerate link"
-                                         action="#{calendarView.regenerateCalendarLink}"
-                                         ajax="false"
-                                         styleClass="ui-button-danger ui-button-outlined">
-                            <p:confirm header="Regenerate calendar link"
-                                       message="The current calendar link will stop working for everyone. Continue?"
-                                       yesButtonLabel="Regenerate link"
-                                       yesButtonClass="ui-button-danger"
-                                       noButtonLabel="Cancel"
-                                       noButtonClass="ui-button-secondary ui-button-outlined"
-                                       beforeShow="focusConfirmationCancelButton();"/>
-                        </p:commandButton>
-                    </h:form>
-                    <h:outputLink value="#{request.contextPath}/app/calendar-members"
-                                  styleClass="button-link secondary-link"
-                                  rendered="#{calendarView.admin}">
-                        Members
-                        <f:param name="id" value="#{calendarView.calendarId}"/>
-                    </h:outputLink>
-                    <h:outputLink value="#{request.contextPath}/app/calendar-settings"
-                                  styleClass="button-link secondary-link"
-                                  rendered="#{calendarView.admin}">
-                        Settings
-                        <f:param name="id" value="#{calendarView.calendarId}"/>
-                    </h:outputLink>
-                </div>
-            </div>
 
-            <div class="#{calendarView.editable ? 'calendar-workspace' : ''}">
-                <section class="event-list-section" aria-labelledby="events-heading">
-                    <div class="subsection-header">
-                        <div>
-                            <h2 id="events-heading" tabindex="-1">Events</h2>
-                            <p>Times are shown in #{calendarView.timeZone}.</p>
-                        </div>
-                        <h:form rendered="#{calendarView.editable}">
+                    <div class="calendar-sidebar-copy">
+                        <h1 id="calendar-heading" tabindex="-1">#{calendarView.calendarName}</h1>
+                        <h:outputText value="#{calendarView.calendarDescription}"
+                                      styleClass="calendar-sidebar-description"
+                                      rendered="#{not empty calendarView.calendarDescription}"/>
+                    </div>
+
+                    <div class="calendar-sidebar-guidance">
+                        <h2>Calendar</h2>
+                        <p>
+                            Times use #{calendarView.timeZone}.
+                            #{calendarView.editable
+                              ? 'Select a date to add an event or select an event to edit it.'
+                              : 'Select an event to see its details.'}
+                        </p>
+                        <h:outputText
+                                value="Share the calendar link for read-only access while public access is enabled."
+                                styleClass="calendar-sidebar-supporting"
+                                rendered="#{calendarView.editable}"/>
+                    </div>
+
+                    <h:panelGroup layout="block"
+                                  styleClass="calendar-sidebar-actions"
+                                  rendered="#{calendarView.editable}">
+                        <h:form>
                             <p:commandButton id="newEventButton"
                                              value="New event"
                                              action="#{calendarView.resetEventForm}"
                                              ajax="true"
                                              process="@this"
-                                             update=":messages :calendarPage"
-                                             oncomplete="focusElementByIdSuffix('eventTitle');"
+                                             update=":messages :eventDialogTitle :eventDialogContent"
+                                             oncomplete="showEventDialog();"
                                              styleClass="ui-button-outlined"/>
                         </h:form>
-                    </div>
-
-                    <h:panelGroup layout="block" styleClass="event-board" rendered="#{not empty calendarView.events}">
-                        <ui:repeat value="#{calendarView.events}" var="event">
-                            <article id="event-#{event.id}"
-                                     class="event-item"
-                                     tabindex="-1">
-                                <span class="event-date">#{event.dateLabel}</span>
-                                <div class="event-copy">
-                                    <h3>#{event.title}</h3>
-                                    <p>#{event.scheduleAndLocationLabel}</p>
-                                    <h:panelGroup layout="block"
-                                                  styleClass="description-text"
-                                                  rendered="#{not empty event.description}">#{event.description}</h:panelGroup>
-                                </div>
-                                <h:panelGroup layout="block" styleClass="item-actions" rendered="#{calendarView.editable}">
-                                    <h:form>
-                                        <p:commandButton value="Edit"
-                                                         action="#{calendarView.selectEvent(event.id)}"
-                                                         ariaLabel="Edit #{event.title}"
-                                                         ajax="true"
-                                                         process="@this"
-                                                         update=":messages :calendarPage"
-                                                         oncomplete="focusAfterAjax(args, 'eventTitle');"
-                                                         styleClass="ui-button-outlined"/>
-                                    </h:form>
-                                    <h:form>
-                                        <p:commandButton value="Delete"
-                                                         action="#{calendarView.deleteEvent(event.id, event.version)}"
-                                                         ariaLabel="Delete #{event.title}"
-                                                         ajax="true"
-                                                         process="@this"
-                                                         update=":messages :calendarPage"
-                                                         oncomplete="focusAfterAjax(args, 'events-heading');"
-                                                         styleClass="ui-button-danger ui-button-outlined">
-                                            <p:confirm header="Delete event"
-                                                       message="Delete this event permanently?"
-                                                       yesButtonLabel="Delete event"
-                                                       yesButtonClass="ui-button-danger"
-                                                       noButtonLabel="Cancel"
-                                                       noButtonClass="ui-button-secondary ui-button-outlined"
-                                                       beforeShow="focusConfirmationCancelButton();"/>
-                                        </p:commandButton>
-                                    </h:form>
-                                </h:panelGroup>
-                            </article>
-                        </ui:repeat>
+                        <h:outputLink value="#{request.contextPath}/app/calendar-members"
+                                      styleClass="app-button app-button-secondary"
+                                      rendered="#{calendarView.admin}">
+                            Members
+                            <f:param name="id" value="#{calendarView.calendarId}"/>
+                        </h:outputLink>
+                        <h:outputLink value="#{request.contextPath}/app/calendar-settings"
+                                      styleClass="app-button app-button-secondary"
+                                      rendered="#{calendarView.admin}">
+                            Settings
+                            <f:param name="id" value="#{calendarView.calendarId}"/>
+                        </h:outputLink>
+                        <h:form>
+                            <p:commandButton value="Regenerate link"
+                                             action="#{calendarView.regenerateCalendarLink}"
+                                             ajax="false"
+                                             styleClass="ui-button-danger ui-button-outlined">
+                                <p:confirm header="Regenerate calendar link"
+                                           message="The current calendar link will stop working for everyone. Continue?"
+                                           yesButtonLabel="Regenerate link"
+                                           yesButtonClass="ui-button-danger"
+                                           noButtonLabel="Cancel"
+                                           noButtonClass="ui-button-secondary ui-button-outlined"
+                                           beforeShow="focusConfirmationCancelButton();"/>
+                            </p:commandButton>
+                        </h:form>
                     </h:panelGroup>
-                    <h:panelGroup layout="block" styleClass="empty-state" rendered="#{empty calendarView.events}">No events yet.</h:panelGroup>
-                </section>
+                </aside>
 
-                <p:panel styleClass="surface-panel event-editor"
-                         pt:aria-labelledby="eventEditorHeading"
-                         rendered="#{calendarView.editable}">
-                    <h2 id="eventEditorHeading" class="panel-heading">#{calendarView.editingEvent ? 'Edit event' : 'Create event'}</h2>
-                    <h:form styleClass="stacked-form">
-                        <p:outputLabel for="eventTitle" value="Title"/>
-                        <p:inputText id="eventTitle"
-                                     value="#{calendarView.eventTitle}"
-                                     pt:maxlength="200"
-                                     required="true"
-                                     requiredMessage="Event title is required."/>
-
-                        <p:outputLabel for="eventLocation" value="Location (optional)"/>
-                        <p:inputText id="eventLocation" value="#{calendarView.eventLocation}" pt:maxlength="200"/>
-
-                        <div class="checkbox-field">
-                            <p:selectBooleanCheckbox id="allDay"
-                                                     value="#{calendarView.eventAllDaySelection}">
-                                <p:ajax listener="#{calendarView.changeEventAllDayMode}"
-                                        process="eventScheduleFields @this"
-                                        update=":messages @this eventScheduleFields"/>
-                            </p:selectBooleanCheckbox>
-                            <p:outputLabel for="allDay" value="All-day event"/>
-                        </div>
-
-                        <h:panelGroup id="eventScheduleFields" layout="block">
-                            <h:panelGroup layout="block"
-                                          styleClass="two-column-fields"
-                                          rendered="#{not calendarView.eventAllDay}">
-                                <div class="field-stack">
-                                    <p:outputLabel for="eventStart" value="Starts"/>
-                                    <p:datePicker id="eventStart"
-                                                  value="#{calendarView.eventStartTime}"
-                                                  appendTo="@(body)"
-                                                  pattern="yyyy-MM-dd HH:mm"
-                                                  showTime="true"
-                                                  hourFormat="24"
-                                                  required="true"
-                                                  requiredMessage="Event start time is required."/>
-                                </div>
-                                <div class="field-stack">
-                                    <p:outputLabel for="eventEnd" value="Ends"/>
-                                    <p:datePicker id="eventEnd"
-                                                  value="#{calendarView.eventEndTime}"
-                                                 appendTo="@(body)"
-                                                 pattern="yyyy-MM-dd HH:mm"
-                                                 showTime="true"
-                                                 hourFormat="24"
-                                                 required="true"
-                                                 requiredMessage="Event end time is required."/>
-                                </div>
-                            </h:panelGroup>
-
-                            <h:panelGroup layout="block"
-                                          styleClass="two-column-fields"
-                                          rendered="#{calendarView.eventAllDay}">
-                                <div class="field-stack">
-                                    <p:outputLabel for="eventFirstDay" value="First day"/>
-                                    <p:datePicker id="eventFirstDay"
-                                                  value="#{calendarView.eventFirstDay}"
-                                                  appendTo="@(body)"
-                                                  pattern="yyyy-MM-dd"
-                                                  required="true"
-                                                  requiredMessage="Event first day is required."/>
-                                </div>
-                                <div class="field-stack">
-                                    <p:outputLabel for="eventLastDay" value="Last day (inclusive)"/>
-                                    <p:datePicker id="eventLastDay"
-                                                 value="#{calendarView.eventLastDay}"
-                                                 appendTo="@(body)"
-                                                 pattern="yyyy-MM-dd"
-                                                 required="true"
-                                                 requiredMessage="Event last day is required."/>
-                                </div>
-                            </h:panelGroup>
-                        </h:panelGroup>
-
-                        <p:outputLabel for="eventDescription" value="Description (optional)"/>
-                        <p:inputTextarea id="eventDescription"
-                                         value="#{calendarView.eventDescription}"
-                                         pt:maxlength="4000"
-                                         rows="5"
-                                         autoResize="false"/>
-
-                        <div class="action-row compact-actions">
-                            <p:commandButton value="Save changes"
-                                             action="#{calendarView.updateEvent}"
-                                             ajax="true"
-                                             process="@form"
-                                             update=":messages :calendarPage"
-                                             oncomplete="focusAfterAjax(args, 'events-heading');"
-                                             rendered="#{calendarView.editingEvent}"/>
-                            <p:commandButton value="Create event"
-                                             action="#{calendarView.createEvent}"
-                                             ajax="true"
-                                             process="@form"
-                                             update=":messages :calendarPage"
-                                             oncomplete="focusAfterAjax(args, 'events-heading');"
-                                             rendered="#{not calendarView.editingEvent}"/>
-                            <p:commandButton value="Cancel edit"
-                                             action="#{calendarView.resetEventForm}"
-                                             ajax="true"
-                                             process="@this"
-                                             update=":messages :calendarPage"
-                                             oncomplete="focusElementByIdSuffix('newEventButton');"
-                                             styleClass="ui-button-secondary ui-button-outlined"
-                                             rendered="#{calendarView.editingEvent}"/>
-                        </div>
+                    <h:form id="scheduleForm" styleClass="calendar-schedule-form">
+                        <p:schedule id="schedule"
+                                    widgetVar="calendarSchedule"
+                                    value="#{calendarView.scheduleModel}"
+                                    initialDate="#{calendarView.scheduleInitialDate}"
+                                    view="dayGridMonth"
+                                    locale="en"
+                                    timeZone="#{calendarView.timeZone}"
+                                    clientTimeZone="#{calendarView.timeZone}"
+                                    height="auto"
+                                    leftHeaderTemplate="prev,next today"
+                                    centerHeaderTemplate="title"
+                                    rightHeaderTemplate="dayGridMonth,timeGridWeek"
+                                    displayEventEnd="true"
+                                    scrollTime="08:00:00"
+                                    slotDuration="00:30:00"
+                                    slotLabelInterval="01:00:00"
+                                    slotLabelFormat="HH:mm"
+                                    tooltip="true"
+                                    draggable="false"
+                                    resizable="false"
+                                    extender="configureCalendarSchedule"
+                                    styleClass="calendar-schedule">
+                            <p:ajax event="dateSelect"
+                                    listener="#{calendarView.selectScheduleDate}"
+                                    process="@this"
+                                    update=":messages :eventDialogTitle :eventDialogContent"
+                                    oncomplete="showEventDialog();"
+                                    disabled="#{not calendarView.editable}"/>
+                            <p:ajax event="eventSelect"
+                                    listener="#{calendarView.selectScheduleEvent}"
+                                    process="@this"
+                                    update=":messages :eventDialogTitle :eventDialogContent"
+                                    oncomplete="showEventDialog();"/>
+                        </p:schedule>
                     </h:form>
-                </p:panel>
-            </div>
-            <p:confirmDialog global="true"
-                             closeOnEscape="true"
-                             closable="false"
-                             responsive="true"
-                             rendered="#{calendarView.editable}">
-                <p:commandButton value="Cancel"
-                                 type="button"
-                                 styleClass="ui-confirmdialog-no ui-button-secondary ui-button-outlined"/>
-                <p:commandButton value="Confirm"
-                                 type="button"
-                                 styleClass="ui-confirmdialog-yes ui-button-danger"/>
-            </p:confirmDialog>
+
+                    <h:panelGroup id="agendaPanel"
+                                  layout="block"
+                                  styleClass="calendar-agenda">
+                        <div class="calendar-agenda-header">
+                            <div>
+                                <h2 id="agenda-heading">Agenda</h2>
+                                <p>All events in date order.</p>
+                            </div>
+                            <span class="calendar-agenda-count">#{calendarView.events.size()}</span>
+                        </div>
+                        <h:form id="agendaForm"
+                                styleClass="calendar-agenda-list"
+                                rendered="#{not empty calendarView.events}">
+                            <ui:repeat value="#{calendarView.events}" var="event">
+                                <p:commandLink id="agendaEvent"
+                                               action="#{calendarView.selectEvent(event.id)}"
+                                               ajax="true"
+                                               process="@this"
+                                               update=":messages :eventDialogTitle :eventDialogContent"
+                                               oncomplete="showEventDialog();"
+                                               styleClass="calendar-agenda-event #{event.allDay ? 'calendar-agenda-event-all-day' : ''}"
+                                               pt:aria-label="Open #{event.title}, #{event.scheduleAndLocationLabel}">
+                                    <span class="calendar-agenda-date">#{event.dateLabel}</span>
+                                    <span class="calendar-agenda-copy">
+                                        <strong>#{event.title}</strong>
+                                        <span class="calendar-agenda-meta">#{event.scheduleAndLocationLabel}</span>
+                                        <h:outputText value="#{event.description}"
+                                                      styleClass="calendar-agenda-description"
+                                                      rendered="#{not empty event.description}"/>
+                                    </span>
+                                </p:commandLink>
+                            </ui:repeat>
+                        </h:form>
+                        <h:panelGroup layout="block"
+                                      styleClass="calendar-agenda-empty"
+                                      rendered="#{empty calendarView.events}">
+                            No events yet.
+                        </h:panelGroup>
+                    </h:panelGroup>
+            </section>
+
+            <p:dialog id="eventDialog"
+                      widgetVar="eventDialog"
+                      modal="true"
+                      responsive="true"
+                      closeOnEscape="true"
+                      appendTo="@(body)"
+                      styleClass="event-dialog"
+                      onShow="focusEventDialog();">
+                <f:facet name="header">
+                    <h:outputText id="eventDialogTitle"
+                                  value="#{calendarView.editable
+                                           ? (calendarView.editingEvent ? 'Edit event' : 'Create event')
+                                           : 'Event details'}"/>
+                </f:facet>
+                <h:panelGroup id="eventDialogContent"
+                              layout="block"
+                              styleClass="event-dialog-content">
+                    <h:panelGroup layout="block" rendered="#{calendarView.editable}">
+                        <h:form id="eventForm" styleClass="stacked-form event-form">
+                            <p:outputLabel for="eventTitle" value="Title"/>
+                            <p:inputText id="eventTitle"
+                                         value="#{calendarView.eventTitle}"
+                                         pt:maxlength="200"
+                                         required="true"
+                                         requiredMessage="Event title is required."/>
+
+                            <p:outputLabel for="eventLocation" value="Location (optional)"/>
+                            <p:inputText id="eventLocation"
+                                         value="#{calendarView.eventLocation}"
+                                         pt:maxlength="200"/>
+
+                            <div class="checkbox-field">
+                                <p:selectBooleanCheckbox id="allDay"
+                                                         value="#{calendarView.eventAllDaySelection}">
+                                    <p:ajax listener="#{calendarView.changeEventAllDayMode}"
+                                            process="eventScheduleFields @this"
+                                            update=":messages @this eventScheduleFields"
+                                            oncomplete="focusElementByIdSuffix('#{calendarView.eventAllDay ? 'eventFirstDay_input' : 'eventStart_input'}');"/>
+                                </p:selectBooleanCheckbox>
+                                <p:outputLabel for="allDay" value="All-day event"/>
+                            </div>
+
+                            <h:panelGroup id="eventScheduleFields" layout="block">
+                                <h:panelGroup layout="block"
+                                              styleClass="two-column-fields"
+                                              rendered="#{not calendarView.eventAllDay}">
+                                    <div class="field-stack">
+                                        <p:outputLabel for="eventStart" value="Starts"/>
+                                        <p:datePicker id="eventStart"
+                                                      value="#{calendarView.eventStartTime}"
+                                                      appendTo="@(body)"
+                                                      locale="en_GB"
+                                                      pattern="dd MMM yyyy, HH:mm"
+                                                      placeholder="31 Jul 2026, 18:00"
+                                                      showTime="true"
+                                                      timeInput="true"
+                                                      hourFormat="24"
+                                                      stepMinute="5"
+                                                      showIcon="true"
+                                                      showOnFocus="false"
+                                                      showOtherMonths="true"
+                                                      selectOtherMonths="true"
+                                                      monthNavigator="true"
+                                                      yearNavigator="dropdown"
+                                                      yearRange="c-5:c+10"
+                                                      focusOnSelect="true"
+                                                      panelStyleClass="event-date-picker-panel"
+                                                      inputStyleClass="event-date-input"
+                                                      autocomplete="off"
+                                                      required="true"
+                                                      requiredMessage="Event start time is required."/>
+                                    </div>
+                                    <div class="field-stack">
+                                        <p:outputLabel for="eventEnd" value="Ends"/>
+                                        <p:datePicker id="eventEnd"
+                                                      value="#{calendarView.eventEndTime}"
+                                                      appendTo="@(body)"
+                                                      locale="en_GB"
+                                                      pattern="dd MMM yyyy, HH:mm"
+                                                      placeholder="31 Jul 2026, 19:00"
+                                                      showTime="true"
+                                                      timeInput="true"
+                                                      hourFormat="24"
+                                                      stepMinute="5"
+                                                      showIcon="true"
+                                                      showOnFocus="false"
+                                                      showOtherMonths="true"
+                                                      selectOtherMonths="true"
+                                                      monthNavigator="true"
+                                                      yearNavigator="dropdown"
+                                                      yearRange="c-5:c+10"
+                                                      focusOnSelect="true"
+                                                      panelStyleClass="event-date-picker-panel"
+                                                      inputStyleClass="event-date-input"
+                                                      autocomplete="off"
+                                                      required="true"
+                                                      requiredMessage="Event end time is required."/>
+                                    </div>
+                                </h:panelGroup>
+
+                                <h:panelGroup layout="block"
+                                              styleClass="two-column-fields"
+                                              rendered="#{calendarView.eventAllDay}">
+                                    <div class="field-stack">
+                                        <p:outputLabel for="eventFirstDay" value="First day"/>
+                                        <p:datePicker id="eventFirstDay"
+                                                      value="#{calendarView.eventFirstDay}"
+                                                      appendTo="@(body)"
+                                                      locale="en_GB"
+                                                      pattern="dd MMM yyyy"
+                                                      placeholder="31 Jul 2026"
+                                                      showIcon="true"
+                                                      showOnFocus="false"
+                                                      showOtherMonths="true"
+                                                      selectOtherMonths="true"
+                                                      monthNavigator="true"
+                                                      yearNavigator="dropdown"
+                                                      yearRange="c-5:c+10"
+                                                      focusOnSelect="true"
+                                                      hideOnDateTimeSelect="true"
+                                                      panelStyleClass="event-date-picker-panel"
+                                                      inputStyleClass="event-date-input"
+                                                      autocomplete="off"
+                                                      required="true"
+                                                      requiredMessage="Event first day is required."/>
+                                    </div>
+                                    <div class="field-stack">
+                                        <p:outputLabel for="eventLastDay" value="Last day (inclusive)"/>
+                                        <p:datePicker id="eventLastDay"
+                                                      value="#{calendarView.eventLastDay}"
+                                                      appendTo="@(body)"
+                                                      locale="en_GB"
+                                                      pattern="dd MMM yyyy"
+                                                      placeholder="31 Jul 2026"
+                                                      showIcon="true"
+                                                      showOnFocus="false"
+                                                      showOtherMonths="true"
+                                                      selectOtherMonths="true"
+                                                      monthNavigator="true"
+                                                      yearNavigator="dropdown"
+                                                      yearRange="c-5:c+10"
+                                                      focusOnSelect="true"
+                                                      hideOnDateTimeSelect="true"
+                                                      panelStyleClass="event-date-picker-panel"
+                                                      inputStyleClass="event-date-input"
+                                                      autocomplete="off"
+                                                      required="true"
+                                                      requiredMessage="Event last day is required."/>
+                                    </div>
+                                </h:panelGroup>
+                            </h:panelGroup>
+
+                            <p:outputLabel for="eventDescription" value="Description (optional)"/>
+                            <p:inputTextarea id="eventDescription"
+                                             value="#{calendarView.eventDescription}"
+                                             pt:maxlength="4000"
+                                             rows="4"
+                                             autoResize="false"/>
+
+                            <div class="event-dialog-actions">
+                                <p:commandButton type="button"
+                                                 value="Cancel"
+                                                 onclick="PF('eventDialog').hide();"
+                                                 styleClass="ui-button-secondary ui-button-outlined"/>
+                                <p:commandButton value="Save changes"
+                                                 action="#{calendarView.updateEvent}"
+                                                 ajax="true"
+                                                 process="@form"
+                                                 update=":messages :agendaPanel :eventDialogTitle :eventDialogContent"
+                                                 oncomplete="completeEventMutation(args);"
+                                                 rendered="#{calendarView.editingEvent}"/>
+                                <p:commandButton value="Create event"
+                                                 action="#{calendarView.createEvent}"
+                                                 ajax="true"
+                                                 process="@form"
+                                                 update=":messages :agendaPanel :eventDialogTitle :eventDialogContent"
+                                                 oncomplete="completeEventMutation(args);"
+                                                 rendered="#{not calendarView.editingEvent}"/>
+                                <p:commandButton value="Delete event"
+                                                 action="#{calendarView.deleteEvent(
+                                                           calendarView.selectedEvent.id,
+                                                           calendarView.selectedEvent.version)}"
+                                                 ariaLabel="Delete #{calendarView.selectedEvent.title}"
+                                                 ajax="true"
+                                                 process="@this"
+                                                 update=":messages :agendaPanel :eventDialogTitle :eventDialogContent"
+                                                 oncomplete="completeEventMutation(args);"
+                                                 styleClass="ui-button-danger ui-button-outlined delete-event-button"
+                                                 rendered="#{calendarView.editingEvent}">
+                                    <p:confirm header="Delete event"
+                                               message="Delete this event permanently?"
+                                               yesButtonLabel="Delete event"
+                                               yesButtonClass="ui-button-danger"
+                                               noButtonLabel="Cancel"
+                                               noButtonClass="ui-button-secondary ui-button-outlined"
+                                               beforeShow="focusConfirmationCancelButton();"/>
+                                </p:commandButton>
+                            </div>
+                        </h:form>
+                    </h:panelGroup>
+
+                    <h:panelGroup layout="block"
+                                  styleClass="event-details"
+                                  rendered="#{not calendarView.editable and not empty calendarView.selectedEvent}">
+                        <h2>#{calendarView.selectedEvent.title}</h2>
+                        <p class="event-details-schedule">#{calendarView.selectedEvent.scheduleAndLocationLabel}</p>
+                        <h:panelGroup layout="block"
+                                      styleClass="description-text"
+                                      rendered="#{not empty calendarView.selectedEvent.description}">#{calendarView.selectedEvent.description}</h:panelGroup>
+                        <div class="event-dialog-actions">
+                            <p:commandButton type="button"
+                                             value="Close"
+                                             onclick="PF('eventDialog').hide();"
+                                             styleClass="ui-button-secondary"/>
+                        </div>
+                    </h:panelGroup>
+                </h:panelGroup>
+            </p:dialog>
+            <app:confirmation-dialog id="eventConfirmation" rendered="#{calendarView.editable}"/>
         </h:panelGroup>
 
         <h:panelGroup layout="block" styleClass="narrow-section not-found-state" rendered="#{not calendarView.available}">
@@ -262,7 +393,7 @@
             <p>This calendar link no longer works. It may have been regenerated, or public access may be disabled.</p>
             <p>Ask a calendar member for the current link.</p>
             <h:outputLink value="#{request.contextPath}/app/calendars"
-                          styleClass="button-link primary-link"
+                          styleClass="app-button app-button-primary"
                           rendered="#{currentUser.signedIn}">My calendars</h:outputLink>
         </h:panelGroup>
         </h:panelGroup>

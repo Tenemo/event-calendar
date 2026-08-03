@@ -24,7 +24,12 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
+import org.primefaces.PrimeFaces;
+import org.primefaces.event.SelectEvent;
+import org.primefaces.model.ScheduleEvent;
+import org.primefaces.model.ScheduleModel;
 
 @Named
 @ViewScoped
@@ -56,6 +61,9 @@ public class CalendarView implements Serializable {
     private boolean publicAccessEnabled;
     private boolean available;
     private List<CalendarEventItem> events = List.of();
+    private ScheduleModel scheduleModel = CalendarScheduleModelFactory.create(List.of());
+    private LocalDate scheduleInitialDate = LocalDate.now();
+    private CalendarEventItem selectedEvent;
     private final EventFormState eventForm = new EventFormState();
 
     public void load() {
@@ -127,6 +135,7 @@ public class CalendarView implements Serializable {
 
     public void createEvent() {
         ApplicationUser actingUser;
+        LocalDate eventDate;
         try {
             eventForm.applyAllDaySelection(timeZone);
             actingUser = currentUser.require();
@@ -139,15 +148,18 @@ public class CalendarView implements Serializable {
                     eventForm.toTimeInput(),
                     calendarVersion,
                     timeZone);
+            eventDate = selectedEventDate();
         } catch (AuthorizationException | ConflictException | NotFoundException | ValidationException exception) {
             FacesMessages.add(
                     FacesMessage.SEVERITY_ERROR, "Event could not be created.", exception.getMessage());
+            addEventOperationCallback(false, null);
             return;
         }
 
         resetEventForm();
         FacesMessages.add(FacesMessage.SEVERITY_INFO, "Event created.", "The event is now on the calendar.");
         reloadEventsAfterChange(actingUser);
+        addEventOperationCallback(true, eventDate);
     }
 
     public void selectEvent(Long eventId) {
@@ -155,15 +167,39 @@ public class CalendarView implements Serializable {
                 .filter(event -> event.getId().equals(eventId))
                 .findFirst()
                 .ifPresentOrElse(
-                        eventForm::select,
+                        event -> {
+                            selectedEvent = event;
+                            eventForm.select(event);
+                        },
                         () -> FacesMessages.add(
                                 FacesMessage.SEVERITY_ERROR,
                                 "Event could not be selected.",
                                 "The event is no longer available. Reload the page and try again."));
     }
 
+    public void selectScheduleEvent(SelectEvent<ScheduleEvent<?>> selectEvent) {
+        Object eventId = selectEvent.getObject().getData();
+        if (eventId instanceof Long selectedEventId) {
+            selectEvent(selectedEventId);
+            return;
+        }
+        FacesMessages.add(
+                FacesMessage.SEVERITY_ERROR,
+                "Event could not be selected.",
+                "The event is no longer available. Reload the page and try again.");
+    }
+
+    public void selectScheduleDate(SelectEvent<LocalDateTime> selectEvent) {
+        if (!isEditable()) {
+            return;
+        }
+        selectedEvent = null;
+        eventForm.resetForCalendarSelection(selectEvent.getObject(), timeZone);
+    }
+
     public void updateEvent() {
         ApplicationUser actingUser;
+        LocalDate eventDate;
         try {
             if (eventForm.getSelectedEventId() == null || eventForm.getSelectedEventVersion() == null) {
                 throw new ValidationException("Select an event to edit.");
@@ -180,15 +216,18 @@ public class CalendarView implements Serializable {
                     eventForm.toTimeInput(),
                     calendarVersion,
                     timeZone);
+            eventDate = selectedEventDate();
         } catch (AuthorizationException | ConflictException | NotFoundException | ValidationException exception) {
             FacesMessages.add(
                     FacesMessage.SEVERITY_ERROR, "Event could not be updated.", exception.getMessage());
+            addEventOperationCallback(false, null);
             return;
         }
 
         resetEventForm();
         FacesMessages.add(FacesMessage.SEVERITY_INFO, "Event updated.", "Your changes were saved.");
         reloadEventsAfterChange(actingUser);
+        addEventOperationCallback(true, eventDate);
     }
 
     public void deleteEvent(Long eventId, Integer eventVersion) {
@@ -199,17 +238,18 @@ public class CalendarView implements Serializable {
         } catch (AuthorizationException | ConflictException | NotFoundException exception) {
             FacesMessages.add(
                     FacesMessage.SEVERITY_ERROR, "Event could not be deleted.", exception.getMessage());
+            addEventOperationCallback(false, null);
             return;
         }
 
-        if (eventId != null && eventId.equals(eventForm.getSelectedEventId())) {
-            resetEventForm();
-        }
+        resetEventForm();
         FacesMessages.add(FacesMessage.SEVERITY_INFO, "Event deleted.", "The event was removed.");
         reloadEventsAfterChange(actingUser);
+        addEventOperationCallback(true, null);
     }
 
     public void resetEventForm() {
+        selectedEvent = null;
         eventForm.reset(timeZone);
     }
 
@@ -224,6 +264,9 @@ public class CalendarView implements Serializable {
         events = loadedEvents.stream()
                 .map(event -> CalendarEventItem.from(event, timeZone, calendarTimeService))
                 .toList();
+        scheduleModel = CalendarScheduleModelFactory.create(events);
+        scheduleInitialDate = CalendarScheduleModelFactory.findInitialDate(
+                events, LocalDate.now(ZoneId.of(timeZone)));
     }
 
     private void reloadEventsAfterChange(ApplicationUser actingUser) {
@@ -246,6 +289,19 @@ public class CalendarView implements Serializable {
         }
     }
 
+    private LocalDate selectedEventDate() {
+        return eventForm.isAllDay()
+                ? eventForm.getFirstDay()
+                : eventForm.getStartTime().toLocalDate();
+    }
+
+    private void addEventOperationCallback(boolean operationSucceeded, LocalDate eventDate) {
+        PrimeFaces.current().ajax().addCallbackParam("operationSucceeded", operationSucceeded);
+        if (eventDate != null) {
+            PrimeFaces.current().ajax().addCallbackParam("eventDate", eventDate.toString());
+        }
+    }
+
     public Long getCalendarId() { return calendarId; }
     public String getCalendarName() { return calendarName; }
     public String getCalendarDescription() { return calendarDescription; }
@@ -256,6 +312,9 @@ public class CalendarView implements Serializable {
     public boolean isEditable() { return role != null; }
     public boolean isAdmin() { return role == CalendarRole.ADMIN; }
     public List<CalendarEventItem> getEvents() { return events; }
+    public ScheduleModel getScheduleModel() { return scheduleModel; }
+    public LocalDate getScheduleInitialDate() { return scheduleInitialDate; }
+    public CalendarEventItem getSelectedEvent() { return selectedEvent; }
     public boolean isEditingEvent() { return eventForm.isEditing(); }
     public String getEventTitle() { return eventForm.getTitle(); }
     public void setEventTitle(String eventTitle) { eventForm.setTitle(eventTitle); }

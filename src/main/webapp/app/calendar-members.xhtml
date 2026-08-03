@@ -1,4 +1,5 @@
 <ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:app="jakarta.faces.composite/app-components"
                 xmlns:f="jakarta.faces.core"
                 xmlns:h="jakarta.faces.html"
                 xmlns:ui="jakarta.faces.facelets"
@@ -9,26 +10,32 @@
         <f:viewAction action="#{calendarMembersView.load}" onPostback="false"/>
     </f:metadata>
 
-    <ui:define name="title">Members - Shared calendar</ui:define>
+    <ui:define name="title">Members - calendar.social</ui:define>
 
     <ui:define name="content">
         <h:panelGroup id="membersPage" layout="block">
         <h:panelGroup id="membersContent" layout="block" styleClass="page-section" rendered="#{calendarMembersView.available}">
-            <div class="section-header compact-heading">
-                <div>
-                    <p class="eyebrow">#{calendarMembersView.calendarName}</p>
-                    <h1 id="membersHeading" tabindex="-1">Members</h1>
-                    <p class="lead-text">Manage calendar-specific roles and access.</p>
-                </div>
-                <div class="action-row compact-actions">
-                    <h:outputLink value="#{request.contextPath}/app/invitations" styleClass="button-link primary-link">Create editor invitation</h:outputLink>
-                    <h:outputLink value="#{request.contextPath}/#{calendarMembersView.calendarLinkToken}"
-                                  styleClass="button-link secondary-link">Back to calendar</h:outputLink>
-                </div>
-            </div>
+            <app:page-header id="calendarMembersHeader"
+                             title="Members"
+                             eyebrow="#{calendarMembersView.calendarName}"
+                             description="Manage calendar-specific roles and access."
+                             compact="true"
+                             focusable="true"
+                             focusIdentifier="membersHeading">
+                <f:facet name="actions">
+                    <h:panelGroup layout="block" styleClass="page-header-action-group">
+                        <h:outputLink value="#{request.contextPath}/app/invitations"
+                                      styleClass="app-button app-button-primary">Create editor invitation</h:outputLink>
+                        <h:outputLink value="#{request.contextPath}/#{calendarMembersView.calendarLinkToken}"
+                                      styleClass="app-button app-button-secondary">Back to calendar</h:outputLink>
+                    </h:panelGroup>
+                </f:facet>
+            </app:page-header>
 
-            <h:panelGroup layout="block" styleClass="empty-state"
-                          rendered="#{empty calendarMembersView.members}">No members are available.</h:panelGroup>
+            <app:empty-state id="emptyMemberList"
+                             title="No members are available"
+                             description="Members with access to this calendar will appear here."
+                             rendered="#{empty calendarMembersView.members}"/>
             <p:dataList id="memberList"
                         value="#{calendarMembersView.members}"
                         var="member"
@@ -80,14 +87,7 @@
                         </h:form>
                     </article>
             </p:dataList>
-            <p:confirmDialog global="true" closeOnEscape="true" closable="false" responsive="true">
-                <p:commandButton value="Cancel"
-                                 type="button"
-                                 styleClass="ui-confirmdialog-no ui-button-secondary ui-button-outlined"/>
-                <p:commandButton value="Confirm"
-                                 type="button"
-                                 styleClass="ui-confirmdialog-yes ui-button-danger"/>
-            </p:confirmDialog>
+            <app:confirmation-dialog id="memberConfirmation"/>
         </h:panelGroup>
 
         <h:panelGroup layout="block" styleClass="narrow-section not-found-state" rendered="#{not calendarMembersView.available}">

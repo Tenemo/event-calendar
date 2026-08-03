@@ -12,6 +12,7 @@ import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.Response;
+import com.microsoft.playwright.options.BoundingBox;
 import com.microsoft.playwright.options.Cookie;
 import com.microsoft.playwright.options.SameSiteAttribute;
 import java.net.URI;
@@ -46,11 +47,52 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             page.setViewportSize(320, 720);
             Response homeResponse = navigate(page, "/");
             assertEquals(200, homeResponse.status());
+            assertThat(page).hasTitle("calendar.social");
+            assertThat(page.locator(".app-brand span")).hasText("calendar.social");
+            assertFalse(
+                    page.locator(".app-header")
+                            .innerText()
+                            .contains("Events for friends, clubs, and group plans."),
+                    "The shared header should not display a subtitle.");
+            Locator brandMark = page.locator(".app-brand-mark");
+            assertThat(brandMark).isVisible();
+            assertTrue(
+                    Boolean.TRUE.equals(brandMark.evaluate(
+                            "image => image.complete && image.naturalWidth > 0 "
+                                    + "&& image.naturalHeight > 0")),
+                    "The calendar mark should load successfully.");
             assertThat(page.locator("h1")).hasText("Shared event calendars for real plans");
+            Locator homePreviewDates = page.locator(".home-preview-date");
+            assertEquals(3, homePreviewDates.count(), "The homepage should show three example dates.");
+            for (Locator homePreviewDate : homePreviewDates.all()) {
+                assertTrue(
+                        Boolean.TRUE.equals(homePreviewDate.evaluate(
+                                "tile => {"
+                                        + "const children = tile.children;"
+                                        + "if (getComputedStyle(tile).display !== 'flex' "
+                                        + "|| children.length !== 2) return false;"
+                                        + "const tileBounds = tile.getBoundingClientRect();"
+                                        + "const firstLineBounds = children[0].getBoundingClientRect();"
+                                        + "const lastLineBounds = children[1].getBoundingClientRect();"
+                                        + "const topSpace = firstLineBounds.top - tileBounds.top;"
+                                        + "const bottomSpace = tileBounds.bottom - lastLineBounds.bottom;"
+                                        + "return Math.abs(topSpace - bottomSpace) <= 1;"
+                                        + "}")),
+                        "Each example date should be vertically centered inside its tile.");
+            }
             assertSecurityHeaders(homeResponse);
+            assertEquals(
+                    "dark",
+                    page.evaluate("() => getComputedStyle(document.documentElement).colorScheme"));
+            assertEquals(
+                    page.evaluate(
+                            "() => getComputedStyle(document.documentElement).backgroundColor"),
+                    page.evaluate("() => getComputedStyle(document.body).backgroundColor"),
+                    "The body background should resolve to the canvas token.");
             assertFalse(Boolean.TRUE.equals(page.evaluate(
                     "() => document.documentElement.scrollWidth "
                             + "> document.documentElement.clientWidth")));
+            assertMobileNavigationTargets(page);
             assertAccessible(page);
 
             page.keyboard().press("Tab");
@@ -58,7 +100,19 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             page.keyboard().press("Enter");
             assertEquals("main-content", page.evaluate("document.activeElement.id"));
 
+            page.setViewportSize(1920, 900);
+            assertHeaderUsesViewportWidth(page);
+
             navigate(page, "/sign-in");
+            assertThat(page).hasTitle("Sign in - calendar.social");
+            Locator usernameField = page.locator("input[id$='username']");
+            Locator passwordField = page.locator("input[id$='password']");
+            Locator signInButton = page.locator("input[type='submit'][value='Sign in']");
+            assertThat(usernameField).isFocused();
+            page.keyboard().press("Tab");
+            assertThat(passwordField).isFocused();
+            page.keyboard().press("Tab");
+            assertThat(signInButton).isFocused();
             assertAccessible(page);
             navigate(page, "/app/calendars");
             page.waitForURL("**/sign-in");
@@ -119,10 +173,12 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
         try (BrowserContext inviterContext = newBrowserContext()) {
             Page inviterPage = inviterContext.newPage();
             navigate(inviterPage, "/sign-in");
+            assertThat(inviterPage.locator("input[id$='username']")).isFocused();
             inviterPage.locator("input[id$='username']").fill(inviterUsername);
             inviterPage.locator("input[id$='password']").fill("definitely wrong");
             inviterPage.locator("input[type='submit'][value='Sign in']").click();
             assertThat(inviterPage.locator("body")).containsText("Sign-in failed.");
+            assertThat(inviterPage.locator("input[id$='password']")).isFocused();
             Locator signInMessages = inviterPage.locator("[id$='messages']");
             assertThat(signInMessages).hasAttribute("role", "alert");
             assertThat(signInMessages).hasAttribute("aria-live", "assertive");
@@ -136,7 +192,7 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             assertAccessible(inviterPage);
 
             inviterPage.locator("input[id$='password']").fill(TEST_PASSWORD);
-            inviterPage.locator("input[type='submit'][value='Sign in']").click();
+            inviterPage.locator("input[id$='password']").press("Enter");
             inviterPage.waitForURL("**/app/calendars");
             Cookie authenticationCookie = inviterContext.cookies(route("/")).stream()
                     .filter(cookie -> "LtpaToken2".equals(cookie.name))
@@ -145,6 +201,66 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             assertTrue(Boolean.TRUE.equals(authenticationCookie.secure));
             assertTrue(Boolean.TRUE.equals(authenticationCookie.httpOnly));
             assertEquals(SameSiteAttribute.LAX, authenticationCookie.sameSite);
+
+            assertUnifiedButtonGeometry(inviterPage);
+
+            Locator calendarCard = inviterPage.locator("article.calendar-card").filter(
+                    new Locator.FilterOptions().setHasText("Invitation calendar " + suffix));
+            Locator calendarCardLink = calendarCard.locator(".calendar-card-link");
+            String calendarPath = URI.create(calendarCardLink.getAttribute("href")).getPath();
+            BoundingBox restingCalendarCardBounds = calendarCard.boundingBox();
+            String restingCalendarCardBackground = computedStyle(calendarCard, "backgroundColor");
+            String restingCalendarCardBorder = computedStyle(calendarCard, "borderColor");
+            calendarCard.hover();
+            waitForElementAnimations(calendarCard);
+            BoundingBox highlightedCalendarCardBounds = calendarCard.boundingBox();
+            assertFalse(
+                    restingCalendarCardBackground.equals(
+                            computedStyle(calendarCard, "backgroundColor")),
+                    "Hovering a clickable calendar card should highlight its background.");
+            assertFalse(
+                    restingCalendarCardBorder.equals(computedStyle(calendarCard, "borderColor")),
+                    "Hovering a clickable calendar card should highlight its border.");
+            assertEquals(
+                    restingCalendarCardBounds.y,
+                    highlightedCalendarCardBounds.y,
+                    0.01,
+                    "Hovering a calendar card should not move it.");
+            assertEquals(
+                    "none",
+                    computedStyle(calendarCard, "transform"),
+                    "Hovering a calendar card should not move it.");
+            assertEquals(
+                    "pointer",
+                    computedStyle(calendarCard, "cursor"),
+                    "A clickable calendar card should use the pointer cursor.");
+            calendarCardLink.focus();
+            assertThat(calendarCardLink).isFocused();
+            assertEquals(
+                    highlightedCalendarCardBounds.y,
+                    calendarCard.boundingBox().y,
+                    0.01,
+                    "Keyboard focus should not move a calendar card.");
+
+            inviterPage.mouse().click(
+                    highlightedCalendarCardBounds.x + highlightedCalendarCardBounds.width / 2,
+                    highlightedCalendarCardBounds.y + highlightedCalendarCardBounds.height / 2);
+            inviterPage.waitForURL(url -> URI.create(url).getPath().equals(calendarPath));
+            assertThat(inviterPage.locator("h1"))
+                    .hasText("Invitation calendar " + suffix);
+
+            navigate(inviterPage, "/app/calendars");
+            Locator calendarSettingsLink = inviterPage
+                    .locator("article.calendar-card")
+                    .filter(new Locator.FilterOptions()
+                            .setHasText("Invitation calendar " + suffix))
+                    .locator("a[aria-label='Open settings for Invitation calendar "
+                            + suffix
+                            + "']");
+            calendarSettingsLink.click();
+            inviterPage.waitForURL("**/app/calendar-settings?id=*");
+            assertThat(inviterPage.locator("h1")).hasText("Settings");
+            navigate(inviterPage, "/app/calendars");
 
             String invitationLink = createRegistrationInvitation(inviterPage);
             assertThat(inviterPage.locator("body")).containsText("Registration invitation");
@@ -161,6 +277,7 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
                     BrowserContext secondRegisteredContext = newBrowserContext()) {
                 Page registeredPage = registeredContext.newPage();
                 navigateBearerLink(registeredPage, invitationLink);
+                assertThat(registeredPage.locator("input[id$='username']")).isFocused();
                 assertAccessible(registeredPage);
                 fillRegistration(
                         registeredPage,
@@ -198,6 +315,7 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
 
                 Response accountSettingsResponse = navigate(registeredPage, "/app/account-settings");
                 assertSecurityHeaders(accountSettingsResponse);
+                assertThat(registeredPage.locator("input[id$='currentPassword']")).isFocused();
                 assertResponsiveAndAccessible(registeredPage, 768, 900);
                 registeredPage.locator("input[id$='currentPassword']").fill(TEST_PASSWORD);
                 registeredPage.locator("input[id$='newPassword']").fill(changedPassword);
@@ -249,40 +367,176 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             String originalCalendarLinkToken =
                     queryText("select calendar_link_token from calendar where id = ?", calendarId);
             navigate(ownerPage, "/" + originalCalendarLinkToken);
+            assertThat(ownerPage.locator(".calendar-schedule.fc")).isVisible();
+            Locator previousMonthButton = ownerPage.locator(".fc-prev-button");
+            Locator nextMonthButton = ownerPage.locator(".fc-next-button");
+            assertThat(previousMonthButton).hasText("Previous");
+            assertThat(nextMonthButton).hasText("Next");
+            assertCalendarNavigationIcons(previousMonthButton, nextMonthButton);
+            assertThat(ownerPage.locator(".fc-dayGridMonth-button")).hasText("Month");
+            assertThat(ownerPage.locator(".fc-timeGridWeek-button")).hasText("Week");
+            assertEquals(
+                    0,
+                    ownerPage.locator(".fc-listMonth-button").count(),
+                    "Agenda should be a permanent sidebar, not a calendar view button.");
+            Locator agenda = ownerPage.locator(".calendar-agenda");
+            Locator calendarSidebar = ownerPage.locator(".calendar-sidebar");
+            assertThat(agenda).isVisible();
+            assertThat(agenda.locator("h2")).hasText("Agenda");
+            assertThat(agenda).containsText("No events yet.");
+            assertThat(calendarSidebar).isVisible();
+            assertThat(calendarSidebar.locator("h1")).hasText(createdCalendarName);
+            assertThat(calendarSidebar).containsText("Times use Europe/Warsaw.");
+            BoundingBox desktopScheduleBounds = ownerPage.locator(".calendar-schedule").boundingBox();
+            BoundingBox desktopAgendaBounds = agenda.boundingBox();
+            BoundingBox desktopSidebarBounds = calendarSidebar.boundingBox();
+            assertTrue(
+                    desktopSidebarBounds != null
+                            && desktopScheduleBounds != null
+                            && desktopAgendaBounds != null,
+                    "The desktop sidebars and calendar should have visible bounds.");
+            assertTrue(
+                    desktopSidebarBounds.x + desktopSidebarBounds.width < desktopScheduleBounds.x,
+                    "The calendar information should remain beside and left of the calendar on desktop.");
+            assertTrue(
+                    desktopAgendaBounds.x > desktopScheduleBounds.x + desktopScheduleBounds.width,
+                    "The agenda should remain beside the calendar on desktop.");
             assertResponsiveAndAccessible(ownerPage, 320, 900);
+            assertMobileNavigationTargets(ownerPage);
+            BoundingBox phoneScheduleBounds = ownerPage.locator(".calendar-schedule").boundingBox();
+            BoundingBox phoneAgendaBounds = agenda.boundingBox();
+            BoundingBox phoneSidebarBounds = calendarSidebar.boundingBox();
+            assertTrue(
+                    phoneSidebarBounds != null
+                            && phoneScheduleBounds != null
+                            && phoneAgendaBounds != null,
+                    "The phone calendar information, calendar, and agenda should have visible bounds.");
+            assertTrue(
+                    phoneScheduleBounds.y >= phoneSidebarBounds.y + phoneSidebarBounds.height,
+                    "The calendar information should precede the calendar on a phone.");
+            assertTrue(
+                    phoneAgendaBounds.y >= phoneScheduleBounds.y + phoneScheduleBounds.height,
+                    "The permanent agenda should follow the calendar on a phone.");
+            ownerPage.setViewportSize(1280, 900);
+            ownerPage.locator(".fc-dayGridMonth-button").click();
 
-            ownerPage.locator("button:has-text('Create event')").click();
+            ownerPage.locator("button:has-text('New event')").click();
+            assertThat(ownerPage.locator(".event-dialog .ui-dialog-title"))
+                    .hasText("Create event");
+            assertThat(ownerPage.locator("input[id$='eventTitle']")).isFocused();
+            ownerPage.locator(".event-dialog button:has-text('Create event')").click();
             assertThat(ownerPage.locator("body")).containsText("Event title is required.");
             ownerPage.waitForFunction(
-                    "() => document.activeElement && document.activeElement.id.endsWith('messages')");
+                    "() => document.activeElement && document.activeElement.id.endsWith('eventTitle')");
+
+            Locator startDatePickerButton =
+                    ownerPage.locator("span[id$='eventStart'] .ui-datepicker-trigger");
+            startDatePickerButton.click();
+            Locator visibleDatePicker = ownerPage.locator(".event-date-picker-panel:visible");
+            assertThat(visibleDatePicker).isVisible();
+            BoundingBox datePickerBounds = visibleDatePicker.boundingBox();
+            assertTrue(datePickerBounds != null, "The date picker should have visible bounds.");
+            assertTrue(
+                    datePickerBounds.width <= 320,
+                    () -> "The date picker should remain compact, but was "
+                            + datePickerBounds.width
+                            + "px wide.");
+            assertTrue(
+                    datePickerBounds.height <= 420,
+                    () -> "The date picker should remain compact, but was "
+                            + datePickerBounds.height
+                            + "px tall.");
+            assertEquals(
+                    2,
+                    visibleDatePicker.locator(".ui-timepicker-timeinput input").count(),
+                    "Timed date pickers should expose typed hour and minute controls.");
+            assertEquals(
+                    0,
+                    visibleDatePicker
+                            .locator(".ui-picker-up:visible, .ui-picker-down:visible")
+                            .count(),
+                    "Typed time controls should not retain the old spinner arrows.");
+            ownerPage.keyboard().press("Escape");
+            ownerPage.keyboard().press("Escape");
+            assertThat(ownerPage.locator(".event-dialog")).isHidden();
+            ownerPage.locator("button:has-text('New event')").click();
+            assertThat(ownerPage.locator("input[id$='eventTitle']")).isFocused();
 
             createTimedEvent(
                     ownerPage,
                     eventTitle,
                     "River bank",
-                    "2026-08-22 10:00",
-                    "2026-08-22 13:00");
+                    "22 Aug 2026, 10:00",
+                    "22 Aug 2026, 13:00");
 
-            Locator eventCard = ownerPage.locator("article.event-item").filter(
+            Locator agendaEvent = ownerPage.locator(".calendar-agenda-event").filter(
                     new Locator.FilterOptions().setHasText(eventTitle));
-            eventCard.locator("button:has-text('Edit')").click();
-            assertThat(ownerPage.locator("button:has-text('Save changes')")).isVisible();
+            assertThat(agendaEvent).isVisible();
+            assertEquals(
+                    "pointer",
+                    computedStyle(agendaEvent, "cursor"),
+                    "The full agenda card should be clickable.");
+            agendaEvent.click();
+            assertThat(ownerPage.locator(".event-dialog .ui-dialog-title"))
+                    .hasText("Edit event");
+            assertThat(ownerPage.locator("input[id$='eventTitle']")).isFocused();
+            ownerPage.locator(".event-dialog .ui-dialog-titlebar-close").click();
+
+            Locator calendarEvent = ownerPage.locator(".calendar-schedule .fc-event").filter(
+                    new Locator.FilterOptions().setHasText(eventTitle));
+            assertEquals(
+                    "pointer",
+                    computedStyle(calendarEvent, "cursor"),
+                    "The full calendar event should be clickable.");
+            calendarEvent.scrollIntoViewIfNeeded();
+            BoundingBox restingEventBounds = calendarEvent.boundingBox();
+            assertTrue(restingEventBounds != null, "The calendar event should have visible bounds.");
+            calendarEvent.hover();
+            waitForElementAnimations(calendarEvent);
+            BoundingBox highlightedEventBounds = calendarEvent.boundingBox();
+            assertTrue(
+                    highlightedEventBounds != null,
+                    "The highlighted calendar event should have visible bounds.");
+            assertEquals(
+                    restingEventBounds.y,
+                    highlightedEventBounds.y,
+                    0.1,
+                    "Hovering a calendar event should not move it.");
+            calendarEvent.click();
+            assertThat(ownerPage.locator(".event-dialog .ui-dialog-title"))
+                    .hasText("Edit event");
+            assertThat(ownerPage.locator("input[id$='eventTitle']")).isFocused();
+            assertThat(ownerPage.locator(".event-dialog button:has-text('Save changes')"))
+                    .isVisible();
             String updatedEventTitle = eventTitle + " updated";
             ownerPage.locator("input[id$='eventTitle']").fill(updatedEventTitle);
-            ownerPage.locator("button:has-text('Save changes')").click();
+            ownerPage.locator(".event-dialog button:has-text('Save changes')").click();
             assertThat(ownerPage.locator("body")).containsText("Event updated.");
-            assertThat(ownerPage.locator("article.event-item").filter(
+            assertThat(ownerPage.locator(".calendar-schedule .fc-event").filter(
+                             new Locator.FilterOptions().setHasText(updatedEventTitle)))
+                    .isVisible();
+            assertThat(ownerPage.locator(".calendar-agenda-event").filter(
                             new Locator.FilterOptions().setHasText(updatedEventTitle)))
                     .isVisible();
 
-            ownerPage.locator(".event-editor .ui-chkbox-box").click();
+            ownerPage.locator("button:has-text('New event')").click();
+            ownerPage.locator(".event-dialog .ui-chkbox-box").click();
             ownerPage.locator("input[id$='eventTitle']").fill(allDayEventTitle);
-            ownerPage.locator("input[id$='eventFirstDay_input']").fill("2026-08-23");
-            ownerPage.locator("input[id$='eventLastDay_input']").fill("2026-08-24");
-            ownerPage.locator("button:has-text('Create event')").click();
-            assertThat(ownerPage.locator("article.event-item").filter(
+            ownerPage.locator("input[id$='eventFirstDay_input']").fill("23 Aug 2026");
+            ownerPage.locator("input[id$='eventLastDay_input']").fill("24 Aug 2026");
+            ownerPage.locator("textarea[id$='eventDescription']").click();
+            ownerPage.locator(".event-dialog button:has-text('Create event')").click();
+            assertThat(ownerPage.locator(".calendar-schedule .calendar-event-all-day").filter(
+                             new Locator.FilterOptions().setHasText(allDayEventTitle))
+                    .first())
+                    .isVisible();
+            assertThat(ownerPage.locator(".calendar-agenda-event-all-day").filter(
                             new Locator.FilterOptions().setHasText(allDayEventTitle)))
-                    .containsText("All day from Sun, Aug 23, 2026 to Mon, Aug 24, 2026");
+                    .isVisible();
+            ownerPage.locator(".fc-timeGridWeek-button").click();
+            assertThat(ownerPage.locator(".fc-timeGridWeek-view")).isVisible();
+            ownerPage.locator(".fc-dayGridMonth-button").click();
+            assertThat(ownerPage.locator(".fc-dayGridMonth-view")).isVisible();
             String originalAllDayStart = queryText(
                     "select start_at::text from calendar_event where calendar_id = ? and title = ?",
                     calendarId,
@@ -294,9 +548,20 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             assertEquals("noindex, nofollow", publicResponse.headerValue("x-robots-tag"));
             assertThat(readerPage.locator("body")).containsText(updatedEventTitle);
             assertThat(readerPage.locator("body")).containsText("Read-only");
-            assertEquals(0, readerPage.locator("button:has-text('Create event')").count());
+            assertThat(readerPage.locator(".calendar-schedule.fc")).isVisible();
+            assertThat(readerPage.locator(".calendar-agenda")).isVisible();
+            assertEquals(0, readerPage.locator("button:has-text('New event')").count());
+            readerPage.locator(".calendar-schedule .fc-event").filter(
+                            new Locator.FilterOptions().setHasText(updatedEventTitle))
+                    .click();
+            assertThat(readerPage.locator(".event-dialog .ui-dialog-title"))
+                    .hasText("Event details");
+            assertThat(readerPage.locator(".event-details h2")).hasText(updatedEventTitle);
+            assertThat(readerPage.locator(".event-details")).containsText("River bank");
+            readerPage.locator(".event-dialog .ui-dialog-titlebar-close").click();
 
             navigate(ownerPage, "/app/calendar-settings?id=" + calendarId);
+            assertThat(ownerPage.locator("input[id$='calendarName']")).isFocused();
             assertThat(ownerPage.locator(".app-nav a[aria-current='page']")).hasText("My calendars");
             assertResponsiveAndAccessible(ownerPage, 768, 900);
             Page staleOwnerPage = staleOwnerContext.newPage();
@@ -338,9 +603,15 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             assertEquals(200, readerPage.reload().status());
 
             navigate(ownerPage, "/" + originalCalendarLinkToken);
-            assertThat(ownerPage.locator("article.event-item").filter(
-                            new Locator.FilterOptions().setHasText(allDayEventTitle)))
-                    .containsText("All day from Sun, Aug 23, 2026 to Mon, Aug 24, 2026");
+            ownerPage.locator(".calendar-schedule .fc-event").filter(
+                            new Locator.FilterOptions().setHasText(allDayEventTitle))
+                    .first()
+                    .click();
+            assertThat(ownerPage.locator("input[id$='eventFirstDay_input']"))
+                    .hasValue("23 Aug 2026");
+            assertThat(ownerPage.locator("input[id$='eventLastDay_input']"))
+                    .hasValue("24 Aug 2026");
+            ownerPage.locator(".event-dialog .ui-dialog-titlebar-close").click();
             String originalLink = ownerPage.url();
             ownerPage.locator("button:has-text('Regenerate link')").click();
             assertThat(ownerPage.locator(".ui-confirmdialog-no")).isFocused();
@@ -420,7 +691,8 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
                             .filter(result -> "/register".equals(result.resultingPath())
                                     && result.pageText().contains("Invitation could not be accepted."))
                             .count(),
-                    "The request that loses the invitation race should receive a clear rejection.");
+                    "The request that loses the invitation race should receive a clear rejection. Results: "
+                            + acceptanceResults);
 
             String editorUsername = acceptanceResults.stream()
                     .filter(result -> acceptedCalendarPath.equals(result.resultingPath()))
@@ -602,14 +874,154 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             if (!submitForms.await(30, TimeUnit.SECONDS)) {
                 throw new IllegalStateException("Concurrent registration was not released.");
             }
-            page.locator("button:has-text('Register')")
-                    .click(new Locator.ClickOptions().setTimeout(Duration.ofSeconds(60).toMillis()));
-            page.waitForLoadState();
+            Locator registerButton = page.locator("button:has-text('Register')");
+            registerButton.click(
+                    new Locator.ClickOptions().setTimeout(Duration.ofSeconds(60).toMillis()));
+            page.locator("h1:has-text('My calendars')")
+                    .or(page.locator(".ui-messages-error"))
+                    .waitFor(new Locator.WaitForOptions()
+                            .setTimeout(Duration.ofSeconds(60).toMillis()));
             return URI.create(page.url()).getPath();
         } catch (Exception exception) {
             throw new IllegalStateException(
                     "A concurrent disposable registration request failed.",
                     exception);
+        }
+    }
+
+    private static String computedStyle(Locator element, String propertyName) {
+        return (String) element.evaluate(
+                "(element, propertyName) => getComputedStyle(element)[propertyName]",
+                propertyName);
+    }
+
+    private static void assertHeaderUsesViewportWidth(Page page) {
+        BoundingBox brandBounds = page.locator(".app-brand").boundingBox();
+        BoundingBox navigationBounds = page.locator(".app-nav").boundingBox();
+        Number viewportWidth = (Number) page.evaluate("window.innerWidth");
+        assertTrue(
+                brandBounds != null && navigationBounds != null,
+                "The header brand and navigation should have visible bounds.");
+        assertTrue(
+                brandBounds.x <= 48,
+                () -> "The header brand should use the viewport width, but its left edge was "
+                        + brandBounds.x
+                        + "px from the viewport edge.");
+        double navigationRightGap =
+                viewportWidth.doubleValue() - navigationBounds.x - navigationBounds.width;
+        assertTrue(
+                navigationRightGap <= 48,
+                () -> "The header navigation should use the viewport width, but its right edge was "
+                        + navigationRightGap
+                        + "px from the viewport edge.");
+    }
+
+    private static void assertCalendarNavigationIcons(
+            Locator previousMonthButton, Locator nextMonthButton) {
+        assertTrue(
+                Boolean.TRUE.equals(previousMonthButton.evaluate(
+                        """
+                        button => {
+                            const iconStyles = getComputedStyle(button, "::before");
+                            return iconStyles.content === '\"\"'
+                                    && Number.parseFloat(iconStyles.width) >= 8
+                                    && Number.parseFloat(iconStyles.height) >= 8
+                                    && Number.parseFloat(iconStyles.borderRightWidth) >= 2
+                                    && iconStyles.transform !== "none";
+                        }
+                        """)),
+                "The previous-month button should have a visible leading arrow icon.");
+        assertTrue(
+                Boolean.TRUE.equals(nextMonthButton.evaluate(
+                        """
+                        button => {
+                            const iconStyles = getComputedStyle(button, "::after");
+                            return iconStyles.content === '\"\"'
+                                    && Number.parseFloat(iconStyles.width) >= 8
+                                    && Number.parseFloat(iconStyles.height) >= 8
+                                    && Number.parseFloat(iconStyles.borderRightWidth) >= 2
+                                    && iconStyles.transform !== "none";
+                        }
+                        """)),
+                "The next-month button should have a visible trailing arrow icon.");
+        assertFalse(
+                previousMonthButton
+                        .evaluate("button => getComputedStyle(button, '::before').transform")
+                        .equals(nextMonthButton.evaluate(
+                                "button => getComputedStyle(button, '::after').transform")),
+                "The previous- and next-month arrows should point in opposite directions.");
+    }
+
+    private static void assertUnifiedButtonGeometry(Page page) {
+        String mismatchSummary = (String) page.evaluate(
+                """
+                () => {
+                    const renderedButtons = Array.from(document.querySelectorAll(
+                            ".app-button, .ui-button:not(.ui-datepicker-trigger)"))
+                            .filter(button => button.getClientRects().length > 0);
+                    if (renderedButtons.length < 4) {
+                        return `Expected at least four rendered buttons, found ${renderedButtons.length}.`;
+                    }
+
+                    const referenceStyles = getComputedStyle(renderedButtons[0]);
+                    const expectedHeight = Number.parseFloat(referenceStyles.minHeight);
+                    const sharedProperties = [
+                        "borderRadius",
+                        "borderWidth",
+                        "fontFamily",
+                        "fontSize",
+                        "fontWeight",
+                        "lineHeight",
+                        "paddingLeft",
+                        "paddingRight"
+                    ];
+                    const mismatches = [];
+
+                    for (const button of renderedButtons) {
+                        const buttonStyles = getComputedStyle(button);
+                        const buttonLabel = button.value
+                                || button.textContent.trim()
+                                || button.getAttribute("aria-label")
+                                || button.tagName;
+                        const buttonHeight = button.getBoundingClientRect().height;
+                        if (Math.abs(buttonHeight - expectedHeight) > 0.01) {
+                            mismatches.push(
+                                    `${buttonLabel} height ${buttonHeight}px != ${expectedHeight}px`);
+                        }
+                        for (const propertyName of sharedProperties) {
+                            if (buttonStyles[propertyName] !== referenceStyles[propertyName]) {
+                                mismatches.push(
+                                        `${buttonLabel} ${propertyName} ${buttonStyles[propertyName]}`
+                                        + ` != ${referenceStyles[propertyName]}`);
+                            }
+                        }
+                    }
+                    return mismatches.join("; ");
+                }
+                """);
+        assertEquals(
+                "",
+                mismatchSummary,
+                "Every standard application button should use the shared button geometry.");
+    }
+
+    private static void waitForElementAnimations(Locator element) {
+        element.evaluate(
+                "element => Promise.all("
+                        + "element.getAnimations().map(animation => animation.finished))");
+    }
+
+    private static void assertMobileNavigationTargets(Page page) {
+        for (Locator navigationTarget : page.locator(".app-brand, .app-nav a, .app-nav .app-button").all()) {
+            BoundingBox bounds = navigationTarget.boundingBox();
+            assertTrue(bounds != null, "Each mobile navigation target should have visible bounds.");
+            assertTrue(
+                    bounds.height >= 44,
+                    () -> "Mobile navigation target '"
+                            + navigationTarget.innerText()
+                            + "' should be at least 44px tall, but was "
+                            + bounds.height
+                            + "px.");
         }
     }
 
@@ -637,7 +1049,10 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             }
             acceptInvitationButton.click(
                     new Locator.ClickOptions().setTimeout(Duration.ofSeconds(60).toMillis()));
-            page.waitForLoadState();
+            page.locator("#calendarPage")
+                    .or(page.locator(".ui-messages-error"))
+                    .waitFor(new Locator.WaitForOptions()
+                            .setTimeout(Duration.ofSeconds(60).toMillis()));
             return new InvitationAcceptanceResult(
                     username,
                     URI.create(page.url()).getPath(),

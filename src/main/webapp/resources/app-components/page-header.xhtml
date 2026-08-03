@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:cc="jakarta.faces.composite"
+      xmlns:h="jakarta.faces.html"
+      xmlns:ui="jakarta.faces.facelets">
+<cc:interface>
+    <cc:attribute name="title" required="true"/>
+    <cc:attribute name="eyebrow"/>
+    <cc:attribute name="description"/>
+    <cc:attribute name="supportingText"/>
+    <cc:attribute name="compact" type="java.lang.Boolean" default="false"/>
+    <cc:attribute name="focusable" type="java.lang.Boolean" default="false"/>
+    <cc:attribute name="focusIdentifier" default="pageHeading"/>
+    <cc:facet name="meta"/>
+    <cc:facet name="actions"/>
+</cc:interface>
+<cc:implementation>
+    <div class="#{cc.attrs.compact ? 'page-header page-header-compact' : 'page-header'}">
+        <div class="page-header-copy">
+            <ui:fragment rendered="#{not empty cc.facets['meta']}">
+                <div class="page-header-meta">
+                    <cc:renderFacet name="meta"/>
+                </div>
+            </ui:fragment>
+            <h:outputText value="#{cc.attrs.eyebrow}"
+                          styleClass="eyebrow"
+                          rendered="#{not empty cc.attrs.eyebrow}"/>
+            <h1 id="#{cc.clientId}:#{cc.attrs.focusIdentifier}"
+                tabindex="#{cc.attrs.focusable ? '-1' : null}">#{cc.attrs.title}</h1>
+            <h:outputText value="#{cc.attrs.description}"
+                          styleClass="lead-text description-text"
+                          rendered="#{not empty cc.attrs.description}"/>
+            <h:outputText value="#{cc.attrs.supportingText}"
+                          styleClass="secondary-line"
+                          rendered="#{not empty cc.attrs.supportingText}"/>
+        </div>
+        <ui:fragment rendered="#{not empty cc.facets['actions']}">
+            <div class="page-header-actions">
+                <cc:renderFacet name="actions"/>
+            </div>
+        </ui:fragment>
+    </div>
+</cc:implementation>
+</html>

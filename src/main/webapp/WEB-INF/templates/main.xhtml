@@ -6,20 +6,43 @@
       xmlns:p="primefaces"
       lang="en">
 <h:head>
-    <title><ui:insert name="title">Shared calendar</ui:insert></title>
+    <title><ui:insert name="title">calendar.social</ui:insert></title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="description"
           content="Create and share practical event calendars with friends, clubs, and groups."/>
-    <link rel="icon" type="image/svg+xml" sizes="any" href="#{resource['images/favicon.svg']}"/>
+    <meta name="theme-color" content="#0b1020"/>
+    <link rel="icon"
+          type="image/svg+xml"
+          sizes="any"
+          href="#{resource['images/calendar-mark.svg']}&amp;revision=#{assetRevision.value}"/>
     <ui:insert name="head"/>
-    <h:outputStylesheet library="css" name="app.css"/>
+    <link rel="stylesheet" href="#{resource['css:tokens.css']}&amp;revision=#{assetRevision.value}"/>
+    <link rel="stylesheet" href="#{resource['css:base.css']}&amp;revision=#{assetRevision.value}"/>
+    <link rel="stylesheet" href="#{resource['css:layout.css']}&amp;revision=#{assetRevision.value}"/>
+    <link rel="stylesheet" href="#{resource['css:components/navigation.css']}&amp;revision=#{assetRevision.value}"/>
+    <link rel="stylesheet" href="#{resource['css:components/buttons.css']}&amp;revision=#{assetRevision.value}"/>
+    <link rel="stylesheet" href="#{resource['css:components/actions.css']}&amp;revision=#{assetRevision.value}"/>
+    <link rel="stylesheet" href="#{resource['css:components/surfaces.css']}&amp;revision=#{assetRevision.value}"/>
+    <link rel="stylesheet" href="#{resource['css:components/calendar-list.css']}&amp;revision=#{assetRevision.value}"/>
+    <link rel="stylesheet" href="#{resource['css:components/forms.css']}&amp;revision=#{assetRevision.value}"/>
+    <link rel="stylesheet" href="#{resource['css:components/event-date-picker.css']}&amp;revision=#{assetRevision.value}"/>
+    <link rel="stylesheet" href="#{resource['css:components/feedback.css']}&amp;revision=#{assetRevision.value}"/>
+    <link rel="stylesheet" href="#{resource['css:components/calendar-grid.css']}&amp;revision=#{assetRevision.value}"/>
+    <link rel="stylesheet" href="#{resource['css:components/calendar-agenda.css']}&amp;revision=#{assetRevision.value}"/>
+    <link rel="stylesheet" href="#{resource['css:components/calendar-workspace.css']}&amp;revision=#{assetRevision.value}"/>
+    <link rel="stylesheet" href="#{resource['css:components/event-dialog.css']}&amp;revision=#{assetRevision.value}"/>
+    <link rel="stylesheet" href="#{resource['css:components/calendar-members.css']}&amp;revision=#{assetRevision.value}"/>
+    <link rel="stylesheet" href="#{resource['css:primefaces-overrides.css']}&amp;revision=#{assetRevision.value}"/>
+    <link rel="stylesheet" href="#{resource['css:motion.css']}&amp;revision=#{assetRevision.value}"/>
 </h:head>
 <h:body>
     <a href="#main-content" class="skip-link">Skip to main content</a>
     <header class="app-header">
-        <div>
-            <h:outputLink value="#{request.contextPath}/" styleClass="app-brand">Shared calendar</h:outputLink>
-            <p class="app-subtitle">Events for friends, clubs, and group plans.</p>
+        <div class="app-brand-lockup">
+            <h:outputLink value="#{request.contextPath}/" styleClass="app-brand">
+                <h:graphicImage library="images" name="calendar-mark.svg" styleClass="app-brand-mark" alt=""/>
+                <span>calendar.social</span>
+            </h:outputLink>
         </div>
         <nav class="app-nav" aria-label="Main navigation">
             <h:outputLink value="#{request.contextPath}/">Home</h:outputLink>
@@ -37,7 +60,9 @@
                           pt:aria-current="#{request.servletPath.startsWith('/app/account-settings') ? 'page' : null}">Account settings</h:outputLink>
             <h:outputLink value="#{request.contextPath}/sign-in" rendered="#{not currentUser.signedIn}">Sign in</h:outputLink>
             <h:form styleClass="nav-form" rendered="#{currentUser.signedIn}">
-                <h:commandButton value="Sign out" action="#{signOutView.signOut}" styleClass="nav-action link-button"/>
+                <h:commandButton value="Sign out"
+                                 action="#{signOutView.signOut}"
+                                 styleClass="app-button app-button-secondary"/>
             </h:form>
         </nav>
     </header>
@@ -48,52 +73,8 @@
         </ui:insert>
         <ui:insert name="content"/>
     </main>
-    <script type="text/javascript">
-        function focusElementByIdSuffix(idSuffix) {
-            window.requestAnimationFrame(function () {
-                var element = document.querySelector("[id$='" + idSuffix + "']");
-                if (element) {
-                    element.focus();
-                }
-            });
-        }
-
-        function focusAfterAjax(ajaxArguments, successIdSuffix) {
-            var validationFailed = ajaxArguments &amp;&amp; ajaxArguments.validationFailed;
-            focusElementByIdSuffix(validationFailed ? "messages" : successIdSuffix);
-        }
-
-        function focusConfirmationCancelButton() {
-            window.setTimeout(function () {
-                var cancelButton = document.querySelector(".ui-confirmdialog-no");
-                if (cancelButton) {
-                    cancelButton.focus();
-                }
-            }, 0);
-        }
-
-        function copyLink(button) {
-            var copyControl = button.closest(".copy-control");
-            var linkInput = copyControl.querySelector("input");
-            var copyStatus = copyControl.querySelector(".copy-status");
-
-            function reportCopySuccess() {
-                copyStatus.textContent = "Link copied.";
-            }
-
-            function selectForManualCopy() {
-                linkInput.focus();
-                linkInput.select();
-                linkInput.setSelectionRange(0, linkInput.value.length);
-                copyStatus.textContent = "Clipboard access is unavailable. Select the link and copy it manually.";
-            }
-
-            if (navigator.clipboard) {
-                navigator.clipboard.writeText(linkInput.value).then(reportCopySuccess, selectForManualCopy);
-                return;
-            }
-            selectForManualCopy();
-        }
-    </script>
+    <script src="#{resource['js:keyboard-navigation.js']}&amp;revision=#{assetRevision.value}"></script>
+    <script src="#{resource['js:calendar-widgets.js']}&amp;revision=#{assetRevision.value}"></script>
+    <script src="#{resource['js:clipboard.js']}&amp;revision=#{assetRevision.value}"></script>
 </h:body>
 </html>

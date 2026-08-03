@@ -1,0 +1,137 @@
+.notice-message {
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--color-primary-border);
+    border-left: 4px solid var(--color-primary);
+    border-radius: var(--radius-medium);
+    background: var(--color-primary-soft);
+    color: var(--color-text);
+    line-height: 1.5;
+}
+
+.role-chip {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    padding: 0.38rem 0.68rem;
+    border: 1px solid var(--color-success-border);
+    border-radius: var(--radius-pill);
+    background: var(--color-success-soft);
+    color: var(--color-success);
+    font-size: 0.78rem;
+    font-weight: var(--font-weight-strong);
+}
+
+.member-role-label {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    font-weight: var(--font-weight-strong);
+}
+
+.status-line {
+    margin: 0.35rem 0 0;
+    font-weight: var(--font-weight-strong);
+}
+
+.status-dot {
+    width: 0.65rem;
+    height: 0.65rem;
+    flex: 0 0 auto;
+    border-radius: 50%;
+}
+
+.status-dot.enabled {
+    background: var(--color-success);
+    box-shadow: 0 0 0 4px var(--color-success-soft);
+}
+
+.status-dot.disabled {
+    background: var(--color-danger);
+    box-shadow: 0 0 0 4px var(--color-danger-soft);
+}
+
+.empty-state {
+    display: grid;
+    justify-items: center;
+    gap: 0.45rem;
+    padding: 1.4rem;
+    border: 1px dashed var(--color-border-control);
+    border-radius: var(--radius-medium);
+    background: var(--color-surface-translucent-subtle);
+    text-align: center;
+}
+
+.empty-state-mark {
+    position: relative;
+    width: 2.5rem;
+    height: 2.5rem;
+    margin-bottom: 0.2rem;
+    border: 1px solid var(--color-primary-border-strong);
+    border-radius: 0.75rem;
+    background: var(--color-primary-soft);
+}
+
+.empty-state-mark::before,
+.empty-state-mark::after {
+    position: absolute;
+    content: "";
+}
+
+.empty-state-mark::before {
+    inset: 0.72rem 0.48rem 0.48rem;
+    border: 2px solid var(--color-primary);
+    border-radius: 0.2rem;
+}
+
+.empty-state-mark::after {
+    top: 0.72rem;
+    right: 0.48rem;
+    left: 0.48rem;
+    border-top: 2px solid var(--color-primary);
+}
+
+.empty-state-title,
+.empty-state-description {
+    margin: 0;
+}
+
+.empty-state-title {
+    color: var(--color-text);
+    font-weight: var(--font-weight-strong);
+}
+
+.empty-state-description {
+    max-width: 34rem;
+    font-size: 0.9rem;
+}
+
+.lightweight-messages {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0 0 1rem;
+    padding: 0;
+    line-height: 1.5;
+    list-style: none;
+}
+
+.lightweight-messages > li {
+    padding: 0.9rem 1rem;
+    border: 1px solid currentcolor;
+    border-left-width: 4px;
+    border-radius: var(--radius-medium);
+}
+
+.lightweight-message-info {
+    background: var(--color-success-soft);
+    color: var(--color-success);
+}
+
+.lightweight-message-warn {
+    background: var(--color-warning-soft);
+    color: var(--color-warning);
+}
+
+.lightweight-message-error,
+.lightweight-message-fatal {
+    background: var(--color-danger-soft);
+    color: var(--color-danger);
+}

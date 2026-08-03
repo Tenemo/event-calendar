@@ -2,35 +2,73 @@
                 xmlns:h="jakarta.faces.html"
                 xmlns:ui="jakarta.faces.facelets"
                 template="/WEB-INF/templates/main.xhtml">
-    <ui:define name="title">Shared calendar</ui:define>
+    <ui:define name="title">calendar.social</ui:define>
     <ui:define name="messages"/>
 
     <ui:define name="content">
-        <section class="home-layout narrow-section">
+        <section class="home-layout">
             <div class="intro-panel">
-                <div class="section-header">
-                    <div>
-                        <h1>Shared event calendars for real plans</h1>
-                        <p class="lead-text">
-                            Create a calendar, share the public read-only link, and invite the people who can help keep events current.
-                        </p>
+                <div class="intro-copy">
+                    <p class="intro-kicker">Plans belong somewhere better than chat history</p>
+                    <h1>Shared event calendars for real plans</h1>
+                    <p class="lead-text">
+                        Create a calendar, share the public read-only link, and invite the people who can help keep events current.
+                    </p>
+
+                    <div class="action-row">
+                        <h:outputLink value="#{request.contextPath}/sign-in"
+                                      styleClass="app-button app-button-primary"
+                                      rendered="#{not currentUser.signedIn}">Sign in</h:outputLink>
+                        <h:outputLink value="#{request.contextPath}/app/calendars"
+                                      styleClass="app-button app-button-primary"
+                                      rendered="#{currentUser.signedIn}">My calendars</h:outputLink>
                     </div>
                 </div>
 
-                <div class="action-row">
-                    <h:outputLink value="#{request.contextPath}/sign-in"
-                                  styleClass="button-link primary-link"
-                                  rendered="#{not currentUser.signedIn}">Sign in</h:outputLink>
-                    <h:outputLink value="#{request.contextPath}/app/calendars"
-                                  styleClass="button-link primary-link"
-                                  rendered="#{currentUser.signedIn}">My calendars</h:outputLink>
+                <div class="home-preview" aria-hidden="true">
+                    <div class="home-preview-header">
+                        <span class="home-preview-label">Example calendar</span>
+                        <span class="home-preview-status">Shared</span>
+                    </div>
+                    <div class="home-preview-events">
+                        <div class="home-preview-event">
+                            <span class="home-preview-date">
+                                <span>09</span>
+                                <span>Aug</span>
+                            </span>
+                            <div class="home-preview-copy">
+                                <strong>Kayaking day</strong>
+                                <span>Lake launch, 10:00</span>
+                            </div>
+                        </div>
+                        <div class="home-preview-event">
+                            <span class="home-preview-date">
+                                <span>16</span>
+                                <span>Aug</span>
+                            </span>
+                            <div class="home-preview-copy">
+                                <strong>Marta's birthday</strong>
+                                <span>Garden dinner</span>
+                            </div>
+                        </div>
+                        <div class="home-preview-event">
+                            <span class="home-preview-date">
+                                <span>23</span>
+                                <span>Aug</span>
+                            </span>
+                            <div class="home-preview-copy">
+                                <strong>Weekend trip</strong>
+                                <span>Two days away</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <ul class="feature-list">
-                    <li>Use one short link for members and read-only guests.</li>
-                    <li>Invite friends who should add and update events.</li>
-                    <li>Keep timed and all-day plans correct in the calendar time zone.</li>
-                </ul>
             </div>
+            <ul class="feature-list">
+                <li>Use one short link for members and read-only guests.</li>
+                <li>Invite friends who should add and update events.</li>
+                <li>Keep timed and all-day plans correct in the calendar time zone.</li>
+            </ul>
         </section>
     </ui:define>
 </ui:composition>

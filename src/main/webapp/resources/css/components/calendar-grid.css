@@ -1,0 +1,339 @@
+.calendar-schedule-form {
+    margin: 0;
+}
+
+body .calendar-schedule {
+    padding: var(--space-medium);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-large);
+    background:
+        linear-gradient(145deg, var(--color-primary-highlight), transparent 38%),
+        var(--color-surface);
+    box-shadow: var(--shadow-surface);
+}
+
+body .calendar-schedule.fc {
+    color: var(--color-text);
+    font-family: var(--font-family-body);
+}
+
+body .calendar-schedule.fc .fc-toolbar {
+    gap: var(--space-small);
+}
+
+body .calendar-schedule.fc .fc-toolbar.fc-header-toolbar {
+    margin-bottom: var(--space-medium);
+}
+
+body .calendar-schedule.fc .fc-toolbar-title {
+    color: var(--color-text);
+    font-family: var(--font-family-heading);
+    font-size: clamp(1.25rem, 3vw, 1.65rem);
+    font-weight: var(--font-weight-heading);
+    letter-spacing: -0.02em;
+}
+
+body .calendar-schedule.fc .fc-button-group {
+    gap: 0.3rem;
+}
+
+body .calendar-schedule.fc .fc-button-group > .fc-button {
+    margin: 0;
+    border-radius: var(--radius-small);
+}
+
+body .calendar-schedule.fc .fc-button {
+    display: inline-flex;
+    min-height: var(--control-height);
+    align-items: center;
+    justify-content: center;
+    padding: 0 1rem;
+    border-radius: var(--radius-small);
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-compact);
+    font-weight: var(--font-weight-strong);
+    line-height: 1;
+    box-shadow: none;
+}
+
+body .calendar-schedule.fc .fc-prev-button,
+body .calendar-schedule.fc .fc-next-button {
+    gap: 0.5rem;
+}
+
+body .calendar-schedule.fc .fc-prev-button::before,
+body .calendar-schedule.fc .fc-next-button::after {
+    width: 0.5rem;
+    height: 0.5rem;
+    flex: 0 0 auto;
+    border: solid currentcolor;
+    border-width: 0 0.125rem 0.125rem 0;
+    content: "";
+}
+
+body .calendar-schedule.fc .fc-prev-button::before {
+    transform: rotate(135deg);
+}
+
+body .calendar-schedule.fc .fc-next-button::after {
+    transform: rotate(-45deg);
+}
+
+body .calendar-schedule.fc .fc-button-primary {
+    border-color: var(--color-border-control);
+    background: var(--color-surface);
+    color: var(--color-text);
+}
+
+body .calendar-schedule.fc .fc-button-primary:not(:disabled):hover {
+    border-color: var(--color-primary);
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+}
+
+body .calendar-schedule.fc .fc-button-primary:not(:disabled):active,
+body .calendar-schedule.fc .fc-button-primary.fc-button-active {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+}
+
+body .calendar-schedule.fc .fc-button-primary:not(:disabled):focus {
+    border-color: var(--color-focus);
+    box-shadow: 0 0 0 3px var(--color-primary-border);
+}
+
+body .calendar-schedule.fc-theme-standard .fc-scrollgrid,
+body .calendar-schedule.fc-theme-standard td,
+body .calendar-schedule.fc-theme-standard th {
+    border-color: var(--color-border-subtle);
+}
+
+body .calendar-schedule.fc-theme-standard .fc-scrollgrid {
+    overflow: hidden;
+    border-radius: var(--radius-medium);
+    background: var(--color-canvas-muted);
+}
+
+body .calendar-schedule.fc .fc-col-header-cell {
+    background: var(--color-surface-raised);
+}
+
+body .calendar-schedule.fc .fc-col-header-cell-cushion {
+    padding: 0.75rem 0.4rem;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-strong);
+    text-decoration: none;
+}
+
+body .calendar-schedule.fc .fc-daygrid-day-frame {
+    min-height: 7rem;
+    background: var(--color-canvas-muted);
+}
+
+body .calendar-schedule.fc .fc-day-other .fc-daygrid-day-frame {
+    background: var(--color-canvas);
+}
+
+body .calendar-schedule.fc .fc-daygrid-day-top {
+    padding: 0.35rem;
+}
+
+body .calendar-schedule.fc .fc-daygrid-day-number {
+    display: inline-grid;
+    min-width: 1.9rem;
+    min-height: 1.9rem;
+    padding: 0.25rem;
+    border-radius: var(--radius-pill);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-small);
+    font-weight: var(--font-weight-medium);
+    place-items: center;
+    text-decoration: none;
+}
+
+body .calendar-schedule.fc .fc-daygrid-day-number:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+}
+
+body .calendar-schedule.fc .fc-day-today {
+    background: var(--color-primary-highlight);
+}
+
+body .calendar-schedule.fc .fc-day-today .fc-daygrid-day-number {
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+    font-weight: var(--font-weight-strong);
+}
+
+body .calendar-schedule.fc .fc-day-other .fc-daygrid-day-number {
+    color: var(--color-text-subtle);
+    opacity: 0.72;
+}
+
+body .calendar-schedule.fc .fc-daygrid-day-events {
+    margin: 0 0.35rem 0.35rem;
+}
+
+body .calendar-schedule.fc .fc-event {
+    border-color: var(--color-primary-border);
+    border-radius: 0.4rem;
+    background: var(--color-primary-soft);
+    color: var(--color-primary-hover);
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition:
+        background-color var(--motion-duration-quick) var(--motion-easing-standard),
+        border-color var(--motion-duration-quick) var(--motion-easing-standard);
+}
+
+body .calendar-schedule.fc .fc-event:hover {
+    border-color: var(--color-primary);
+    background: var(--color-surface-hover);
+    color: var(--color-text);
+}
+
+body .calendar-schedule.fc .fc-event:focus {
+    outline: 3px solid var(--color-focus);
+    outline-offset: 2px;
+}
+
+body .calendar-schedule.fc .fc-event-main {
+    color: inherit;
+}
+
+body .calendar-schedule.fc .fc-daygrid-event {
+    padding: 0.16rem 0.35rem;
+}
+
+body .calendar-schedule.fc .fc-event-time {
+    font-weight: var(--font-weight-strong);
+}
+
+body .calendar-schedule.fc .calendar-event-all-day {
+    border-color: var(--color-success-border);
+    background: var(--color-success-soft);
+    color: var(--color-success);
+}
+
+body .calendar-schedule.fc .fc-timegrid-slot-label-cushion,
+body .calendar-schedule.fc .fc-timegrid-axis-cushion {
+    color: var(--color-text-subtle);
+    font-size: 0.78rem;
+}
+
+body .calendar-schedule.fc .fc-timegrid-now-indicator-line {
+    border-color: var(--color-danger);
+}
+
+body .calendar-schedule.fc .fc-timegrid-now-indicator-arrow {
+    border-left-color: var(--color-danger);
+}
+
+body .calendar-schedule.fc-theme-standard .fc-popover {
+    border-color: var(--color-border-control);
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+    box-shadow: var(--shadow-raised);
+}
+
+body .calendar-schedule.fc-theme-standard .fc-popover-header {
+    background: var(--color-surface-hover);
+}
+
+body .calendar-schedule.fc .fc-more-link {
+    color: var(--color-primary-hover);
+    font-size: 0.78rem;
+    font-weight: var(--font-weight-strong);
+}
+
+body .ui-tooltip .ui-tooltip-text {
+    max-width: min(22rem, calc(100vw - 2rem));
+    border: 1px solid var(--color-border-control);
+    border-radius: var(--radius-small);
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+    line-height: 1.45;
+    white-space: pre-line;
+    box-shadow: var(--shadow-raised);
+}
+
+@media (width <= 48rem) {
+    body .calendar-schedule {
+        padding: 0.625rem;
+    }
+
+    body .calendar-schedule.fc .fc-toolbar {
+        flex-wrap: wrap;
+    }
+
+    body .calendar-schedule.fc .fc-toolbar-chunk:nth-child(2) {
+        order: -1;
+        width: 100%;
+    }
+
+    body .calendar-schedule.fc .fc-toolbar-title {
+        text-align: left;
+    }
+
+    body .calendar-schedule.fc .fc-daygrid-day-frame {
+        min-height: 4.5rem;
+    }
+
+    body .calendar-schedule.fc .fc-view-harness {
+        overflow-x: auto;
+    }
+
+    body .calendar-schedule.fc [class~="fc-timeGridWeek-view"] {
+        min-width: 42rem;
+    }
+}
+
+@media (width <= 32rem) {
+    body .calendar-schedule.fc .fc-toolbar-chunk {
+        width: 100%;
+    }
+
+    body .calendar-schedule.fc .fc-button-group {
+        display: flex;
+    }
+
+    body .calendar-schedule.fc .fc-button-group .fc-button {
+        flex: 1;
+    }
+
+    body .calendar-schedule.fc .fc-daygrid-day-frame {
+        min-height: 3.75rem;
+    }
+
+    body .calendar-schedule.fc .fc-col-header-cell-cushion {
+        padding: 0.55rem 0.15rem;
+        font-size: 0.75rem;
+    }
+
+    body .calendar-schedule.fc .fc-daygrid-day-top {
+        padding: 0.15rem;
+    }
+
+    body .calendar-schedule.fc .fc-daygrid-day-number {
+        min-width: 1.65rem;
+        min-height: 1.65rem;
+        padding: 0.15rem;
+        font-size: 0.75rem;
+    }
+
+    body .calendar-schedule.fc .fc-daygrid-day-events {
+        margin: 0 0.15rem 0.15rem;
+    }
+
+    body .calendar-schedule.fc .fc-daygrid-event {
+        padding: 0.1rem 0.2rem;
+        font-size: 0.7rem;
+    }
+
+    body .calendar-schedule.fc .fc-daygrid-event .fc-event-time {
+        display: none;
+    }
+}

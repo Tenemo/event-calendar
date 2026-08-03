@@ -1,6 +1,6 @@
-# Shared calendar
+# calendar.social
 
-Shared calendar is a small server-rendered web app for coordinating events with friends and groups. Registered users can create multiple calendars, invite editors, and share a read-only calendar through its calendar link.
+calendar.social is a small server-rendered web app for coordinating events with friends and groups. Registered users can create multiple calendars, invite editors, and share a read-only calendar through its calendar link.
 
 ## What it does
 
@@ -34,7 +34,7 @@ mise run db
 mise run dev
 ```
 
-The default application URL is `https://localhost:9443`. Open Liberty uses a local development certificate, so a browser warning is expected. The database health check is available at `http://localhost:9080/health` and returns `ok` only when PostgreSQL is usable.
+The default application URL is `http://localhost:9080`, so the local workflow does not require accepting a development certificate. The database health check is available at `http://localhost:9080/health` and returns `ok` only when PostgreSQL is usable.
 
 To run the production container locally instead of Liberty development mode:
 
@@ -42,12 +42,26 @@ To run the production container locally instead of Liberty development mode:
 mise run docker-up
 ```
 
+## Deterministic local data
+
+Run this whenever you want to discard local application data and return to the same useful testing state:
+
+```text
+mise run reseed-local
+```
+
+The task starts local PostgreSQL when needed, refuses non-loopback database hosts, verifies that the target is empty or belongs to calendar.social, rebuilds the pre-launch schema from `V1`, and inserts fixed data in one transaction. It creates the local `admin` account, two additional members, three calendars, seven memberships, and twenty-five realistic events. The fixtures cover public and private calendars, `ADMIN` and `EDITOR` roles, Warsaw and Lisbon time zones, past and future events, events crossing midnight and daylight-saving changes, and single-day and multi-day all-day events. The heavier Weekend adventures calendar spans late July through a January ski trip so calendar navigation and long agendas can be exercised immediately.
+
+The local Docker application automatically establishes a normal authenticated session for the seeded `admin` account on the first home, sign-in, or authenticated application request. Explicitly signing out suppresses automatic sign-in for that browser session, so the ordinary sign-in flow remains available with `admin` as both the username and password. This shortcut is disabled by default outside Docker Compose and refuses to start when enabled for a non-loopback application origin.
+
+This command permanently deletes all application data in the configured local database. It cannot target a non-loopback host and does not run against the disposable end-to-end database unless that local database is explicitly selected through the `PG*` environment variables.
+
 ## First account
 
 Registration is invitation-only. For a fresh database, set `APP_BOOTSTRAP_INVITATION_TOKEN` to a random 43- to 80-character Base64URL value, start the app, and open:
 
 ```text
-https://localhost:9443/register?token=YOUR_TOKEN
+http://localhost:9080/register?token=YOUR_TOKEN
 ```
 
 The bootstrap invitation can create exactly one account. Its use is recorded atomically in the database and is not restored by deleting users. That first account can create ordinary registration invitations for friends.
@@ -58,10 +72,12 @@ Leave `APP_BOOTSTRAP_INVITATION_TOKEN` blank when bootstrap registration should 
 
 | Variable | Local default | Purpose |
 | --- | --- | --- |
-| `APP_BASE_URL` | `https://localhost:9443` | Public origin used in generated links. It must be an HTTP or HTTPS origin without credentials, a path, query parameters, or a fragment. |
+| `APP_BASE_URL` | `http://localhost:9080` | Public origin used in generated links. It must be an HTTP or HTTPS origin without credentials, a path, query parameters, or a fragment. |
 | `APP_DEFAULT_TIME_ZONE` | `Europe/Warsaw` | IANA time zone assigned to new calendars. |
 | `APP_BOOTSTRAP_INVITATION_TOKEN` | blank | Optional one-time invitation for the first account in a fresh database. |
+| `APP_LOCAL_AUTO_SIGN_IN` | `true` in local Docker Compose | Automatically authenticates the deterministic `admin` fixture. It is disabled when unset and can be enabled only with a loopback `APP_BASE_URL`. |
 | `APP_LTPA_KEYS_PASSWORD` | `local-development-only` | Password protecting Liberty authentication keys. Use a stable secret in Railway. |
+| `APP_SSO_REQUIRES_SSL` | `false` locally | Controls the Secure attribute on the Liberty authentication cookie. Keep this `true` outside loopback-only local development. |
 | `PGHOST` | `localhost` | PostgreSQL host. |
 | `PGPORT` | `5432` | PostgreSQL port. |
 | `PGDATABASE` | `calendar` | PostgreSQL database name. |
@@ -91,6 +107,7 @@ The schema contains only application users, calendars, memberships, events, outs
 ```text
 mise run package
 mise run format
+mise run reseed-local
 mise run lint-css
 mise run lint-workflows
 mise run end-to-end
@@ -154,7 +171,9 @@ Railway builds the committed `Dockerfile`, runs one web replica, and checks `/he
 
 When Railway identifies an environment as non-production, every response is marked `noindex, nofollow`.
 
-The shared preview bootstrap and verification credentials are intentionally reusable, non-production-only values. Pull-request code may receive them; they are not used as production credentials.
+Pull-request environments clone `preview-base`, including its PostgreSQL data. That base environment contains the fixed non-production `preview` account and its initial `Preview calendar`, so newly created previews inherit the same login and ordinary redeployments preserve it.
+
+The login source of truth is `preview-base` → `shared-calendar-web` → Variables. `PREVIEW_VERIFICATION_USERNAME` stores the fixed username and `PREVIEW_VERIFICATION_PASSWORD` stores the fixed password. Do not change either value per pull request or store the plaintext password in the repository. `APP_BOOTSTRAP_INVITATION_TOKEN` is a one-time account-provisioning credential, not the preview login. Pull-request code may receive these intentionally reusable preview-only values; they are never used as production credentials.
 
 Unauthenticated sessions expire after ten idle minutes. Successful sign-in extends that server-side idle lifetime to 30 days. Use one application replica because sessions are stored in memory; a restart or redeploy requires users to sign in again.
 

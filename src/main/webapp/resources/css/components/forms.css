@@ -1,0 +1,106 @@
+.stacked-form,
+.field-stack {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.stacked-form {
+    margin-top: 1rem;
+}
+
+.panel-heading + .stacked-form {
+    margin-top: 0.9rem;
+}
+
+.two-column-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.checkbox-field,
+.status-line {
+    display: flex;
+    align-items: center;
+    gap: var(--space-small);
+}
+
+.copy-control {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    align-items: start;
+    margin-top: 0.45rem;
+}
+
+.copy-control .ui-inputfield {
+    width: 100%;
+    font-family: var(--font-family-monospace);
+    font-size: 0.9rem;
+}
+
+.copy-status {
+    grid-column: 1 / -1;
+    min-height: 1.25rem;
+    margin: 0;
+    font-size: var(--font-size-small);
+}
+
+.copy-help {
+    margin: 0;
+}
+
+body input.native-input,
+body select,
+body .ui-inputfield {
+    width: 100%;
+    min-width: 0;
+    min-height: var(--control-height);
+    border-radius: var(--radius-small);
+    caret-color: var(--color-primary);
+    font: inherit;
+}
+
+body input.native-input,
+body select {
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--color-border-control);
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+}
+
+body input.native-input::placeholder,
+body .ui-inputfield::placeholder {
+    color: var(--color-text-subtle);
+    opacity: 1;
+}
+
+body input.native-input:disabled,
+body select:disabled {
+    border-color: var(--color-border-subtle);
+    background: var(--color-canvas-muted);
+    color: var(--color-text-subtle);
+    cursor: not-allowed;
+    opacity: 0.72;
+}
+
+body input.native-input:not(:disabled):hover,
+body select:not(:disabled):hover {
+    border-color: var(--color-primary);
+}
+
+@media (width <= 52rem) {
+    .two-column-fields {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (width <= 32rem) {
+    .copy-control {
+        grid-template-columns: 1fr;
+    }
+
+    .copy-control .app-button {
+        width: 100%;
+    }
+}

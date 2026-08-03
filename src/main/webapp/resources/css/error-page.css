@@ -1,0 +1,64 @@
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+body {
+    display: grid;
+    min-height: 100vh;
+    margin: 0;
+    padding: 1rem;
+    background:
+        radial-gradient(circle at 18% 0, var(--color-canvas-glow), transparent 28rem),
+        var(--color-canvas);
+    color: var(--color-text);
+    font-family: var(--font-family-body);
+    place-items: center;
+}
+
+main {
+    width: min(100%, 34rem);
+    padding: clamp(1.5rem, 5vw, 2.25rem);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-large);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-surface);
+}
+
+h1 {
+    margin: 0;
+    color: var(--color-text);
+    font-family: var(--font-family-heading);
+    font-size: clamp(1.9rem, 8vw, 2.7rem);
+    letter-spacing: -0.035em;
+    line-height: 1.08;
+}
+
+p {
+    margin: 1rem 0 0;
+    color: var(--color-text-muted);
+    line-height: 1.65;
+}
+
+a {
+    color: var(--color-primary);
+    font-weight: var(--font-weight-strong);
+    text-decoration-thickness: 0.08em;
+    text-underline-offset: 0.18em;
+}
+
+a:hover {
+    color: var(--color-primary-hover);
+}
+
+a:focus-visible {
+    outline: 3px solid var(--color-focus);
+    outline-offset: 3px;
+}
+
+@media (forced-colors: active) {
+    main {
+        border-color: CanvasText;
+    }
+}

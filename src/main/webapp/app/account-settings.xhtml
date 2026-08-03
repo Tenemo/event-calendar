@@ -1,22 +1,23 @@
 <ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:app="jakarta.faces.composite/app-components"
                 xmlns:h="jakarta.faces.html"
                 xmlns:ui="jakarta.faces.facelets"
                 xmlns:pt="jakarta.faces.passthrough"
                 xmlns:p="primefaces"
                 template="/WEB-INF/templates/main.xhtml">
-    <ui:define name="title">Account settings - Shared calendar</ui:define>
+    <ui:define name="title">Account settings - calendar.social</ui:define>
 
     <ui:define name="content">
         <section class="narrow-section">
-            <div>
-                <p class="eyebrow">Signed in as <h:outputText value="#{accountSettingsView.username}"/></p>
-                <h1>Account settings</h1>
-            </div>
+            <app:page-header id="accountSettingsHeader"
+                             title="Account settings"
+                             eyebrow="Signed in as #{accountSettingsView.username}"
+                             compact="true"/>
 
             <p:panel styleClass="surface-panel" pt:aria-labelledby="changePasswordHeading">
                 <h2 id="changePasswordHeading" class="panel-heading">Change password</h2>
                 <p id="passwordChangeNotice" class="field-help">Changing your password signs you out here and invalidates your other signed-in sessions.</p>
-                <h:form styleClass="stacked-form">
+                <h:form styleClass="stacked-form" pt:data-initial-focus="true">
                     <p:outputLabel for="currentPassword" value="Current password"/>
                     <p:password id="currentPassword"
                                 value="#{accountSettingsView.currentPassword}"

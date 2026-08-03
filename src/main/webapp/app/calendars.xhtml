@@ -1,24 +1,23 @@
 <ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:app="jakarta.faces.composite/app-components"
                 xmlns:f="jakarta.faces.core"
                 xmlns:h="jakarta.faces.html"
                 xmlns:ui="jakarta.faces.facelets"
                 xmlns:pt="jakarta.faces.passthrough"
                 xmlns:p="primefaces"
                 template="/WEB-INF/templates/main.xhtml">
-    <ui:define name="title">My calendars - Shared calendar</ui:define>
+    <ui:define name="title">My calendars - calendar.social</ui:define>
 
     <ui:define name="content">
         <section class="page-section">
-            <div class="section-header">
-                <div>
-                    <h1>My calendars</h1>
-                    <p class="lead-text">Create and manage event calendars for friend groups and plans.</p>
-                </div>
-            </div>
+            <app:page-header id="calendarListHeader"
+                             title="My calendars"
+                             description="Create and manage event calendars for friend groups and plans."/>
 
             <p:panel styleClass="surface-panel" pt:aria-labelledby="createCalendarHeading">
                 <h2 id="createCalendarHeading" class="panel-heading">Create calendar</h2>
-                <h:form styleClass="stacked-form">
+                <h:form styleClass="stacked-form"
+                        pt:data-initial-focus="#{empty calendarListView.calendarMemberships ? 'true' : null}">
                     <p:outputLabel for="calendarName" value="Calendar name"/>
                     <p:inputText id="calendarName"
                                  value="#{calendarListView.calendarName}"
@@ -29,23 +28,26 @@
                 </h:form>
             </p:panel>
 
-            <h:panelGroup layout="block" styleClass="empty-state"
-                          rendered="#{empty calendarListView.calendarMemberships}">No calendars yet.</h:panelGroup>
+            <app:empty-state id="emptyCalendarList"
+                             title="No calendars yet"
+                             description="Create your first calendar above and start adding plans."
+                             rendered="#{empty calendarListView.calendarMemberships}"/>
             <div class="card-list">
                 <ui:repeat value="#{calendarListView.calendarMemberships}" var="calendar">
-                    <article class="list-card">
-                        <div>
+                    <article class="list-card calendar-card">
+                        <div class="calendar-card-copy">
                             <h2 class="card-heading">
-                                <h:outputLink value="#{request.contextPath}/#{calendar.calendarLinkToken}">#{calendar.calendarName}</h:outputLink>
+                                <h:outputLink value="#{request.contextPath}/#{calendar.calendarLinkToken}"
+                                              styleClass="calendar-card-link">#{calendar.calendarName}</h:outputLink>
                             </h2>
                             <p class="secondary-line">#{calendar.role.displayName} · Public access #{calendar.publicAccessEnabled ? 'enabled' : 'disabled'}</p>
                         </div>
                         <div class="item-actions">
                             <h:outputLink value="#{request.contextPath}/#{calendar.calendarLinkToken}"
-                                          styleClass="button-link secondary-link"
+                                          styleClass="app-button app-button-secondary"
                                           pt:aria-label="Open #{calendar.calendarName}">Open</h:outputLink>
                             <h:outputLink value="#{request.contextPath}/app/calendar-settings"
-                                          styleClass="button-link secondary-link"
+                                          styleClass="app-button app-button-secondary"
                                           pt:aria-label="Open settings for #{calendar.calendarName}"
                                           rendered="#{calendar.admin}">
                                 Settings

@@ -1,0 +1,29 @@
+.skip-link {
+    transition: transform var(--motion-duration-quick) var(--motion-easing-standard);
+}
+
+.app-nav a {
+    transition:
+        color var(--motion-duration-quick) var(--motion-easing-standard),
+        background-color var(--motion-duration-quick) var(--motion-easing-standard),
+        border-color var(--motion-duration-quick) var(--motion-easing-standard),
+        box-shadow var(--motion-duration-standard) var(--motion-easing-standard);
+}
+
+.generated-invitation,
+.lightweight-messages > li,
+body .ui-messages {
+    animation: feedback-enter var(--motion-duration-deliberate) var(--motion-easing-emphasized);
+}
+
+@keyframes feedback-enter {
+    from {
+        opacity: 0;
+        transform: translateY(-0.35rem);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
