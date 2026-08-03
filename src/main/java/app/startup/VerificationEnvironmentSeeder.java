@@ -13,12 +13,12 @@ import java.util.logging.Logger;
 @Singleton
 @Startup
 @DependsOn("DatabaseMigration")
-public class PreviewEnvironmentSeeder {
+public class VerificationEnvironmentSeeder {
     private static final Logger LOGGER =
-            Logger.getLogger(PreviewEnvironmentSeeder.class.getName());
+            Logger.getLogger(VerificationEnvironmentSeeder.class.getName());
 
     @Inject
-    private PreviewEnvironmentProvisioningService provisioningService;
+    private VerificationEnvironmentProvisioningService provisioningService;
 
     @PostConstruct
     @TransactionAttribute(TransactionAttributeType.NOT_SUPPORTED)
@@ -27,9 +27,9 @@ public class PreviewEnvironmentSeeder {
     }
 
     void seedFromEnvironment(Map<String, String> environment) {
-        PreviewEnvironmentConfiguration.fromEnvironment(environment).ifPresent(configuration -> {
+        VerificationEnvironmentConfiguration.fromEnvironment(environment).ifPresent(configuration -> {
             provisioningService.ensureProvisioned(configuration);
-            LOGGER.info(() -> "Preview verification account is ready in "
+            LOGGER.info(() -> "Verification account is ready in "
                     + configuration.environmentName()
                     + ".");
         });

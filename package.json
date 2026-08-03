@@ -12,6 +12,7 @@
   "devDependencies": {
     "chrome-launcher": "1.2.1",
     "lighthouse": "13.4.1",
+    "puppeteer-core": "25.3.0",
     "stylelint": "17.14.0",
     "stylelint-config-standard": "40.0.0"
   }
