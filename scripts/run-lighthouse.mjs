@@ -1,4 +1,4 @@
-import {mkdir, writeFile} from "node:fs/promises";
+import {mkdir, mkdtemp, rm, writeFile} from "node:fs/promises";
 import path from "node:path";
 
 import {launch} from "chrome-launcher";
@@ -11,7 +11,6 @@ const auditedPages = [
 ];
 
 const outputDirectory = path.resolve(".build", "lighthouse");
-const browserProfileDirectory = path.resolve(".build", "lighthouse-browser-profile");
 const runCount = 3;
 const budgets = [
   {name: "Performance score", minimum: 0.9, value: result => result.categories.performance.score},
@@ -40,17 +39,17 @@ function formatValue(value, budget) {
   return `${Math.round(value * 100) / 100}${budget.unit ?? ""}`;
 }
 
-await Promise.all([
-  mkdir(outputDirectory, {recursive: true}),
-  mkdir(browserProfileDirectory, {recursive: true}),
-]);
-const chrome = await launch({
-  chromeFlags: ["--headless=new", "--no-sandbox", "--ignore-certificate-errors"],
-  userDataDir: browserProfileDirectory,
-});
-
+await mkdir(outputDirectory, {recursive: true});
+const browserProfileDirectory = await mkdtemp(
+    path.resolve(".build", "lighthouse-browser-profile-"));
+let chrome;
 const pageResults = [];
 try {
+  chrome = await launch({
+    chromeFlags: ["--headless=new", "--no-sandbox", "--ignore-certificate-errors"],
+    userDataDir: browserProfileDirectory,
+  });
+
   for (const page of auditedPages) {
     const results = [];
     for (let runNumber = 1; runNumber <= runCount; runNumber++) {
@@ -78,7 +77,14 @@ try {
     pageResults.push({...page, results});
   }
 } finally {
-  await chrome.kill();
+  if (chrome) {
+    const browserClosed = chrome.process.exitCode === null
+      ? new Promise(resolve => chrome.process.once("close", resolve))
+      : Promise.resolve();
+    chrome.kill();
+    await browserClosed;
+  }
+  await rm(browserProfileDirectory, {recursive: true, force: true});
 }
 
 const summary = pageResults.flatMap(page => budgets.map(budget => {

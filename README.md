@@ -171,7 +171,9 @@ Railway builds the committed `Dockerfile`, runs one web replica, and checks `/he
 
 When Railway identifies an environment as non-production, every response is marked `noindex, nofollow`.
 
-The shared preview bootstrap and verification credentials are intentionally reusable, non-production-only values. Pull-request code may receive them; they are not used as production credentials.
+Pull-request environments clone `preview-base`, including its PostgreSQL data. That base environment contains the fixed non-production `preview` account and its initial `Preview calendar`, so newly created previews inherit the same login and ordinary redeployments preserve it.
+
+The login source of truth is `preview-base` → `shared-calendar-web` → Variables. `PREVIEW_VERIFICATION_USERNAME` stores the fixed username and `PREVIEW_VERIFICATION_PASSWORD` stores the fixed password. Do not change either value per pull request or store the plaintext password in the repository. `APP_BOOTSTRAP_INVITATION_TOKEN` is a one-time account-provisioning credential, not the preview login. Pull-request code may receive these intentionally reusable preview-only values; they are never used as production credentials.
 
 Unauthenticated sessions expire after ten idle minutes. Successful sign-in extends that server-side idle lifetime to 30 days. Use one application replica because sessions are stored in memory; a restart or redeploy requires users to sign in again.
 
