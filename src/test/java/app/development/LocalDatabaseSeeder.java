@@ -29,12 +29,13 @@ public final class LocalDatabaseSeeder {
     private static final String DEFAULT_DATABASE_USER = "calendar";
     private static final String DEFAULT_DATABASE_PASSWORD = "calendar";
     private static final Pattern DATABASE_IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,62}");
-    private static final Set<String> APPLICATION_SCHEMA_SENTINELS = Set.of(
+    private static final Set<String> APPLICATION_SCHEMA_TABLES = Set.of(
             "app_user",
             "calendar",
             "calendar_event",
             "calendar_membership",
             "flyway_schema_history",
+            "invitation",
             "registration_bootstrap");
 
     private LocalDatabaseSeeder() {}
@@ -89,7 +90,7 @@ public final class LocalDatabaseSeeder {
     }
 
     static boolean isRecognizedApplicationSchema(Set<String> publicTableNames) {
-        return publicTableNames.isEmpty() || publicTableNames.containsAll(APPLICATION_SCHEMA_SENTINELS);
+        return publicTableNames.isEmpty() || publicTableNames.equals(APPLICATION_SCHEMA_TABLES);
     }
 
     private static String environmentValue(

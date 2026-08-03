@@ -100,16 +100,34 @@ class LocalDatabaseSeederTest {
     }
 
     @Test
-    void onlyEmptyOrRecognizableApplicationSchemasCanBeReset() {
-        assertTrue(LocalDatabaseSeeder.isRecognizedApplicationSchema(Set.of()));
-        assertTrue(LocalDatabaseSeeder.isRecognizedApplicationSchema(Set.of(
+    void onlyEmptyOrExactApplicationSchemasCanBeReset() {
+        Set<String> applicationSchemaTables = Set.of(
                 "app_user",
                 "calendar",
                 "calendar_event",
                 "calendar_membership",
                 "flyway_schema_history",
+                "invitation",
+                "registration_bootstrap");
+
+        assertTrue(LocalDatabaseSeeder.isRecognizedApplicationSchema(Set.of()));
+        assertTrue(LocalDatabaseSeeder.isRecognizedApplicationSchema(applicationSchemaTables));
+        assertFalse(LocalDatabaseSeeder.isRecognizedApplicationSchema(Set.of(
+                "app_user",
+                "calendar",
+                "calendar_event",
+                "calendar_membership",
+                "flyway_schema_history",
+                "registration_bootstrap")));
+        assertFalse(LocalDatabaseSeeder.isRecognizedApplicationSchema(Set.of(
+                "app_user",
+                "calendar",
+                "calendar_event",
+                "calendar_membership",
+                "flyway_schema_history",
+                "invitation",
                 "registration_bootstrap",
-                "future_application_table")));
+                "unrelated_table")));
         assertFalse(LocalDatabaseSeeder.isRecognizedApplicationSchema(Set.of("app_user", "calendar")));
         assertFalse(LocalDatabaseSeeder.isRecognizedApplicationSchema(Set.of("customer", "invoice")));
     }

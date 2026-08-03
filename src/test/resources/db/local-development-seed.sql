@@ -10,6 +10,7 @@ begin
             or to_regclass('public.calendar') is null
             or to_regclass('public.calendar_event') is null
             or to_regclass('public.calendar_membership') is null
+            or to_regclass('public.invitation') is null
             or to_regclass('public.registration_bootstrap') is null then
         raise exception 'Local development seed requires the calendar.social schema.';
     end if;
