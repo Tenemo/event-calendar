@@ -6,6 +6,9 @@
     <application>
         <view-handler>app.calendar.CanonicalCalendarViewHandler</view-handler>
     </application>
+    <factory>
+        <exception-handler-factory>app.web.ExpiredViewExceptionHandlerFactory</exception-handler-factory>
+    </factory>
     <render-kit>
         <renderer>
             <component-family>org.primefaces.component</component-family>

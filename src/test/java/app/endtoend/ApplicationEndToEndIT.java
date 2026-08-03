@@ -121,6 +121,30 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
 
     @Test
     @Order(2)
+    void expiredSignInFormReturnsAFreshFormInsteadOfAServerError() {
+        try (BrowserContext context = newBrowserContext()) {
+            Page page = context.newPage();
+            navigate(page, "/sign-in");
+            page.locator("input[id$='username']").fill("stale-form-user");
+            page.locator("input[id$='password']").fill(TEST_PASSWORD);
+
+            context.clearCookies();
+            Response expiredFormResponse = page.waitForResponse(
+                    response -> "POST".equals(response.request().method())
+                            && "/sign-in".equals(URI.create(response.url()).getPath()),
+                    () -> page.locator("input[type='submit'][value='Sign in']").click());
+
+            assertEquals(302, expiredFormResponse.status());
+            page.waitForURL("**/sign-in?viewExpired=true");
+            assertThat(page.locator(".view-expired-message"))
+                    .containsText("This page expired while it was open. Please try again.");
+            assertThat(page.locator("input[id$='username']")).isFocused();
+            assertAccessible(page);
+        }
+    }
+
+    @Test
+    @Order(3)
     void bootstrapRegistrationIsConsumedByExactlyOneConcurrentRequest() throws Exception {
         String suffix = uniqueSuffix();
         CountDownLatch formsReady = new CountDownLatch(2);
@@ -163,7 +187,7 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
     }
 
     @Test
-    @Order(3)
+    @Order(4)
     void authenticationInvitedRegistrationAndPasswordChangeWork() throws SQLException {
         String suffix = uniqueSuffix();
         String inviterUsername = "inviter-" + suffix;
@@ -343,7 +367,7 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
     }
 
     @Test
-    @Order(4)
+    @Order(5)
     void calendarEventsPublicAccessAndLinkRegenerationWork() throws SQLException {
         String suffix = uniqueSuffix();
         String username = "calendar-owner-" + suffix;
@@ -630,7 +654,7 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
     }
 
     @Test
-    @Order(5)
+    @Order(6)
     void editorInvitationAndLastAdminProtectionWork() throws Exception {
         String suffix = uniqueSuffix();
         String adminUsername = "admin-" + suffix;
@@ -780,7 +804,7 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
     }
 
     @Test
-    @Order(6)
+    @Order(7)
     void invitationLifecycleRejectsRevokedExpiredAndUnauthorizedLinks() throws SQLException {
         String suffix = uniqueSuffix();
         String calendarName = "Invitation lifecycle " + suffix;

@@ -71,6 +71,12 @@
         <ui:insert name="messages">
             <p:messages id="messages" showDetail="true" closable="true" pt:tabindex="-1"/>
         </ui:insert>
+        <h:panelGroup layout="block"
+                      styleClass="notice-message view-expired-message"
+                      rendered="#{param.viewExpired eq 'true'}"
+                      pt:role="status">
+            This page expired while it was open. Please try again.
+        </h:panelGroup>
         <ui:insert name="content"/>
     </main>
     <script src="#{resource['js:keyboard-navigation.js']}&amp;revision=#{assetRevision.value}"></script>
