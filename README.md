@@ -171,9 +171,9 @@ Railway builds the committed `Dockerfile`, runs one web replica, and checks `/he
 
 When Railway identifies an environment as non-production, every response is marked `noindex, nofollow`.
 
-Pull-request environments clone `preview-base`, including its PostgreSQL data. That base environment contains the fixed non-production `preview` account and its initial `Preview calendar`, so newly created previews inherit the same login and ordinary redeployments preserve it.
+Pull-request environments clone the `preview-base` service configuration, but Railway gives each PostgreSQL service a fresh volume rather than copying the base volume's data. On startup, the application recognizes only `preview-base` and exact `event-calendar-pr-<number>` environments and provisions the configured non-production account plus its initial `Preview calendar` when the database is fresh. Ordinary redeployments preserve its data and restore the configured password hash if it has drifted.
 
-The login source of truth is `preview-base` → `shared-calendar-web` → Variables. `PREVIEW_VERIFICATION_USERNAME` stores the fixed username and `PREVIEW_VERIFICATION_PASSWORD` stores the fixed password. Do not change either value per pull request or store the plaintext password in the repository. `APP_BOOTSTRAP_INVITATION_TOKEN` is a one-time account-provisioning credential, not the preview login. Pull-request code may receive these intentionally reusable preview-only values; they are never used as production credentials.
+The login source of truth is `preview-base` → `shared-calendar-web` → Variables. `PREVIEW_VERIFICATION_USERNAME` stores the fixed username and `PREVIEW_VERIFICATION_PASSWORD` stores the fixed password. Do not change either value per pull request or store the plaintext password in the repository. `APP_BOOTSTRAP_INVITATION_TOKEN` remains a one-time account-provisioning credential and is atomically consumed when the preview account is first created; it is not the preview login. Pull-request code may receive these intentionally reusable preview-only values; they are never used as production credentials.
 
 Unauthenticated sessions expire after ten idle minutes. Successful sign-in extends that server-side idle lifetime to 30 days. Use one application replica because sessions are stored in memory; a restart or redeploy requires users to sign in again.
 

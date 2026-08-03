@@ -117,6 +117,7 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             navigate(page, "/app/calendars");
             page.waitForURL("**/sign-in");
         }
+
     }
 
     @Test
