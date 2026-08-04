@@ -21,6 +21,19 @@ final class TokenServiceTest {
     }
 
     @Test
+    void generatesApiTokensFromExactlyThirtyTwoRandomBytesWithARecognizablePrefix() {
+        TokenService tokenService = new TokenService(new FixedSecureRandom(sequence(32)));
+
+        String token = tokenService.generateApiToken();
+
+        assertAll(
+                () -> assertEquals(
+                        "calendar_social_api_AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+                        token),
+                () -> assertTrue(ApiTokenService.isValidCandidate(token)));
+    }
+
+    @Test
     void generatesCalendarLinkTokensFromExactlyEightRandomBytes() {
         TokenService tokenService = new TokenService(new FixedSecureRandom(
                 new byte[] {(byte) 0xfb, (byte) 0xff, 0, 1, 2, 3, 4, 5}));

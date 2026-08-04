@@ -67,7 +67,7 @@ public class InvitationService {
                 .createQuery(
                         "select new app.invitation.InvitationSummary("
                                 + "invitation.id, invitation.invitationToken, "
-                                + "calendar.name, invitation.createdAt, invitation.expiresAt) "
+                                + "calendar.id, calendar.name, invitation.createdAt, invitation.expiresAt) "
                                 + "from Invitation invitation "
                                 + "left join invitation.calendar calendar "
                                 + "where invitation.createdByUser.id = :userId "

@@ -18,7 +18,9 @@ import com.microsoft.playwright.options.SameSiteAttribute;
 import java.net.URI;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -37,7 +39,7 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
     @Order(1)
     void freshSchemaPublicPagesAndAccessibilityAreSound() throws SQLException {
         assertEquals(
-                "app_user,calendar,calendar_event,calendar_membership,"
+                "api_token,app_user,calendar,calendar_event,calendar_membership,"
                         + "flyway_schema_history,invitation,registration_bootstrap",
                 queryText(
                         "select string_agg(table_name, ',' order by table_name) "
@@ -51,6 +53,17 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             assertEquals(200, homeResponse.status());
             assertThat(page).hasTitle("calendar.social");
             assertThat(page.locator(".app-brand span")).hasText("calendar.social");
+            String faviconUrl = page.locator("link[rel='icon']").getAttribute("href");
+            String faviconQuery = URI.create(faviconUrl).getQuery();
+            assertTrue(faviconQuery != null && faviconQuery.contains("ln=images"));
+            assertTrue(faviconQuery.contains("revision="));
+            assertEquals(
+                    200,
+                    ((Number) page.evaluate(
+                                    "faviconUrl => fetch(faviconUrl).then(response => response.status)",
+                                    faviconUrl))
+                            .intValue(),
+                    "The cache-revised favicon should load successfully.");
             assertFalse(
                     page.locator(".app-header")
                             .innerText()
@@ -908,6 +921,489 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             assertSecurityHeaders(expiredResponse);
             assertThat(targetPage.locator("body")).containsText("Invitation unavailable");
         }
+    }
+
+    @Test
+    @Order(8)
+    void indefiniteApiTokensProvideLiveAccountPermissionsUntilRevoked() throws SQLException {
+        String suffix = uniqueSuffix();
+        String adminUsername = "api-admin-" + suffix;
+        String editorUsername = "api-editor-" + suffix;
+        String calendarName = "API calendar " + suffix;
+        String adminTokenName = "Admin integration " + suffix;
+        String editorTokenName = "Editor integration " + suffix;
+        long adminId = seedUser(adminUsername, "API admin " + suffix);
+        long editorId = seedUser(editorUsername, "API editor " + suffix);
+        SeededCalendar calendar = seedCalendar(adminId, calendarName);
+        String otherCalendarName = "Other API calendar " + suffix;
+        SeededCalendar otherCalendar = seedCalendar(adminId, otherCalendarName);
+        executeUpdate(
+                "insert into calendar_membership(calendar_id, user_id, role_name) values (?, ?, 'EDITOR')",
+                calendar.id(),
+                editorId);
+
+        try (BrowserContext adminContext = newBrowserContext();
+                BrowserContext editorContext = newBrowserContext()) {
+            Page adminPage = adminContext.newPage();
+            Page editorPage = editorContext.newPage();
+            signIn(adminPage, adminUsername, TEST_PASSWORD);
+            signIn(editorPage, editorUsername, TEST_PASSWORD);
+
+            navigate(adminPage, "/app/account-settings");
+            assertThat(adminPage.locator("body")).containsText("Tokens do not expire.");
+            adminPage.locator("input[id$='tokenName']").fill(adminTokenName);
+            adminPage.locator("button:has-text('Create API token')").click();
+            String adminToken = adminPage.getByLabel(
+                            "New API token", new Page.GetByLabelOptions().setExact(true))
+                    .inputValue();
+            assertTrue(
+                    adminToken.matches("calendar_social_api_[A-Za-z0-9_-]{43}"),
+                    "The issued API token should use the documented opaque format.");
+            assertResponsiveAndAccessible(adminPage, 768, 900);
+
+            String storedDigest = queryText(
+                    "select token_digest from api_token where user_id = ? and name = ?",
+                    adminId,
+                    adminTokenName);
+            assertEquals(64, storedDigest.length());
+            assertFalse(storedDigest.contains(adminToken));
+            assertEquals(
+                    adminToken.substring(adminToken.length() - 8),
+                    queryText(
+                            "select token_hint from api_token where user_id = ? and name = ?",
+                            adminId,
+                            adminTokenName));
+            assertEquals(
+                    0,
+                    queryLong(
+                            "select count(*) from api_token where token_digest = ?",
+                            adminToken));
+            assertEquals(
+                    0,
+                    queryLong(
+                            "select count(*) from information_schema.columns "
+                                    + "where table_schema = 'public' and table_name = 'api_token' "
+                                    + "and column_name in ('expires_at', 'scope', 'scopes')"));
+
+            navigate(adminPage, "/app/account-settings");
+            assertFalse(
+                    adminPage.content().contains(adminToken),
+                    "The plaintext token must disappear after its one-time response.");
+
+            navigate(editorPage, "/app/account-settings");
+            editorPage.locator("input[id$='tokenName']").fill(editorTokenName);
+            editorPage.locator("button:has-text('Create API token')").click();
+            String editorToken = editorPage.getByLabel(
+                            "New API token", new Page.GetByLabelOptions().setExact(true))
+                    .inputValue();
+
+            Map<String, Object> openApiResponse = apiRequest(
+                    adminPage, "/api/openapi", "GET", null, null, null);
+            assertEquals(200, responseStatus(openApiResponse));
+            assertTrue(String.valueOf(openApiResponse.get("body")).contains("calendar.social API"));
+            Map<String, Object> openApiDocument = responseBody(openApiResponse);
+            Map<String, Object> calendarPath = nestedBody(
+                    nestedBody(openApiDocument, "paths"),
+                    "/api/v1/calendars/{calendarId}");
+            Map<String, Object> calendarUpdateOperation = nestedBody(calendarPath, "put");
+            assertEquals(
+                    1,
+                    ((List<?>) calendarUpdateOperation.get("parameters")).size(),
+                    "The design-first contract must not be merged with duplicate scanned parameters.");
+
+            Map<String, Object> cookieOnlyResponse = apiRequest(
+                    adminPage, "/api/v1/me", "GET", null, null, null);
+            assertProblemResponse(cookieOnlyResponse, 401);
+            assertEquals(
+                    "Bearer realm=\"calendar.social\"",
+                    cookieOnlyResponse.get("wwwAuthenticate"));
+
+            Map<String, Object> publicLinkAsBearerResponse = apiRequest(
+                    adminPage,
+                    "/api/v1/me",
+                    "GET",
+                    calendar.calendarLinkToken(),
+                    null,
+                    null);
+            assertProblemResponse(publicLinkAsBearerResponse, 401);
+
+            Map<String, Object> callerResponse = apiRequest(
+                    adminPage, "/api/v1/me", "GET", adminToken, null, null);
+            assertEquals(200, responseStatus(callerResponse));
+            assertEquals(adminUsername, responseBody(callerResponse).get("username"));
+
+            Map<String, Object> calendarResponse = apiRequest(
+                    adminPage,
+                    "/api/v1/calendars/" + calendar.id(),
+                    "GET",
+                    adminToken,
+                    null,
+                    null);
+            assertEquals(200, responseStatus(calendarResponse));
+            assertEquals("ADMIN", responseBody(calendarResponse).get("role"));
+            String calendarEntityTag = (String) calendarResponse.get("etag");
+
+            String calendarSettings = """
+                    {
+                      "name": "%s",
+                      "description": "Managed through the API",
+                      "timeZone": "Europe/Warsaw",
+                      "publicAccessEnabled": true
+                    }
+                    """.formatted(calendarName);
+            Map<String, Object> staleCalendarUpdate = apiRequest(
+                    adminPage,
+                    "/api/v1/calendars/" + calendar.id(),
+                    "PUT",
+                    adminToken,
+                    "\"999999\"",
+                    calendarSettings);
+            assertProblemResponse(staleCalendarUpdate, 412);
+
+            Map<String, Object> updatedCalendarResponse = apiRequest(
+                    adminPage,
+                    "/api/v1/calendars/" + calendar.id(),
+                    "PUT",
+                    adminToken,
+                    calendarEntityTag,
+                    calendarSettings);
+            assertEquals(200, responseStatus(updatedCalendarResponse));
+            assertEquals("Managed through the API", responseBody(updatedCalendarResponse).get("description"));
+
+            Map<String, Object> editorCalendarResponse = apiRequest(
+                    editorPage,
+                    "/api/v1/calendars/" + calendar.id(),
+                    "GET",
+                    editorToken,
+                    null,
+                    null);
+            assertEquals(200, responseStatus(editorCalendarResponse));
+            assertEquals("EDITOR", responseBody(editorCalendarResponse).get("role"));
+
+            String eventTitle = "API kayaking " + suffix;
+            String eventInput = """
+                    {
+                      "title": "%s",
+                      "description": null,
+                      "location": "Lake",
+                      "time": {
+                        "kind": "all-day",
+                        "firstDay": "2026-08-10",
+                        "lastDay": "2026-08-12"
+                      }
+                    }
+                    """.formatted(eventTitle);
+            Map<String, Object> createdEventResponse = apiRequest(
+                    editorPage,
+                    "/api/v1/calendars/" + calendar.id() + "/events",
+                    "POST",
+                    editorToken,
+                    (String) editorCalendarResponse.get("etag"),
+                    eventInput);
+            assertEquals(201, responseStatus(createdEventResponse));
+            Map<String, Object> createdEvent = responseBody(createdEventResponse);
+            long eventId = ((Number) createdEvent.get("id")).longValue();
+            Map<String, Object> createdEventTime = nestedBody(createdEvent, "time");
+            assertEquals("2026-08-10", createdEventTime.get("firstDay"));
+            assertEquals("2026-08-12", createdEventTime.get("lastDay"));
+
+            Map<String, Object> wrongCalendarEventResponse = apiRequest(
+                    adminPage,
+                    "/api/v1/calendars/" + otherCalendar.id() + "/events/" + eventId,
+                    "GET",
+                    adminToken,
+                    null,
+                    null);
+            assertProblemResponse(wrongCalendarEventResponse, 404);
+
+            String updatedEventInput = """
+                    {
+                      "title": "%s updated",
+                      "description": "Bring paddles",
+                      "location": "Lake",
+                      "time": {
+                        "kind": "timed",
+                        "start": "2026-08-10T18:30:00",
+                        "end": "2026-08-10T20:00:00"
+                      }
+                    }
+                    """.formatted(eventTitle);
+            String initialEventEntityTag = (String) createdEventResponse.get("etag");
+            Map<String, Object> updatedEventResponse = apiRequest(
+                    editorPage,
+                    "/api/v1/calendars/" + calendar.id() + "/events/" + eventId,
+                    "PUT",
+                    editorToken,
+                    initialEventEntityTag,
+                    updatedEventInput);
+            assertEquals(200, responseStatus(updatedEventResponse));
+            assertFalse(initialEventEntityTag.equals(updatedEventResponse.get("etag")));
+            assertEquals("timed", nestedBody(responseBody(updatedEventResponse), "time").get("kind"));
+
+            Map<String, Object> staleEventUpdateResponse = apiRequest(
+                    editorPage,
+                    "/api/v1/calendars/" + calendar.id() + "/events/" + eventId,
+                    "PUT",
+                    editorToken,
+                    initialEventEntityTag,
+                    updatedEventInput);
+            assertProblemResponse(staleEventUpdateResponse, 412);
+
+            Map<String, Object> editorMemberListResponse = apiRequest(
+                    editorPage,
+                    "/api/v1/calendars/" + calendar.id() + "/members",
+                    "GET",
+                    editorToken,
+                    null,
+                    null);
+            assertProblemResponse(editorMemberListResponse, 403);
+
+            String editorMembershipPath = "/api/v1/calendars/"
+                    + calendar.id()
+                    + "/members/"
+                    + editorId;
+            Map<String, Object> promotedEditorResponse = apiRequest(
+                    adminPage,
+                    editorMembershipPath,
+                    "PUT",
+                    adminToken,
+                    null,
+                    "{\"role\":\"ADMIN\"}");
+            assertEquals(200, responseStatus(promotedEditorResponse));
+            assertEquals("ADMIN", responseBody(promotedEditorResponse).get("role"));
+            assertEquals(
+                    200,
+                    responseStatus(apiRequest(
+                            editorPage,
+                            "/api/v1/calendars/" + calendar.id() + "/members",
+                            "GET",
+                            editorToken,
+                            null,
+                            null)));
+
+            assertEquals(
+                    200,
+                    responseStatus(apiRequest(
+                            adminPage,
+                            editorMembershipPath,
+                            "PUT",
+                            adminToken,
+                            null,
+                            "{\"role\":\"EDITOR\"}")));
+            assertProblemResponse(
+                    apiRequest(
+                            editorPage,
+                            "/api/v1/calendars/" + calendar.id() + "/members",
+                            "GET",
+                            editorToken,
+                            null,
+                            null),
+                    403);
+
+            Map<String, Object> invitationResponse = apiRequest(
+                    adminPage,
+                    "/api/v1/registration-invitations",
+                    "POST",
+                    adminToken,
+                    null,
+                    null);
+            assertEquals(201, responseStatus(invitationResponse));
+            long invitationId = ((Number) responseBody(invitationResponse).get("id")).longValue();
+            assertEquals(
+                    204,
+                    responseStatus(apiRequest(
+                            adminPage,
+                            "/api/v1/invitations/" + invitationId,
+                            "DELETE",
+                            adminToken,
+                            null,
+                            null)));
+
+            Map<String, Object> editorInvitationResponse = apiRequest(
+                    adminPage,
+                    "/api/v1/calendars/" + otherCalendar.id() + "/editor-invitations",
+                    "POST",
+                    adminToken,
+                    null,
+                    null);
+            assertEquals(201, responseStatus(editorInvitationResponse));
+            Map<String, Object> editorInvitation = responseBody(editorInvitationResponse);
+            assertEquals("calendar-editor", editorInvitation.get("kind"));
+            assertEquals(otherCalendar.id(), ((Number) editorInvitation.get("calendarId")).longValue());
+            long editorInvitationId = ((Number) editorInvitation.get("id")).longValue();
+            Map<String, Object> listedInvitationsResponse = apiRequest(
+                    adminPage,
+                    "/api/v1/invitations",
+                    "GET",
+                    adminToken,
+                    null,
+                    null);
+            assertEquals(200, responseStatus(listedInvitationsResponse));
+            Map<String, Object> listedEditorInvitation = responseList(listedInvitationsResponse)
+                    .stream()
+                    .filter(listedInvitation ->
+                            ((Number) listedInvitation.get("id")).longValue() == editorInvitationId)
+                    .findFirst()
+                    .orElseThrow();
+            assertEquals(otherCalendarName, listedEditorInvitation.get("calendarName"));
+
+            String editorInvitationUrl = (String) editorInvitation.get("url");
+            String editorInvitationToken = editorInvitationUrl.substring(
+                    editorInvitationUrl.indexOf("?token=") + "?token=".length());
+            String invitationAcceptanceBody = "{\"token\":\"" + editorInvitationToken + "\"}";
+            Map<String, Object> acceptedInvitationResponse = apiRequest(
+                    editorPage,
+                    "/api/v1/invitation-acceptances",
+                    "POST",
+                    editorToken,
+                    null,
+                    invitationAcceptanceBody);
+            assertEquals(200, responseStatus(acceptedInvitationResponse));
+            assertEquals("EDITOR", responseBody(acceptedInvitationResponse).get("role"));
+            assertEquals(
+                    "EDITOR",
+                    responseBody(apiRequest(
+                                    editorPage,
+                                    "/api/v1/calendars/" + otherCalendar.id(),
+                                    "GET",
+                                    editorToken,
+                                    null,
+                                    null))
+                            .get("role"));
+            assertProblemResponse(
+                    apiRequest(
+                            editorPage,
+                            "/api/v1/invitation-acceptances",
+                            "POST",
+                            editorToken,
+                            null,
+                            invitationAcceptanceBody),
+                    422);
+
+            Map<String, Object> deletedEventResponse = apiRequest(
+                    editorPage,
+                    "/api/v1/calendars/" + calendar.id() + "/events/" + eventId,
+                    "DELETE",
+                    editorToken,
+                    (String) updatedEventResponse.get("etag"),
+                    null);
+            assertEquals(204, responseStatus(deletedEventResponse));
+            assertProblemResponse(
+                    apiRequest(
+                            editorPage,
+                            "/api/v1/calendars/" + calendar.id() + "/events/" + eventId,
+                            "GET",
+                            editorToken,
+                            null,
+                            null),
+                    404);
+
+            assertEquals(
+                    1,
+                    queryLong(
+                            "select count(*) from api_token "
+                                    + "where user_id = ? and name = ? and last_used_at is not null",
+                            adminId,
+                            adminTokenName));
+
+            navigate(adminPage, "/app/account-settings");
+            Locator adminTokenCard = adminPage.locator("article.list-card")
+                    .filter(new Locator.FilterOptions().setHasText(adminTokenName));
+            adminTokenCard.locator("button:has-text('Revoke')").click();
+            adminPage.locator(".ui-confirmdialog-yes").click();
+            assertThat(adminPage.locator("body")).containsText("API token revoked.");
+            assertEquals(
+                    0,
+                    queryLong(
+                            "select count(*) from api_token where user_id = ? and name = ?",
+                            adminId,
+                            adminTokenName));
+
+            Map<String, Object> revokedTokenResponse = apiRequest(
+                    adminPage, "/api/v1/me", "GET", adminToken, null, null);
+            assertProblemResponse(revokedTokenResponse, 401);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> apiRequest(
+            Page page,
+            String path,
+            String method,
+            String token,
+            String entityTag,
+            String requestBody) {
+        Map<String, Object> request = new HashMap<>();
+        request.put("path", path);
+        request.put("method", method);
+        request.put("token", token);
+        request.put("entityTag", entityTag);
+        request.put("requestBody", requestBody);
+        return (Map<String, Object>) page.evaluate(
+                """
+                async request => {
+                    const headers = {Accept: "application/json"};
+                    if (request.token !== null) {
+                        headers.Authorization = `Bearer ${request.token}`;
+                    }
+                    if (request.entityTag !== null) {
+                        headers["If-Match"] = request.entityTag;
+                    }
+                    if (request.requestBody !== null) {
+                        headers["Content-Type"] = "application/json";
+                    }
+                    const response = await fetch(request.path, {
+                        method: request.method,
+                        headers,
+                        body: request.requestBody,
+                        credentials: request.token === null ? "same-origin" : "omit"
+                    });
+                    const text = response.status === 204 ? "" : await response.text();
+                    let body = null;
+                    if (text.length > 0) {
+                        try {
+                            body = JSON.parse(text);
+                        } catch (error) {
+                            body = text;
+                        }
+                    }
+                    return {
+                        status: response.status,
+                        contentType: response.headers.get("content-type"),
+                        etag: response.headers.get("etag"),
+                        wwwAuthenticate: response.headers.get("www-authenticate"),
+                        body
+                    };
+                }
+                """,
+                request);
+    }
+
+    private static int responseStatus(Map<String, Object> response) {
+        return ((Number) response.get("status")).intValue();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> responseBody(Map<String, Object> response) {
+        return (Map<String, Object>) response.get("body");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> responseList(Map<String, Object> response) {
+        return (List<Map<String, Object>>) response.get("body");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> nestedBody(Map<String, Object> body, String propertyName) {
+        return (Map<String, Object>) body.get(propertyName);
+    }
+
+    private static void assertProblemResponse(Map<String, Object> response, int expectedStatus) {
+        assertEquals(expectedStatus, responseStatus(response));
+        assertTrue(
+                String.valueOf(response.get("contentType")).startsWith("application/problem+json"),
+                "API errors should use application/problem+json.");
+        assertEquals(expectedStatus, ((Number) responseBody(response).get("status")).intValue());
     }
 
     private String attemptBootstrapRegistration(

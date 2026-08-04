@@ -116,6 +116,7 @@ public class CalendarMembershipService {
             return Optional.of(entityManager
                     .createQuery(
                             "select calendarMembership from CalendarMembership calendarMembership "
+                                    + "join fetch calendarMembership.user "
                                     + "where calendarMembership.calendar.id = :calendarId "
                                     + "and calendarMembership.user.id = :userId",
                             CalendarMembership.class)

@@ -8,7 +8,8 @@ import java.util.Objects;
 
 @ApplicationScoped
 public class TokenService {
-    private static final int INVITATION_TOKEN_BYTE_COUNT = 32;
+    private static final int TOKEN_BYTE_COUNT = 32;
+    static final String API_TOKEN_PREFIX = "calendar_social_api_";
 
     private final SecureRandom secureRandom;
 
@@ -21,7 +22,15 @@ public class TokenService {
     }
 
     public String generateInvitationToken() {
-        byte[] tokenBytes = new byte[INVITATION_TOKEN_BYTE_COUNT];
+        return generateRandomToken();
+    }
+
+    public String generateApiToken() {
+        return API_TOKEN_PREFIX + generateRandomToken();
+    }
+
+    private String generateRandomToken() {
+        byte[] tokenBytes = new byte[TOKEN_BYTE_COUNT];
         secureRandom.nextBytes(tokenBytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
     }

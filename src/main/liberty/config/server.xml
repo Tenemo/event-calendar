@@ -2,7 +2,10 @@
 
     <featureManager>
         <feature>webProfile-10.0</feature>
+        <feature>mpOpenAPI-4.1</feature>
     </featureManager>
+
+    <mpOpenAPI docPath="/api/openapi" uiPath="/api/openapi/ui"/>
 
     <variable name="PORT" defaultValue="9080"/>
     <variable name="HTTPS_PORT" defaultValue="9443"/>
