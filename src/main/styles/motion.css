@@ -1,0 +1,17 @@
+.generated-invitation,
+.lightweight-messages > li,
+body .ui-messages {
+    animation: feedback-enter var(--motion-duration-deliberate) var(--motion-easing-emphasized);
+}
+
+@keyframes feedback-enter {
+    from {
+        opacity: 0;
+        transform: translateY(-0.35rem);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

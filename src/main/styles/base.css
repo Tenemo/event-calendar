@@ -109,6 +109,7 @@ strong {
     font-weight: var(--font-weight-strong);
     text-decoration: none;
     transform: translateY(-200%);
+    transition: transform var(--motion-duration-quick) var(--motion-easing-standard);
 }
 
 .skip-link:focus {

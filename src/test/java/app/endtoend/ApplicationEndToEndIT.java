@@ -109,6 +109,10 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
                             + "> document.documentElement.clientWidth")));
             assertMobileNavigationTargets(page);
             assertAccessible(page);
+            assertEquals(
+                    1,
+                    page.locator("link[rel='stylesheet'][href*='application.css']").count(),
+                    "The application should load one consolidated first-party stylesheet.");
 
             page.keyboard().press("Tab");
             assertThat(page.locator(".skip-link:focus")).hasText("Skip to main content");
@@ -132,13 +136,10 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
 
             assertEquals(200, navigate(page, "/error.html").status());
             Locator errorPageStylesheets = page.locator("link[rel='stylesheet']");
-            assertEquals(2, errorPageStylesheets.count());
+            assertEquals(1, errorPageStylesheets.count());
             assertEquals(
-                    "/resources/css/tokens.css",
+                    "/resources/css/error.css",
                     errorPageStylesheets.nth(0).getAttribute("href"));
-            assertEquals(
-                    "/resources/css/error-page.css",
-                    errorPageStylesheets.nth(1).getAttribute("href"));
 
             navigate(page, "/app/calendars");
             page.waitForURL("**/sign-in");
@@ -1129,6 +1130,26 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
                     }
                     """.formatted(eventTitle);
             String initialEventEntityTag = (String) createdEventResponse.get("etag");
+            assertProblemResponse(
+                    apiRequest(
+                            adminPage,
+                            "/api/v1/calendars/" + otherCalendar.id() + "/events/" + eventId,
+                            "PUT",
+                            adminToken,
+                            initialEventEntityTag,
+                            updatedEventInput),
+                    404);
+            assertProblemResponse(
+                    apiRequest(
+                            adminPage,
+                            "/api/v1/calendars/" + otherCalendar.id() + "/events/" + eventId,
+                            "DELETE",
+                            adminToken,
+                            initialEventEntityTag,
+                            null),
+                    404);
+            assertEquals(eventTitle, queryText("select title from calendar_event where id = ?", eventId));
+
             Map<String, Object> updatedEventResponse = apiRequest(
                     editorPage,
                     "/api/v1/calendars/" + calendar.id() + "/events/" + eventId,
@@ -1627,9 +1648,7 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             acceptInvitationButton.click(
                     new Locator.ClickOptions().setTimeout(Duration.ofSeconds(60).toMillis()));
             page.locator("#calendarPage")
-                    .or(page.getByText(
-                            "Invitation is invalid or no longer available.",
-                            new Page.GetByTextOptions().setExact(true)))
+                    .or(page.locator("#unavailableInvitationHeading"))
                     .waitFor(new Locator.WaitForOptions()
                             .setTimeout(Duration.ofSeconds(60).toMillis()));
             return new InvitationAcceptanceResult(

@@ -13,7 +13,11 @@ run = "docker compose up --detach --wait postgres"
 
 [tasks.dev]
 description = "Run Open Liberty dev mode"
-run = "mvn -Pliberty-dev liberty:dev"
+run = "mvn -Pliberty-dev generate-resources liberty:dev"
+
+[tasks.bundle-styles]
+description = "Rebuild the development CSS bundles"
+run = "mvn -B -ntp -Pliberty-dev generate-resources"
 
 [tasks.reseed-local]
 description = "Wipe and recreate deterministic local development data"

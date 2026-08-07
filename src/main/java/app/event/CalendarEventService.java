@@ -56,18 +56,7 @@ public class CalendarEventService {
             ApplicationUser actingUser,
             Long calendarId,
             Long eventId) {
-        CalendarEvent event = eventId == null
-                ? null
-                : entityManager.find(CalendarEvent.class, eventId);
-        if (event == null || !Objects.equals(event.getCalendar().getId(), calendarId)) {
-            throw new NotFoundException("Event was not found.");
-        }
-        try {
-            calendarAccessService.requireCanEdit(actingUser, calendarId);
-            return event;
-        } catch (AuthorizationException exception) {
-            throw new NotFoundException("Event was not found.");
-        }
+        return requireEventInCalendar(actingUser, calendarId, eventId);
     }
 
     public CalendarEvent createEvent(
@@ -104,14 +93,16 @@ public class CalendarEventService {
             Integer expectedCalendarVersion,
             String expectedCalendarTimeZone) {
         CalendarEvent event = requireEditableEvent(actingUser, eventId);
-        Calendar calendar = calendarService.requireCalendarForChildMutation(event.getCalendar().getId());
-        calendarAccessService.requireCanEdit(actingUser, calendar.getId());
-        requireExpectedVersion(event, expectedVersion);
-        requireExpectedCalendarState(calendar, expectedCalendarVersion, expectedCalendarTimeZone);
-        EventTimeRange normalizedTimeRange = normalizeEventTimes(calendar, eventTimeInput);
-        applyEventValues(event, title, description, location, eventTimeInput, normalizedTimeRange);
-        flushWithConflictMessage();
-        return event;
+        return updateEventAfterLookup(
+                actingUser,
+                event,
+                expectedVersion,
+                title,
+                description,
+                location,
+                eventTimeInput,
+                expectedCalendarVersion,
+                expectedCalendarTimeZone);
     }
 
     public CalendarEvent updateEventInCalendar(
@@ -125,10 +116,10 @@ public class CalendarEventService {
             EventTimeInput eventTimeInput,
             Integer expectedCalendarVersion,
             String expectedCalendarTimeZone) {
-        requireEventInCalendar(actingUser, calendarId, eventId);
-        return updateEvent(
+        CalendarEvent event = requireEventInCalendar(actingUser, calendarId, eventId);
+        return updateEventAfterLookup(
                 actingUser,
-                eventId,
+                event,
                 expectedVersion,
                 title,
                 description,
@@ -269,6 +260,26 @@ public class CalendarEventService {
         if (!Objects.equals(event.getCalendar().getId(), calendarId)) {
             throw new NotFoundException("Event was not found.");
         }
+        return event;
+    }
+
+    private CalendarEvent updateEventAfterLookup(
+            ApplicationUser actingUser,
+            CalendarEvent event,
+            Integer expectedVersion,
+            String title,
+            String description,
+            String location,
+            EventTimeInput eventTimeInput,
+            Integer expectedCalendarVersion,
+            String expectedCalendarTimeZone) {
+        Calendar calendar = calendarService.requireCalendarForChildMutation(event.getCalendar().getId());
+        calendarAccessService.requireCanEdit(actingUser, calendar.getId());
+        requireExpectedVersion(event, expectedVersion);
+        requireExpectedCalendarState(calendar, expectedCalendarVersion, expectedCalendarTimeZone);
+        EventTimeRange normalizedTimeRange = normalizeEventTimes(calendar, eventTimeInput);
+        applyEventValues(event, title, description, location, eventTimeInput, normalizedTimeRange);
+        flushWithConflictMessage();
         return event;
     }
 

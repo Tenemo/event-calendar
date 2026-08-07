@@ -121,6 +121,10 @@ mise run docker-build
 
 `mise run package` compiles the app, runs unit tests, checks formatting, builds the WAR, and runs SpotBugs. `mise run end-to-end` builds the production image and runs Chromium against an isolated PostgreSQL database held in temporary storage; it does not use the local development database.
 
+Styles remain split by responsibility under `src/main/styles`. Maven concatenates them in the explicit order declared by `build-css.xml` and packages only the generated `application.css` and `error.css` bundles. Browser-level CSS imports are intentionally avoided so production pages keep one first-party stylesheet request.
+
+`mise run dev` builds the development bundles before Open Liberty starts. After editing a stylesheet while dev mode is already running, use `mise run bundle-styles` in another terminal to refresh those bundles without restarting the server.
+
 ## Pull request checks
 
 Every pull request runs:
