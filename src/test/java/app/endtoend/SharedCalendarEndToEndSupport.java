@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.security.TokenService;
 import com.deque.html.axecore.playwright.AxeBuilder;
 import com.deque.html.axecore.results.AxeResults;
 import com.microsoft.playwright.Browser;
@@ -20,6 +21,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -27,6 +31,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.HexFormat;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -44,6 +49,7 @@ abstract class SharedCalendarEndToEndSupport {
                     + "YTpMNBE5TiT//mxRmUMHckVy5XS82Y6oz0V8ZImb+/4=";
 
     private static final AtomicLong CALENDAR_LINK_TOKEN_SEQUENCE = new AtomicLong(1);
+    private static final TokenService TOKEN_SERVICE = new TokenService();
 
     private URI applicationBaseUri;
     private String databaseHost;
@@ -236,6 +242,18 @@ abstract class SharedCalendarEndToEndSupport {
         return new SeededCalendar(calendarId, calendarLinkToken);
     }
 
+    String seedApiToken(long userId, String tokenName) throws SQLException {
+        String plaintextToken = TOKEN_SERVICE.generateApiToken();
+        executeUpdate(
+                "insert into api_token(user_id, name, token_digest, token_hint, created_at) "
+                        + "values (?, ?, ?, ?, now())",
+                userId,
+                tokenName,
+                sha256Digest(plaintextToken),
+                plaintextToken.substring(plaintextToken.length() - 8));
+        return plaintextToken;
+    }
+
     long queryLong(String query, Object... parameters) throws SQLException {
         try (Connection connection = openDatabaseConnection();
                 PreparedStatement statement = connection.prepareStatement(query)) {
@@ -359,6 +377,15 @@ abstract class SharedCalendarEndToEndSupport {
                 .putLong(CALENDAR_LINK_TOKEN_SEQUENCE.getAndIncrement())
                 .array();
         return Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
+    }
+
+    private static String sha256Digest(String plaintextToken) {
+        try {
+            MessageDigest messageDigest = MessageDigest.getInstance("SHA-256");
+            return HexFormat.of().formatHex(messageDigest.digest(plaintextToken.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is required to seed API tokens.", exception);
+        }
     }
 
     private static String requiredEnvironment(String name) {

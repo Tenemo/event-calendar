@@ -119,7 +119,9 @@ mise run lighthouse
 mise run docker-build
 ```
 
-`mise run package` compiles the app, runs unit tests, checks formatting, builds the WAR, and runs SpotBugs. `mise run end-to-end` builds the production image and runs Chromium against an isolated PostgreSQL database held in temporary storage; it does not use the local development database.
+`mise run package` compiles the app, runs unit tests, checks formatting, builds the WAR, and runs SpotBugs. `mise run end-to-end` builds the production image and runs Chromium against an isolated PostgreSQL database held in temporary storage; it does not use the local development database. Independent browser test classes run two at a time locally and sequentially on GitHub Actions.
+
+The browser suite issues API tokens through account settings and verifies their one-time display, digest-only storage, indefinite lifetime, owner-bound revocation, live `EDITOR` and `ADMIN` permissions, every documented API operation, concurrent invitation acceptance, and uniform error responses against the real application and PostgreSQL database.
 
 Styles remain split by responsibility under `src/main/styles`. Maven concatenates them in the explicit order declared by `build-css.xml` and packages only the generated `application.css` and `error.css` bundles. Browser-level CSS imports are intentionally avoided so production pages keep one first-party stylesheet request.
 

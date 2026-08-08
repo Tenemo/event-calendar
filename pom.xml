@@ -27,8 +27,8 @@
         <maven.compiler.plugin.version>3.13.0</maven.compiler.plugin.version>
         <maven.dependency.plugin.version>3.8.1</maven.dependency.plugin.version>
         <maven.enforcer.plugin.version>3.6.3</maven.enforcer.plugin.version>
-        <maven.failsafe.plugin.version>3.5.2</maven.failsafe.plugin.version>
-        <maven.surefire.plugin.version>3.5.2</maven.surefire.plugin.version>
+        <maven.failsafe.plugin.version>3.5.3</maven.failsafe.plugin.version>
+        <maven.surefire.plugin.version>3.5.3</maven.surefire.plugin.version>
         <maven.war.plugin.version>3.4.0</maven.war.plugin.version>
         <spotbugs.maven.plugin.version>4.10.3.0</spotbugs.maven.plugin.version>
         <spotless.maven.plugin.version>3.8.0</spotless.maven.plugin.version>
@@ -316,9 +316,19 @@
                 <end.to.end.http.port>19082</end.to.end.http.port>
                 <end.to.end.https.port>19445</end.to.end.https.port>
                 <end.to.end.browser>chromium</end.to.end.browser>
+                <end.to.end.parallelism>2</end.to.end.parallelism>
+                <spotbugs.skip>true</spotbugs.skip>
+                <spotless.check.skip>true</spotless.check.skip>
             </properties>
             <build>
                 <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <skipTests>true</skipTests>
+                        </configuration>
+                    </plugin>
                     <plugin>
                         <groupId>org.codehaus.mojo</groupId>
                         <artifactId>exec-maven-plugin</artifactId>
@@ -431,6 +441,14 @@
                         <configuration>
                             <failIfNoTests>true</failIfNoTests>
                             <useModulePath>false</useModulePath>
+                            <systemPropertyVariables>
+                                <junit.jupiter.execution.parallel.enabled>true</junit.jupiter.execution.parallel.enabled>
+                                <junit.jupiter.execution.parallel.mode.default>same_thread</junit.jupiter.execution.parallel.mode.default>
+                                <junit.jupiter.execution.parallel.mode.classes.default>concurrent</junit.jupiter.execution.parallel.mode.classes.default>
+                                <junit.jupiter.execution.parallel.config.strategy>fixed</junit.jupiter.execution.parallel.config.strategy>
+                                <junit.jupiter.execution.parallel.config.fixed.parallelism>${end.to.end.parallelism}</junit.jupiter.execution.parallel.config.fixed.parallelism>
+                                <junit.jupiter.execution.parallel.config.fixed.max-pool-size>${end.to.end.parallelism}</junit.jupiter.execution.parallel.config.fixed.max-pool-size>
+                            </systemPropertyVariables>
                             <environmentVariables>
                                 <APP_BASE_URL>https://localhost:${end.to.end.https.port}</APP_BASE_URL>
                                 <BROWSER>${end.to.end.browser}</BROWSER>
@@ -443,7 +461,7 @@
                                 <PGUSER>shared_calendar_verification</PGUSER>
                             </environmentVariables>
                             <includes>
-                                <include>**/ApplicationEndToEndIT.java</include>
+                                <include>**/*EndToEndIT.java</include>
                             </includes>
                         </configuration>
                         <executions>
@@ -457,6 +475,18 @@
                     </plugin>
                 </plugins>
             </build>
+        </profile>
+        <profile>
+            <id>github-actions</id>
+            <activation>
+                <property>
+                    <name>env.GITHUB_ACTIONS</name>
+                    <value>true</value>
+                </property>
+            </activation>
+            <properties>
+                <end.to.end.parallelism>1</end.to.end.parallelism>
+            </properties>
         </profile>
     </profiles>
 </project>

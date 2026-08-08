@@ -71,9 +71,9 @@ public class InvitationService {
                                 + "from Invitation invitation "
                                 + "left join invitation.calendar calendar "
                                 + "where invitation.createdByUser.id = :userId "
-                                + "or (invitation.calendar is not null and exists ("
+                                + "or (calendar.id is not null and exists ("
                                 + "select membership.calendar.id from CalendarMembership membership "
-                                + "where membership.calendar.id = invitation.calendar.id "
+                                + "where membership.calendar.id = calendar.id "
                                 + "and membership.user.id = :userId "
                                 + "and membership.role = :adminRole)) "
                                 + "order by invitation.createdAt desc, invitation.id desc",
