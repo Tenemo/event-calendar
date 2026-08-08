@@ -13,7 +13,11 @@ run = "docker compose up --detach --wait postgres"
 
 [tasks.dev]
 description = "Run Open Liberty dev mode"
-run = "mvn -Pliberty-dev liberty:dev"
+run = "mvn -Pliberty-dev generate-resources liberty:dev"
+
+[tasks.bundle-styles]
+description = "Rebuild the development CSS bundles"
+run = "mvn -B -ntp -Pliberty-dev generate-resources"
 
 [tasks.reseed-local]
 description = "Wipe and recreate deterministic local development data"
@@ -44,7 +48,7 @@ run = "actionlint -shellcheck="
 [tasks.end-to-end]
 description = "Run Chromium tests against an isolated disposable database"
 run = [
-    "mvn -B -ntp -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.classpathScope=test -Dexec.args=\"install --with-deps chromium\" org.codehaus.mojo:exec-maven-plugin:3.5.0:java",
+    "mvn -B -ntp -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.classpathScope=test -Dexec.args=\"install --with-deps --only-shell chromium\" org.codehaus.mojo:exec-maven-plugin:3.5.0:java",
     "mvn -B -ntp -Pend-to-end verify",
 ]
 

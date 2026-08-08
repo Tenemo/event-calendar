@@ -2,7 +2,8 @@
 .surface-panel,
 .ui-panel.surface-panel,
 .list-card,
-.generated-invitation {
+.generated-invitation,
+.generated-token {
     border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-medium);
     background: var(--color-surface);
@@ -11,7 +12,8 @@
 .intro-panel,
 .surface-panel,
 .ui-panel.surface-panel,
-.generated-invitation {
+.generated-invitation,
+.generated-token {
     box-shadow: var(--shadow-surface);
 }
 
@@ -225,12 +227,18 @@
     flex: 1;
 }
 
-.generated-invitation {
+.generated-invitation,
+.generated-token {
     display: grid;
     gap: 0.5rem;
     padding: 1rem;
     border-color: var(--color-success-border);
     background: linear-gradient(135deg, var(--color-success-soft), var(--color-surface));
+}
+
+.generated-token,
+.api-token-list {
+    margin-top: 1rem;
 }
 
 .lightweight-panel {

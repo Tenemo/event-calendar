@@ -40,6 +40,7 @@ public final class LocalDatabaseSeeder {
     private static final Pattern DATABASE_IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,62}");
     private static final Set<String> APPLICATION_SCHEMA_TABLES = Set.of(
             "app_user",
+            "api_token",
             "calendar",
             "calendar_event",
             "calendar_membership",

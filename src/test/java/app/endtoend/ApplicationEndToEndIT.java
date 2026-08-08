@@ -37,7 +37,7 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
     @Order(1)
     void freshSchemaPublicPagesAndAccessibilityAreSound() throws SQLException {
         assertEquals(
-                "app_user,calendar,calendar_event,calendar_membership,"
+                "api_token,app_user,calendar,calendar_event,calendar_membership,"
                         + "flyway_schema_history,invitation,registration_bootstrap",
                 queryText(
                         "select string_agg(table_name, ',' order by table_name) "
@@ -51,6 +51,17 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             assertEquals(200, homeResponse.status());
             assertThat(page).hasTitle("calendar.social");
             assertThat(page.locator(".app-brand span")).hasText("calendar.social");
+            String faviconUrl = page.locator("link[rel='icon']").getAttribute("href");
+            String faviconQuery = URI.create(faviconUrl).getQuery();
+            assertTrue(faviconQuery != null && faviconQuery.contains("ln=images"));
+            assertTrue(faviconQuery.contains("revision="));
+            assertEquals(
+                    200,
+                    ((Number) page.evaluate(
+                                    "faviconUrl => fetch(faviconUrl).then(response => response.status)",
+                                    faviconUrl))
+                            .intValue(),
+                    "The cache-revised favicon should load successfully.");
             assertFalse(
                     page.locator(".app-header")
                             .innerText()
@@ -96,6 +107,10 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
                             + "> document.documentElement.clientWidth")));
             assertMobileNavigationTargets(page);
             assertAccessible(page);
+            assertEquals(
+                    1,
+                    page.locator("link[rel='stylesheet'][href*='application.css']").count(),
+                    "The application should load one consolidated first-party stylesheet.");
 
             page.keyboard().press("Tab");
             assertThat(page.locator(".skip-link:focus")).hasText("Skip to main content");
@@ -119,13 +134,10 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
 
             assertEquals(200, navigate(page, "/error.html").status());
             Locator errorPageStylesheets = page.locator("link[rel='stylesheet']");
-            assertEquals(2, errorPageStylesheets.count());
+            assertEquals(1, errorPageStylesheets.count());
             assertEquals(
-                    "/resources/css/tokens.css",
+                    "/resources/css/error.css",
                     errorPageStylesheets.nth(0).getAttribute("href"));
-            assertEquals(
-                    "/resources/css/error-page.css",
-                    errorPageStylesheets.nth(1).getAttribute("href"));
 
             navigate(page, "/app/calendars");
             page.waitForURL("**/sign-in");
@@ -1131,9 +1143,7 @@ class ApplicationEndToEndIT extends SharedCalendarEndToEndSupport {
             acceptInvitationButton.click(
                     new Locator.ClickOptions().setTimeout(Duration.ofSeconds(60).toMillis()));
             page.locator("#calendarPage")
-                    .or(page.getByText(
-                            "Invitation is invalid or no longer available.",
-                            new Page.GetByTextOptions().setExact(true)))
+                    .or(page.locator("#unavailableInvitationHeading"))
                     .waitFor(new Locator.WaitForOptions()
                             .setTimeout(Duration.ofSeconds(60).toMillis()));
             return new InvitationAcceptanceResult(

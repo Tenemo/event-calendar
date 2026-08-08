@@ -84,6 +84,11 @@ public class CalendarService {
         return requireCalendar(calendarId, LockModeType.NONE);
     }
 
+    public Calendar requireMemberCalendar(ApplicationUser actingUser, Long calendarId) {
+        calendarAccessService.requireCanEdit(actingUser, calendarId);
+        return requireCalendar(calendarId, LockModeType.NONE);
+    }
+
     public List<CalendarMembershipSummary> findCalendarsForUser(ApplicationUser user) {
         if (user == null || user.getId() == null) {
             return List.of();

@@ -7,7 +7,7 @@
   },
   "scripts": {
     "lighthouse": "node scripts/run-lighthouse.mjs",
-    "lint:css": "stylelint \"src/main/webapp/resources/css/**/*.css\""
+    "lint:css": "stylelint \"src/main/styles/**/*.css\""
   },
   "devDependencies": {
     "chrome-launcher": "1.2.1",

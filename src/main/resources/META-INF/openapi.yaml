@@ -1,0 +1,760 @@
+openapi: 3.1.0
+info:
+  title: calendar.social API
+  version: 1.0.0
+  description: |
+    Read and write access to calendar.social using an indefinite API token.
+    A token has the live permissions of its owning account, has no scopes, and remains valid until revoked.
+servers:
+  - url: /
+security:
+  - bearerToken: []
+tags:
+  - name: Caller
+  - name: Calendars
+  - name: Events
+  - name: Members
+  - name: Invitations
+paths:
+  /api/v1/me:
+    get:
+      tags: [Caller]
+      operationId: getCaller
+      summary: Get the token owner
+      responses:
+        "200":
+          description: The account that owns the bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/calendars:
+    get:
+      tags: [Calendars]
+      operationId: listCalendars
+      summary: List calendars
+      responses:
+        "200":
+          description: All calendars the token owner can edit.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CalendarSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Calendars]
+      operationId: createCalendar
+      summary: Create a calendar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCalendarInput"
+      responses:
+        "201":
+          description: Calendar created. The token owner is its first admin.
+          headers:
+            ETag:
+              $ref: "#/components/headers/CalendarEntityTag"
+            Location:
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Calendar"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /api/v1/calendars/{calendarId}:
+    parameters:
+      - $ref: "#/components/parameters/CalendarId"
+    get:
+      tags: [Calendars]
+      operationId: getCalendar
+      summary: Get a calendar
+      responses:
+        "200":
+          description: Calendar details.
+          headers:
+            ETag:
+              $ref: "#/components/headers/CalendarEntityTag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Calendar"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Calendars]
+      operationId: updateCalendar
+      summary: Replace calendar settings
+      description: Admin access is required.
+      parameters:
+        - $ref: "#/components/parameters/CalendarIfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CalendarSettingsInput"
+      responses:
+        "200":
+          description: Updated calendar.
+          headers:
+            ETag:
+              $ref: "#/components/headers/CalendarEntityTag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Calendar"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /api/v1/calendars/{calendarId}/calendar-link-regenerations:
+    parameters:
+      - $ref: "#/components/parameters/CalendarId"
+    post:
+      tags: [Calendars]
+      operationId: regenerateCalendarLink
+      summary: Regenerate the compact calendar link
+      description: Admin access is required. The previous link stops working immediately.
+      parameters:
+        - $ref: "#/components/parameters/CalendarIfMatch"
+      responses:
+        "200":
+          description: Calendar with its new public URL.
+          headers:
+            ETag:
+              $ref: "#/components/headers/CalendarEntityTag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Calendar"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /api/v1/calendars/{calendarId}/events:
+    parameters:
+      - $ref: "#/components/parameters/CalendarId"
+    get:
+      tags: [Events]
+      operationId: listEvents
+      summary: List events
+      responses:
+        "200":
+          description: Events ordered by start time and identifier.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Event"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Events]
+      operationId: createEvent
+      summary: Create an event
+      parameters:
+        - $ref: "#/components/parameters/CalendarIfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventInput"
+      responses:
+        "201":
+          description: Event created.
+          headers:
+            ETag:
+              $ref: "#/components/headers/EventEntityTag"
+            Location:
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Event"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /api/v1/calendars/{calendarId}/events/{eventId}:
+    parameters:
+      - $ref: "#/components/parameters/CalendarId"
+      - $ref: "#/components/parameters/EventId"
+    get:
+      tags: [Events]
+      operationId: getEvent
+      summary: Get an event
+      responses:
+        "200":
+          description: Event details in the calendar's current time zone.
+          headers:
+            ETag:
+              $ref: "#/components/headers/EventEntityTag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Event"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Events]
+      operationId: updateEvent
+      summary: Replace an event
+      parameters:
+        - $ref: "#/components/parameters/EventIfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventInput"
+      responses:
+        "200":
+          description: Updated event.
+          headers:
+            ETag:
+              $ref: "#/components/headers/EventEntityTag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Event"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+    delete:
+      tags: [Events]
+      operationId: deleteEvent
+      summary: Delete an event
+      parameters:
+        - $ref: "#/components/parameters/EventIfMatch"
+      responses:
+        "204":
+          description: Event deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+  /api/v1/calendars/{calendarId}/members:
+    parameters:
+      - $ref: "#/components/parameters/CalendarId"
+    get:
+      tags: [Members]
+      operationId: listMembers
+      summary: List calendar members
+      description: Admin access is required.
+      responses:
+        "200":
+          description: Calendar members.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Membership"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/calendars/{calendarId}/members/{userId}:
+    parameters:
+      - $ref: "#/components/parameters/CalendarId"
+      - $ref: "#/components/parameters/UserId"
+    put:
+      tags: [Members]
+      operationId: changeMemberRole
+      summary: Change a member's role
+      description: Admin access is required. The last admin cannot be demoted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleInput"
+      responses:
+        "200":
+          description: Updated membership.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Membership"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    delete:
+      tags: [Members]
+      operationId: removeMember
+      summary: Remove a calendar member
+      description: Admin access is required. The last admin cannot be removed.
+      responses:
+        "204":
+          description: Membership removed.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /api/v1/registration-invitations:
+    post:
+      tags: [Invitations]
+      operationId: createRegistrationInvitation
+      summary: Create a registration invitation
+      responses:
+        "201":
+          description: Seven-day, single-use registration invitation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invitation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/calendars/{calendarId}/editor-invitations:
+    parameters:
+      - $ref: "#/components/parameters/CalendarId"
+    post:
+      tags: [Invitations]
+      operationId: createEditorInvitation
+      summary: Create an editor invitation
+      responses:
+        "201":
+          description: Seven-day, single-use editor invitation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invitation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/invitations:
+    get:
+      tags: [Invitations]
+      operationId: listInvitations
+      summary: List outstanding invitations
+      responses:
+        "200":
+          description: Invitations the token owner can revoke.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Invitation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/invitations/{invitationId}:
+    parameters:
+      - $ref: "#/components/parameters/InvitationId"
+    delete:
+      tags: [Invitations]
+      operationId: revokeInvitation
+      summary: Revoke an invitation
+      responses:
+        "204":
+          description: Invitation revoked.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/invitation-acceptances:
+    post:
+      tags: [Invitations]
+      operationId: acceptEditorInvitation
+      summary: Accept an editor invitation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationAcceptanceInput"
+      responses:
+        "200":
+          description: The calendar joined as an editor.
+          headers:
+            ETag:
+              $ref: "#/components/headers/CalendarEntityTag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Calendar"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+components:
+  securitySchemes:
+    bearerToken:
+      type: http
+      scheme: bearer
+      bearerFormat: Opaque API token
+      description: Indefinite, unscoped token issued in account settings and valid until revoked.
+  parameters:
+    CalendarId:
+      name: calendarId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    EventId:
+      name: eventId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    InvitationId:
+      name: invitationId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    CalendarIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Strong ETag from the latest calendar representation.
+      schema:
+        type: string
+        example: '"3"'
+    EventIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Strong ETag from the latest event representation; it binds both event and calendar versions.
+      schema:
+        type: string
+        example: '"event-2-calendar-3"'
+  headers:
+    CalendarEntityTag:
+      description: Strong version tag for calendar writes.
+      schema:
+        type: string
+        example: '"3"'
+    EventEntityTag:
+      description: Strong version tag binding the event and calendar versions.
+      schema:
+        type: string
+        example: '"event-2-calendar-3"'
+  responses:
+    Unauthorized:
+      description: Missing, malformed, revoked, or unknown bearer token.
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+            example: Bearer realm="calendar.social"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Forbidden:
+      description: The token owner does not have the required live calendar role.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: The resource does not exist or is deliberately hidden from this account.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    PreconditionFailed:
+      description: The resource changed since the supplied ETag was read.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    PreconditionRequired:
+      description: A current If-Match header is required.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ValidationFailed:
+      description: The JSON document is structurally valid but contains invalid application data.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    User:
+      type: object
+      required: [id, username, displayName]
+      properties:
+        id:
+          type: integer
+          format: int64
+        username:
+          type: string
+        displayName:
+          type: string
+    CalendarSummary:
+      type: object
+      required: [id, name, role, publicAccessEnabled, publicUrl]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        role:
+          $ref: "#/components/schemas/CalendarRole"
+        publicAccessEnabled:
+          type: boolean
+        publicUrl:
+          type: string
+          format: uri
+    Calendar:
+      allOf:
+        - $ref: "#/components/schemas/CalendarSummary"
+        - type: object
+          required: [description, timeZone, version]
+          properties:
+            description:
+              type: [string, "null"]
+              maxLength: 4000
+            timeZone:
+              type: string
+              description: IANA time-zone identifier.
+            version:
+              type: integer
+              minimum: 0
+    CreateCalendarInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 160
+    CalendarSettingsInput:
+      type: object
+      required: [name, timeZone, publicAccessEnabled]
+      properties:
+        name:
+          type: string
+          maxLength: 160
+        description:
+          type: [string, "null"]
+          maxLength: 4000
+        timeZone:
+          type: string
+          maxLength: 80
+        publicAccessEnabled:
+          type: boolean
+    CalendarRole:
+      type: string
+      enum: [EDITOR, ADMIN]
+    TimedEventTime:
+      type: object
+      required: [kind, start, end]
+      properties:
+        kind:
+          const: timed
+        start:
+          type: string
+          description: Local date and time without an offset, interpreted in the calendar time zone.
+          example: 2026-08-03T18:30:00
+        end:
+          type: string
+          description: Local date and time without an offset, interpreted in the calendar time zone.
+          example: 2026-08-03T20:00:00
+    AllDayEventTime:
+      type: object
+      required: [kind, firstDay, lastDay]
+      properties:
+        kind:
+          const: all-day
+        firstDay:
+          type: string
+          format: date
+        lastDay:
+          type: string
+          format: date
+          description: Inclusive final civil date.
+    EventTime:
+      oneOf:
+        - $ref: "#/components/schemas/TimedEventTime"
+        - $ref: "#/components/schemas/AllDayEventTime"
+      discriminator:
+        propertyName: kind
+        mapping:
+          timed: "#/components/schemas/TimedEventTime"
+          all-day: "#/components/schemas/AllDayEventTime"
+    EventInput:
+      type: object
+      required: [title, time]
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: [string, "null"]
+          maxLength: 4000
+        location:
+          type: [string, "null"]
+          maxLength: 200
+        time:
+          $ref: "#/components/schemas/EventTime"
+    Event:
+      allOf:
+        - $ref: "#/components/schemas/EventInput"
+        - type: object
+          required: [id, version, calendarVersion]
+          properties:
+            id:
+              type: integer
+              format: int64
+            version:
+              type: integer
+              minimum: 0
+            calendarVersion:
+              type: integer
+              minimum: 0
+    Membership:
+      type: object
+      required: [user, role]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        role:
+          $ref: "#/components/schemas/CalendarRole"
+    RoleInput:
+      type: object
+      required: [role]
+      properties:
+        role:
+          $ref: "#/components/schemas/CalendarRole"
+    Invitation:
+      type: object
+      required: [id, kind, calendarId, url, createdAt, expiresAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        kind:
+          type: string
+          enum: [registration, calendar-editor]
+        calendarId:
+          type: [integer, "null"]
+          format: int64
+        calendarName:
+          type: [string, "null"]
+        url:
+          type: string
+          format: uri
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+    InvitationAcceptanceInput:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+          minLength: 43
+          maxLength: 43
+    Problem:
+      type: object
+      required: [type, title, status, detail]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri-reference
