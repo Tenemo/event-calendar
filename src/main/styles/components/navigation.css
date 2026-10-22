@@ -69,6 +69,11 @@
     line-height: 1;
     text-decoration: none;
     white-space: nowrap;
+    transition:
+        color var(--motion-duration-quick) var(--motion-easing-standard),
+        background-color var(--motion-duration-quick) var(--motion-easing-standard),
+        border-color var(--motion-duration-quick) var(--motion-easing-standard),
+        box-shadow var(--motion-duration-standard) var(--motion-easing-standard);
 }
 
 .app-nav a:hover {

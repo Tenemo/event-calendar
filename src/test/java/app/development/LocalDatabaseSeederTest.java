@@ -103,6 +103,7 @@ class LocalDatabaseSeederTest {
     void onlyEmptyOrExactApplicationSchemasCanBeReset() {
         Set<String> applicationSchemaTables = Set.of(
                 "app_user",
+                "api_token",
                 "calendar",
                 "calendar_event",
                 "calendar_membership",
@@ -114,6 +115,7 @@ class LocalDatabaseSeederTest {
         assertTrue(LocalDatabaseSeeder.isRecognizedApplicationSchema(applicationSchemaTables));
         assertFalse(LocalDatabaseSeeder.isRecognizedApplicationSchema(Set.of(
                 "app_user",
+                "api_token",
                 "calendar",
                 "calendar_event",
                 "calendar_membership",
@@ -121,6 +123,7 @@ class LocalDatabaseSeederTest {
                 "registration_bootstrap")));
         assertFalse(LocalDatabaseSeeder.isRecognizedApplicationSchema(Set.of(
                 "app_user",
+                "api_token",
                 "calendar",
                 "calendar_event",
                 "calendar_membership",

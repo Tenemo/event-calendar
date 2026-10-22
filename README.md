@@ -10,14 +10,16 @@ calendar.social is a small server-rendered web app for coordinating events with 
 - Lets an admin disable public access or regenerate the calendar link.
 - Uses single-use, seven-day links for registration and editor invitations.
 - Changes passwords from the account settings page.
+- Issues revocable, indefinite API tokens with the owning account's live permissions.
 
 The app intentionally does not include recurring events, notifications, email delivery, ICS import or export, native clients, read-only accounts, audit history, or account recovery.
 
 ## Stack
 
 - Java 25
-- Jakarta EE 10, Jakarta Faces, and PrimeFaces
+- Jakarta EE 10, Jakarta Faces, Jakarta REST, and PrimeFaces
 - Open Liberty
+- MicroProfile OpenAPI
 - PostgreSQL 17
 - Flyway
 - Maven
@@ -102,7 +104,7 @@ There is deliberately no upgrade path for earlier development schemas. Until the
 
 Flyway applies the initial schema during startup and refuses to run when the database contains a different migration history. After launch, freeze `V1` and introduce normal forward migrations instead of resetting user data.
 
-The schema contains only application users, calendars, memberships, events, outstanding invitations, and the one-row bootstrap state.
+The schema contains only application users, API token digests, calendars, memberships, events, outstanding invitations, and the one-row bootstrap state.
 
 ## Development commands
 
@@ -117,7 +119,13 @@ mise run lighthouse
 mise run docker-build
 ```
 
-`mise run package` compiles the app, runs unit tests, checks formatting, builds the WAR, and runs SpotBugs. `mise run end-to-end` builds the production image and runs Chromium against an isolated PostgreSQL database held in temporary storage; it does not use the local development database.
+`mise run package` compiles the app, runs unit tests, checks formatting, builds the WAR, and runs SpotBugs. `mise run end-to-end` builds the production image and runs Chromium against an isolated PostgreSQL database held in temporary storage; it does not use the local development database. Independent browser test classes run two at a time locally and sequentially on GitHub Actions.
+
+The browser suite issues API tokens through account settings and verifies their one-time display, digest-only storage, indefinite lifetime, owner-bound revocation, live `EDITOR` and `ADMIN` permissions, every documented API operation, concurrent invitation acceptance, and uniform error responses against the real application and PostgreSQL database.
+
+Styles remain split by responsibility under `src/main/styles`. Maven concatenates them in the explicit order declared by `build-css.xml` and packages only the generated `application.css` and `error.css` bundles. Browser-level CSS imports are intentionally avoided so production pages keep one first-party stylesheet request.
+
+`mise run dev` builds the development bundles before Open Liberty starts. After editing a stylesheet while dev mode is already running, use `mise run bundle-styles` in another terminal to refresh those bundles without restarting the server.
 
 ## Pull request checks
 
@@ -140,6 +148,28 @@ Each calendar creator becomes its first `ADMIN`.
 - `ADMIN` has editor permissions and can change calendar settings and manage memberships.
 
 Every calendar must retain at least one admin. Removing a membership deletes it; accepting a later editor invitation creates it again. Service methods enforce permissions independently of the visible controls.
+
+## API access
+
+Create API tokens under account settings. A token:
+
+- has full read and write access available to its owning account, with no scopes;
+- has no expiration time and remains valid until manually revoked;
+- uses the account's current calendar roles on every request, so membership and role changes take effect immediately;
+- is displayed once when created and cannot be recovered later;
+- is stored only as a SHA-256 digest with a short display hint.
+
+Password changes invalidate browser sessions but do not revoke API tokens. Revoke a token explicitly from account settings when it should stop working. Revocation removes its stored digest, and later requests receive `401 Unauthorized`.
+
+Send a token only in the bearer authorization header:
+
+```text
+Authorization: Bearer calendar_social_api_YOUR_TOKEN
+```
+
+The versioned API starts at `/api/v1`. Browser cookies, calendar links, and invitation tokens do not authenticate API requests. Errors use `application/problem+json`. Calendar and event mutations that can overwrite concurrent changes require the latest strong `ETag` in an `If-Match` header.
+
+The machine-readable OpenAPI contract is available at `/api/openapi`, and its interactive documentation is available at `/api/openapi/ui`.
 
 ## Calendar links
 

@@ -14,6 +14,66 @@
                              eyebrow="Signed in as #{accountSettingsView.username}"
                              compact="true"/>
 
+            <p:panel styleClass="surface-panel" pt:aria-labelledby="apiTokensHeading">
+                <h2 id="apiTokensHeading" class="panel-heading">API tokens</h2>
+                <p class="field-help">Tokens do not expire. Each token has the same read and write access as your account until you revoke it.</p>
+                <h:form styleClass="stacked-form">
+                    <p:outputLabel for="tokenName" value="Token name"/>
+                    <p:inputText id="tokenName"
+                                 value="#{accountSettingsView.tokenName}"
+                                 maxlength="#{accountSettingsView.maximumTokenNameLength}"
+                                 autocomplete="off"
+                                 required="true"
+                                 requiredMessage="Token name is required."/>
+                    <p class="field-help">Use a name that identifies the app or device using this token.</p>
+
+                    <p:commandButton value="Create API token"
+                                     action="#{accountSettingsView.createApiToken}"
+                                     ajax="false"/>
+                </h:form>
+
+                <h:panelGroup layout="block"
+                              styleClass="generated-token"
+                              rendered="#{accountSettingsView.hasGeneratedApiToken()}">
+                    <app:copy-field id="generatedApiToken"
+                                    value="#{accountSettingsView.generatedApiToken}"
+                                    label="New API token"
+                                    help="Copy this token now. It will not be shown again."
+                                    buttonLabel="Copy API token"/>
+                </h:panelGroup>
+
+                <app:empty-state id="emptyApiTokenList"
+                                 title="No API tokens"
+                                 description="Create a token to use the API without an interactive sign-in."
+                                 rendered="#{empty accountSettingsView.apiTokens}"/>
+                <div class="card-list api-token-list">
+                    <ui:repeat value="#{accountSettingsView.apiTokens}" var="apiToken">
+                        <article class="list-card">
+                            <div>
+                                <h3 class="card-heading">#{apiToken.name}</h3>
+                                <p class="secondary-line">Ending in #{apiToken.tokenHint} · Created #{apiToken.createdAtLabel} · Last used #{apiToken.lastUsedAtLabel}</p>
+                            </div>
+                            <h:form styleClass="item-actions">
+                                <input type="hidden" name="apiTokenId" value="#{apiToken.id}"/>
+                                <p:commandButton value="Revoke"
+                                                 action="#{accountSettingsView.revokeApiToken}"
+                                                 ajax="false"
+                                                 styleClass="ui-button-danger ui-button-outlined"
+                                                 pt:aria-label="Revoke API token #{apiToken.name}, ending in #{apiToken.tokenHint}">
+                                    <p:confirm header="Revoke API token"
+                                               message="Revoke #{apiToken.name}, ending in #{apiToken.tokenHint}, permanently?"
+                                               yesButtonLabel="Revoke API token"
+                                               yesButtonClass="ui-button-danger"
+                                               noButtonLabel="Cancel"
+                                               noButtonClass="ui-button-secondary ui-button-outlined"
+                                               beforeShow="focusConfirmationCancelButton();"/>
+                                </p:commandButton>
+                            </h:form>
+                        </article>
+                    </ui:repeat>
+                </div>
+            </p:panel>
+
             <p:panel styleClass="surface-panel" pt:aria-labelledby="changePasswordHeading">
                 <h2 id="changePasswordHeading" class="panel-heading">Change password</h2>
                 <p id="passwordChangeNotice" class="field-help">Changing your password signs you out here and invalidates your other signed-in sessions.</p>
@@ -57,6 +117,7 @@
                                      ajax="false"/>
                 </h:form>
             </p:panel>
+            <app:confirmation-dialog id="apiTokenConfirmation"/>
         </section>
     </ui:define>
 </ui:composition>

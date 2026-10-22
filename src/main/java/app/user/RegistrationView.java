@@ -81,6 +81,7 @@ public class RegistrationView {
             FacesContext facesContext = FacesContext.getCurrentInstance();
             RelativeRedirect.send(facesContext, route);
         } catch (AuthorizationException | ValidationException exception) {
+            invitationPreview = InvitationPreview.unavailable();
             FacesMessages.add(
                     FacesMessage.SEVERITY_ERROR,
                     "Invitation could not be accepted.",

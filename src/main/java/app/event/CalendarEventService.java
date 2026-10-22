@@ -52,6 +52,13 @@ public class CalendarEventService {
         return findEvents(calendarId);
     }
 
+    public CalendarEvent requireEventForMember(
+            ApplicationUser actingUser,
+            Long calendarId,
+            Long eventId) {
+        return requireEventInCalendar(actingUser, calendarId, eventId);
+    }
+
     public CalendarEvent createEvent(
             ApplicationUser actingUser,
             Long calendarId,
@@ -86,14 +93,40 @@ public class CalendarEventService {
             Integer expectedCalendarVersion,
             String expectedCalendarTimeZone) {
         CalendarEvent event = requireEditableEvent(actingUser, eventId);
-        Calendar calendar = calendarService.requireCalendarForChildMutation(event.getCalendar().getId());
-        calendarAccessService.requireCanEdit(actingUser, calendar.getId());
-        requireExpectedVersion(event, expectedVersion);
-        requireExpectedCalendarState(calendar, expectedCalendarVersion, expectedCalendarTimeZone);
-        EventTimeRange normalizedTimeRange = normalizeEventTimes(calendar, eventTimeInput);
-        applyEventValues(event, title, description, location, eventTimeInput, normalizedTimeRange);
-        flushWithConflictMessage();
-        return event;
+        return updateEventAfterLookup(
+                actingUser,
+                event,
+                expectedVersion,
+                title,
+                description,
+                location,
+                eventTimeInput,
+                expectedCalendarVersion,
+                expectedCalendarTimeZone);
+    }
+
+    public CalendarEvent updateEventInCalendar(
+            ApplicationUser actingUser,
+            Long calendarId,
+            Long eventId,
+            Integer expectedVersion,
+            String title,
+            String description,
+            String location,
+            EventTimeInput eventTimeInput,
+            Integer expectedCalendarVersion,
+            String expectedCalendarTimeZone) {
+        CalendarEvent event = requireEventInCalendar(actingUser, calendarId, eventId);
+        return updateEventAfterLookup(
+                actingUser,
+                event,
+                expectedVersion,
+                title,
+                description,
+                location,
+                eventTimeInput,
+                expectedCalendarVersion,
+                expectedCalendarTimeZone);
     }
 
     public void deleteEvent(ApplicationUser actingUser, Long eventId, Integer expectedVersion) {
@@ -101,6 +134,22 @@ public class CalendarEventService {
         Calendar calendar = calendarService.requireCalendarForChildMutation(event.getCalendar().getId());
         calendarAccessService.requireCanEdit(actingUser, calendar.getId());
         requireExpectedVersion(event, expectedVersion);
+        entityManager.remove(event);
+        flushWithConflictMessage();
+    }
+
+    public void deleteEventInCalendar(
+            ApplicationUser actingUser,
+            Long calendarId,
+            Long eventId,
+            Integer expectedVersion,
+            Integer expectedCalendarVersion,
+            String expectedCalendarTimeZone) {
+        CalendarEvent event = requireEventInCalendar(actingUser, calendarId, eventId);
+        Calendar calendar = calendarService.requireCalendarForChildMutation(calendarId);
+        calendarAccessService.requireCanEdit(actingUser, calendarId);
+        requireExpectedVersion(event, expectedVersion);
+        requireExpectedCalendarState(calendar, expectedCalendarVersion, expectedCalendarTimeZone);
         entityManager.remove(event);
         flushWithConflictMessage();
     }
@@ -201,6 +250,37 @@ public class CalendarEventService {
         } catch (AuthorizationException exception) {
             throw new NotFoundException("Event was not found.");
         }
+    }
+
+    private CalendarEvent requireEventInCalendar(
+            ApplicationUser actingUser,
+            Long calendarId,
+            Long eventId) {
+        CalendarEvent event = requireEditableEvent(actingUser, eventId);
+        if (!Objects.equals(event.getCalendar().getId(), calendarId)) {
+            throw new NotFoundException("Event was not found.");
+        }
+        return event;
+    }
+
+    private CalendarEvent updateEventAfterLookup(
+            ApplicationUser actingUser,
+            CalendarEvent event,
+            Integer expectedVersion,
+            String title,
+            String description,
+            String location,
+            EventTimeInput eventTimeInput,
+            Integer expectedCalendarVersion,
+            String expectedCalendarTimeZone) {
+        Calendar calendar = calendarService.requireCalendarForChildMutation(event.getCalendar().getId());
+        calendarAccessService.requireCanEdit(actingUser, calendar.getId());
+        requireExpectedVersion(event, expectedVersion);
+        requireExpectedCalendarState(calendar, expectedCalendarVersion, expectedCalendarTimeZone);
+        EventTimeRange normalizedTimeRange = normalizeEventTimes(calendar, eventTimeInput);
+        applyEventValues(event, title, description, location, eventTimeInput, normalizedTimeRange);
+        flushWithConflictMessage();
+        return event;
     }
 
     private void requireExpectedVersion(CalendarEvent event, Integer expectedVersion) {

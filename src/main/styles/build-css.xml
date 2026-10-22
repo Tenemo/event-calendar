@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="Bundle styles" default="bundle-styles">
+    <target name="bundle-styles">
+        <mkdir dir="${style.output.directory}"/>
+
+        <concat destfile="${style.output.directory}/application.css"
+                encoding="UTF-8"
+                outputencoding="UTF-8"
+                fixlastline="yes"
+                eol="lf"
+                overwrite="yes">
+            <filelist dir="${style.source.directory}">
+                <file name="tokens.css"/>
+                <file name="base.css"/>
+                <file name="layout.css"/>
+                <file name="components/navigation.css"/>
+                <file name="components/buttons.css"/>
+                <file name="components/actions.css"/>
+                <file name="components/surfaces.css"/>
+                <file name="components/calendar-list.css"/>
+                <file name="components/forms.css"/>
+                <file name="components/event-date-picker.css"/>
+                <file name="components/feedback.css"/>
+                <file name="components/calendar-grid.css"/>
+                <file name="components/calendar-agenda.css"/>
+                <file name="components/calendar-workspace.css"/>
+                <file name="components/event-dialog.css"/>
+                <file name="components/calendar-members.css"/>
+                <file name="primefaces-overrides.css"/>
+                <file name="motion.css"/>
+            </filelist>
+        </concat>
+
+        <concat destfile="${style.output.directory}/error.css"
+                encoding="UTF-8"
+                outputencoding="UTF-8"
+                fixlastline="yes"
+                eol="lf"
+                overwrite="yes">
+            <filelist dir="${style.source.directory}">
+                <file name="tokens.css"/>
+                <file name="error-page.css"/>
+            </filelist>
+        </concat>
+    </target>
+</project>
